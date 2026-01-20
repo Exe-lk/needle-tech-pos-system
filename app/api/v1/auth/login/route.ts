@@ -3,6 +3,36 @@ import { getDatabase } from '@/lib/mongodb';
 import { successResponse, unauthorizedResponse, validationErrorResponse } from '@/lib/api-response';
 import { ObjectId } from 'mongodb';
 
+/**
+ * @swagger
+ * /api/v1/auth/login:
+ *   post:
+ *     summary: User login
+ *     description: Authenticate user with username and password, returns access and refresh tokens
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/LoginResponse'
+ *       400:
+ *         description: Validation error - missing username or password
+ *       401:
+ *         description: Invalid credentials or inactive account
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

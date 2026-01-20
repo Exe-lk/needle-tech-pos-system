@@ -4,6 +4,69 @@ import { successResponse, errorResponse, paginatedResponse, validationErrorRespo
 import { parseQueryParams, buildPaginationMeta, sanitizeObject } from '@/lib/utils';
 import { ObjectId } from 'mongodb';
 
+/**
+ * @swagger
+ * /api/v1/customers:
+ *   get:
+ *     summary: Get all customers
+ *     description: Retrieve a paginated list of customers with optional filtering and search
+ *     tags: [Customers]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Items per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by name, code, or contact person
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [INDIVIDUAL, COMPANY]
+ *         description: Filter by customer type
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [ACTIVE, INACTIVE]
+ *         description: Filter by status
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           default: createdAt
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: Customers retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/PaginatedResponse'
+ */
 export async function GET(request: NextRequest) {
   try {
     const db = await getDatabase();
@@ -64,6 +127,70 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * @swagger
+ * /api/v1/customers:
+ *   post:
+ *     summary: Create a new customer
+ *     description: Create a new customer with required information
+ *     tags: [Customers]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - code
+ *               - type
+ *               - name
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 description: Unique customer code
+ *               type:
+ *                 type: string
+ *                 enum: [INDIVIDUAL, COMPANY]
+ *               name:
+ *                 type: string
+ *               contactPerson:
+ *                 type: string
+ *               phones:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               emails:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               billingAddress:
+ *                 type: object
+ *               shippingAddress:
+ *                 type: object
+ *               taxProfile:
+ *                 type: object
+ *                 properties:
+ *                   vatApplicable:
+ *                     type: boolean
+ *                   vatRegistrationNumber:
+ *                     type: string
+ *                   taxCategory:
+ *                     type: string
+ *     responses:
+ *       201:
+ *         description: Customer created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Customer'
+ *       400:
+ *         description: Validation error - missing required fields or duplicate code
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
