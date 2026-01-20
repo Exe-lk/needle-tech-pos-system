@@ -1,0 +1,46 @@
+[
+  {
+    "_id": { "$oid": "671000000000000000000300" },
+    "agreementNumber": "AGR-1000",
+    "customerId": { "$oid": "671000000000000000000100" },
+    "status": "ACTIVE",
+    "agreementType": "RENTAL",
+    "startDate": { "$date": "2025-01-10T00:00:00Z" },
+    "expectedEndDate": { "$date": "2025-02-10T00:00:00Z" },
+    "actualEndDate": null,
+    "machines": [
+      {
+        "machineId": { "$oid": "671000000000000000000200" },
+        "serialNumberSnapshot": "JUKI-2025-0001",
+        "brandSnapshot": "JUKI",
+        "modelSnapshot": "DDL-8700",
+        "rateType": "MONTHLY",
+        "rate": 50000,
+        "depositAmount": 20000,
+        "quantity": 1
+      }
+    ],
+    "financials": {
+      "subtotal": 50000,
+      "vatAmount": 9000,
+      "total": 59000,
+      "depositTotal": 20000,
+      "paidAmount": 59000,
+      "balance": 0,
+      "currency": "LKR"
+    },
+    "invoiceIds": [
+      { "$oid": "671000000000000000000400" }
+    ],
+    "securityDepositInvoiceId": { "$oid": "671000000000000000000401" },
+    "gatePassIds": [
+      { "$oid": "671000000000000000000500" }
+    ],
+    "returnIds": [],
+    "isLockedForNewTransactions": false,
+    "lockedReason": null,
+    "createdByUserId": { "$oid": "671000000000000000000010" },
+    "createdAt": { "$date": "2025-01-10T09:00:00Z" },
+    "updatedAt": { "$date": "2025-01-10T09:00:00Z" }
+  }
+]

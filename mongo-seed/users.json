@@ -1,0 +1,15 @@
+[
+  {
+    "_id": { "$oid": "671000000000000000000010" },
+    "username": "admin",
+    "passwordHash": "REPLACE_WITH_BCRYPT_HASH",
+    "roleId": { "$oid": "671000000000000000000001" },
+    "fullName": "System Administrator",
+    "email": "admin@needletech.local",
+    "phone": "+94-000-0000000",
+    "status": "ACTIVE",
+    "lastLoginAt": null,
+    "createdAt": { "$date": "2025-01-01T00:00:00Z" },
+    "updatedAt": { "$date": "2025-01-01T00:00:00Z" }
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "_id": { "$oid": "671000000000000000000200" },
+    "brand": "JUKI",
+    "model": "DDL-8700",
+    "category": "LOCKSTITCH",
+    "serialNumber": "JUKI-2025-0001",
+    "boxNumber": "BOX-001",
+    "qrCode": {
+      "value": "MCH-JUKI-2025-0001",
+      "imageUrl": "https://cdn.needletech.local/qrcodes/MCH-JUKI-2025-0001.png"
+    },
+    "photos": [
+      "https://cdn.needletech.local/machines/JUKI-2025-0001/front.jpg"
+    ],
+    "specs": {
+      "voltage": "220V",
+      "power": "550W",
+      "stitchType": "Lockstitch",
+      "maxSpeedSpm": 5500,
+      "other": "Standard industrial lockstitch"
+    },
+    "status": "AVAILABLE",
+    "statusHistory": [
+      {
+        "status": "AVAILABLE",
+        "changedAt": { "$date": "2025-01-01T00:00:00Z" },
+        "changedByUserId": { "$oid": "671000000000000000000010" },
+        "note": "Initial registration"
+      }
+    ],
+    "currentLocation": {
+      "type": "WAREHOUSE",
+      "name": "Main Warehouse",
+      "address": "Head Office Address"
+    },
+    "lifecycle": {
+      "onboardedAt": { "$date": "2025-01-01T00:00:00Z" },
+      "onboardedByUserId": { "$oid": "671000000000000000000010" },
+      "lastRentalId": null,
+      "totalRentalDays": 0
+    },
+    "createdAt": { "$date": "2025-01-01T00:00:00Z" },
+    "updatedAt": { "$date": "2025-01-01T00:00:00Z" }
+  }
+]
