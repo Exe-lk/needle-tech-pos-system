@@ -1,0 +1,392 @@
+{
+  "collections": {
+    "roles": {
+      "fields": {
+        "_id": "ObjectId",
+        "name": "String (required, unique)",
+        "description": "String",
+        "permissions": "Array of Strings",
+        "createdAt": "Date"
+      },
+      "indexes": [
+        {"name": 1}
+      ]
+    },
+    "users": {
+      "fields": {
+        "_id": "ObjectId",
+        "username": "String (required, unique)",
+        "passwordHash": "String (required)",
+        "roleId": "ObjectId (reference: roles._id)",
+        "fullName": "String (required)",
+        "email": "String",
+        "phone": "String",
+        "status": "String (enum: ACTIVE, INACTIVE, SUSPENDED)",
+        "lastLoginAt": "Date or null",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"username": 1},
+        {"email": 1},
+        {"roleId": 1}
+      ]
+    },
+    "settings": {
+      "fields": {
+        "_id": "String (default: 'global')",
+        "company": {
+          "name": "String",
+          "address": "String",
+          "vatRegistrationNumber": "String",
+          "currency": "String",
+          "defaultCountry": "String"
+        },
+        "tax": {
+          "defaultVatRate": "Number",
+          "customerTypeTaxRules": "Array of Objects"
+        },
+        "creditPolicy": {
+          "enableCreditLock": "Boolean",
+          "lockAfterDaysOverdue": "Number",
+          "maxOutstandingForNewRentals": "Number"
+        },
+        "alertSchedule": {
+          "daysOfMonth": "Array of Numbers",
+          "channels": "Array of Strings"
+        },
+        "invoiceSettings": {
+          "prefix": "String",
+          "startNumber": "Number"
+        },
+        "rentalSettings": {
+          "agreementPrefix": "String",
+          "startNumber": "Number"
+        },
+        "gatePassSettings": {
+          "prefix": "String",
+          "startNumber": "Number"
+        },
+        "returnSettings": {
+          "returnPrefix": "String",
+          "startNumber": "Number"
+        },
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      }
+    },
+    "customers": {
+      "fields": {
+        "_id": "ObjectId",
+        "code": "String (required, unique)",
+        "type": "String (enum: GARMENT_FACTORY, INDIVIDUAL)",
+        "name": "String (required)",
+        "contactPerson": "String",
+        "phones": "Array of Strings",
+        "emails": "Array of Strings",
+        "billingAddress": {
+          "line1": "String",
+          "line2": "String",
+          "city": "String",
+          "region": "String",
+          "postalCode": "String",
+          "country": "String"
+        },
+        "shippingAddress": "Object or null",
+        "taxProfile": {
+          "vatApplicable": "Boolean",
+          "vatRegistrationNumber": "String or null",
+          "taxCategory": "String (enum: VAT, NON_VAT)"
+        },
+        "financials": {
+          "creditLimit": "Number",
+          "paymentTermsDays": "Number",
+          "currentBalance": "Number",
+          "oldestOutstandingInvoiceDate": "Date or null",
+          "isCreditLocked": "Boolean",
+          "creditLockReason": "String or null"
+        },
+        "alertPreferences": {
+          "channels": "Array of Strings",
+          "language": "String"
+        },
+        "status": "String (enum: ACTIVE, INACTIVE)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"code": 1},
+        {"type": 1},
+        {"status": 1},
+        {"financials.isCreditLocked": 1}
+      ]
+    },
+    "machines": {
+      "fields": {
+        "_id": "ObjectId",
+        "brand": "String (enum: JUKI, SINGER, KANSAL)",
+        "model": "String",
+        "category": "String",
+        "serialNumber": "String (required, unique)",
+        "boxNumber": "String",
+        "qrCode": {
+          "value": "String (required, unique)",
+          "imageUrl": "String"
+        },
+        "photos": "Array of Strings",
+        "specs": {
+          "voltage": "String",
+          "power": "String",
+          "stitchType": "String",
+          "maxSpeedSpm": "Number",
+          "other": "String"
+        },
+        "status": "String (enum: AVAILABLE, RENTED, DAMAGED, MAINTENANCE, RETIRED)",
+        "statusHistory": "Array of Objects",
+        "currentLocation": {
+          "type": "String",
+          "name": "String",
+          "address": "String"
+        },
+        "lifecycle": {
+          "onboardedAt": "Date",
+          "onboardedByUserId": "ObjectId",
+          "lastRentalId": "ObjectId or null",
+          "totalRentalDays": "Number"
+        },
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"serialNumber": 1},
+        {"qrCode.value": 1},
+        {"brand": 1},
+        {"status": 1},
+        {"boxNumber": 1}
+      ]
+    },
+    "rentals": {
+      "fields": {
+        "_id": "ObjectId",
+        "agreementNumber": "String (required, unique)",
+        "customerId": "ObjectId (reference: customers._id)",
+        "status": "String (enum: ACTIVE, COMPLETED, CANCELLED)",
+        "agreementType": "String (enum: RENTAL)",
+        "startDate": "Date",
+        "expectedEndDate": "Date",
+        "actualEndDate": "Date or null",
+        "machines": "Array of Objects",
+        "financials": {
+          "subtotal": "Number",
+          "vatAmount": "Number",
+          "total": "Number",
+          "depositTotal": "Number",
+          "paidAmount": "Number",
+          "balance": "Number",
+          "currency": "String"
+        },
+        "invoiceIds": "Array of ObjectIds",
+        "securityDepositInvoiceId": "ObjectId or null",
+        "gatePassIds": "Array of ObjectIds",
+        "returnIds": "Array of ObjectIds",
+        "isLockedForNewTransactions": "Boolean",
+        "lockedReason": "String or null",
+        "createdByUserId": "ObjectId (reference: users._id)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"agreementNumber": 1},
+        {"customerId": 1},
+        {"status": 1},
+        {"startDate": 1},
+        {"machines.machineId": 1}
+      ]
+    },
+    "invoices": {
+      "fields": {
+        "_id": "ObjectId",
+        "invoiceNumber": "String (required, unique)",
+        "customerId": "ObjectId (reference: customers._id)",
+        "rentalId": "ObjectId (reference: rentals._id)",
+        "type": "String (enum: RENTAL, DEPOSIT, DAMAGE, OTHER)",
+        "taxCategory": "String (enum: VAT, NON_VAT)",
+        "status": "String (enum: DRAFT, ISSUED, PAID, OVERDUE, CANCELLED)",
+        "issueDate": "Date",
+        "dueDate": "Date",
+        "lineItems": "Array of Objects",
+        "totals": {
+          "subtotal": "Number",
+          "vatAmount": "Number",
+          "grandTotal": "Number",
+          "currency": "String"
+        },
+        "paymentStatus": "String (enum: PENDING, PARTIAL, PAID, OVERDUE)",
+        "paidAmount": "Number",
+        "balance": "Number",
+        "createdByUserId": "ObjectId (reference: users._id)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"invoiceNumber": 1},
+        {"customerId": 1},
+        {"rentalId": 1},
+        {"status": 1},
+        {"dueDate": 1},
+        {"paymentStatus": 1}
+      ]
+    },
+    "payments": {
+      "fields": {
+        "_id": "ObjectId",
+        "receiptNumber": "String (required, unique)",
+        "customerId": "ObjectId (reference: customers._id)",
+        "invoices": "Array of Objects",
+        "totalAmount": "Number",
+        "currency": "String",
+        "paymentMethod": "String (enum: CASH, BANK_TRANSFER, CHEQUE, CARD)",
+        "referenceNumber": "String",
+        "paidAt": "Date",
+        "receivedByUserId": "ObjectId (reference: users._id)",
+        "notes": "String",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"receiptNumber": 1},
+        {"customerId": 1},
+        {"paidAt": 1},
+        {"invoices.invoiceId": 1}
+      ]
+    },
+    "gatePasses": {
+      "fields": {
+        "_id": "ObjectId",
+        "gatePassNumber": "String (required, unique)",
+        "rentalId": "ObjectId (reference: rentals._id)",
+        "customerId": "ObjectId (reference: customers._id)",
+        "machines": "Array of Objects",
+        "driverName": "String",
+        "vehicleNumber": "String",
+        "departureTime": "Date",
+        "arrivalTime": "Date or null",
+        "issuedByUserId": "ObjectId (reference: users._id)",
+        "status": "String (enum: PENDING, DEPARTED, RETURNED)",
+        "printedAt": "Date or null",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"gatePassNumber": 1},
+        {"rentalId": 1},
+        {"customerId": 1},
+        {"status": 1},
+        {"departureTime": 1}
+      ]
+    },
+    "returns": {
+      "fields": {
+        "_id": "ObjectId",
+        "returnNumber": "String (required, unique)",
+        "rentalId": "ObjectId (reference: rentals._id)",
+        "customerId": "ObjectId (reference: customers._id)",
+        "machineId": "ObjectId (reference: machines._id)",
+        "returnDate": "Date",
+        "condition": "String",
+        "triageCategory": "String (enum: STANDARD, DAMAGE, MISSING_PARTS, EXCHANGE)",
+        "notes": "String",
+        "photos": "Array of Strings",
+        "damageReportId": "ObjectId or null (reference: damageReports._id)",
+        "inspectedByUserId": "ObjectId (reference: users._id)",
+        "returnReceiptNumber": "String",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"returnNumber": 1},
+        {"rentalId": 1},
+        {"machineId": 1},
+        {"returnDate": 1},
+        {"triageCategory": 1}
+      ]
+    },
+    "damageReports": {
+      "fields": {
+        "_id": "ObjectId",
+        "machineId": "ObjectId (reference: machines._id)",
+        "rentalId": "ObjectId (reference: rentals._id)",
+        "returnId": "ObjectId (reference: returns._id)",
+        "severity": "String (enum: MINOR, MODERATE, MAJOR)",
+        "category": "String (enum: DAMAGE, MISSING_PARTS, EXCHANGE)",
+        "description": "String",
+        "photos": "Array of Strings",
+        "estimatedRepairCost": "Number",
+        "approvedChargeToCustomer": "Number",
+        "billedInvoiceId": "ObjectId or null (reference: invoices._id)",
+        "resolved": "Boolean",
+        "resolvedAt": "Date or null",
+        "createdByUserId": "ObjectId (reference: users._id)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"machineId": 1},
+        {"rentalId": 1},
+        {"returnId": 1},
+        {"resolved": 1},
+        {"severity": 1}
+      ]
+    },
+    "outstandingAlerts": {
+      "fields": {
+        "_id": "ObjectId",
+        "customerId": "ObjectId (reference: customers._id)",
+        "generatedAt": "Date",
+        "scheduleDay": "Number",
+        "channel": "String (enum: EMAIL, SMS)",
+        "status": "String (enum: PENDING, SENT, FAILED)",
+        "sentAt": "Date or null",
+        "overdueInvoices": "Array of Objects",
+        "snapshotTotals": {
+          "totalOutstanding": "Number",
+          "totalOverdue": "Number"
+        },
+        "creditLockTriggered": "Boolean",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      },
+      "indexes": [
+        {"customerId": 1},
+        {"generatedAt": 1},
+        {"status": 1},
+        {"scheduleDay": 1}
+      ]
+    },
+    "auditLogs": {
+      "fields": {
+        "_id": "ObjectId",
+        "timestamp": "Date",
+        "userId": "ObjectId (reference: users._id)",
+        "roleId": "ObjectId (reference: roles._id)",
+        "action": "String (enum: CREATE, UPDATE, DELETE, VIEW, LOGIN, LOGOUT)",
+        "entityType": "String",
+        "entityId": "ObjectId",
+        "description": "String",
+        "before": "Object or null",
+        "after": "Object or null",
+        "source": {
+          "ip": "String",
+          "userAgent": "String"
+        }
+      },
+      "indexes": [
+        {"timestamp": -1},
+        {"userId": 1},
+        {"entityType": 1},
+        {"entityId": 1},
+        {"action": 1}
+      ]
+    }
+  }
+}
