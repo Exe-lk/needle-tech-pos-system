@@ -1,7 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import SwaggerUI from 'swagger-ui-react';
+import dynamic from 'next/dynamic';
+
+// Dynamically import SwaggerUI with SSR disabled to avoid strict mode warnings
+const SwaggerUIWrapper = dynamic(
+  () => import('./swagger-ui-wrapper').then((mod) => mod.default),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading API documentation...</p>
+        </div>
+      </div>
+    ),
+  }
+);
+
+// Import CSS - Next.js will handle this properly
 import 'swagger-ui-react/swagger-ui.css';
 
 export default function ApiDocsPage() {
@@ -68,7 +86,7 @@ export default function ApiDocsPage() {
             Complete API reference for Needle Tech POS System
           </p>
         </div>
-        <SwaggerUI spec={spec} />
+        <SwaggerUIWrapper spec={spec} />
       </div>
     </div>
   );
