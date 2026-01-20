@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { APP_VERSION } from '@/src/utils/version';
 import {
   Monitor,
   Users,
@@ -55,36 +56,23 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       icon: Users,
-      label: 'Customer Management', href: '/customers/list',
-      children: [
-        { label: 'Customer List', href: '/customers/list' },
-        { label: 'Add Company', href: '/customers/add-company' },
-        { label: 'Add Individual', href: '/customers/add-individual' },
-        { label: 'Customer Profile', href: '/customers/profile' }, // History + Outstanding
-      ],
+      label: 'Customer Management', href: '/customers',
+    
     },
     {
       icon: Truck,
-      label: 'Machine Management',
-      children: [
-        { label: 'Machine Inventory List', href: '/machines/inventory' },
-        { label: 'Machine Registration', href: '/machines/register' },
-        { label: 'Machine Detail (QR Scan View)', href: '/machines/detail' },
-      ],
+      label: 'Machine Management', href: '/machines',
+   
     },
     {
       icon: FileText,
-      label: 'Rental & Agreement',
-      children: [
-        { label: 'Create Agreement', href: '/rental/create' },
-        { label: 'Active Rentals', href: '/rental/active' },
-        { label: 'Rental History', href: '/rental/history' },
-      ],
+      label: 'Rental Agreement', href: '/rentalAgreement',
+      
     },
     {
       icon: Truck,
-      label: 'Dispatch & Gate Pass',
-      href: '/dispatch',
+      label: 'Gate Pass',
+      href: '/gatepass',
     },
     {
       icon: Undo,
@@ -288,6 +276,19 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
           </button>
+          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700">
+            <div className="flex items-center justify-center px-3 py-1">
+              {isExpanded ? (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  v{APP_VERSION}
+                </span>
+              ) : (
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                  v{APP_VERSION}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

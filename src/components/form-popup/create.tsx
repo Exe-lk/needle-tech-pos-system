@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, Plus, Trash2, Upload, X, Image as ImageIcon, FileText } from 'lucide-react';
 
 export interface FormField {
   name: string;
@@ -16,7 +16,9 @@ export interface FormField {
     | 'radio'
     | 'textarea'
     | 'date'
-    | 'number';
+    | 'number'
+    | 'file'
+    | 'file-multiple';
   placeholder?: string;
   required?: boolean;
   options?: { label: string; value: any }[];
@@ -25,6 +27,8 @@ export interface FormField {
   defaultValue?: any;
   className?: string;
   rows?: number; // for textarea
+  accept?: string; // for file inputs (e.g., 'image/*', 'application/pdf')
+  multiple?: boolean; // for file inputs
 }
 
 export interface FormProps {
@@ -49,6 +53,12 @@ interface DynamicSpec {
   isActive?: boolean;
 }
 
+interface FilePreview {
+  file: File;
+  preview: string;
+  id: string;
+}
+
 const Form: React.FC<FormProps> = ({
   fields,
   onSubmit,
@@ -68,7 +78,7 @@ const Form: React.FC<FormProps> = ({
         [field.name]:
           initialData[field.name] ??
           field.defaultValue ??
-          (field.type === 'checkbox' ? false : ''),
+          (field.type === 'checkbox' ? false : field.type === 'file' || field.type === 'file-multiple' ? [] : ''),
       }),
       {}
     )
@@ -76,6 +86,7 @@ const Form: React.FC<FormProps> = ({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [filePreviews, setFilePreviews] = useState<Record<string, FilePreview[]>>({});
 
   // Dynamic specs state (for products / extra attributes)
   const [dynamicSpecs, setDynamicSpecs] = useState<DynamicSpec[]>([
@@ -85,7 +96,11 @@ const Form: React.FC<FormProps> = ({
   const validateField = (field: FormField, value: any): string | null => {
     // Required validation (simple, generic)
     if (field.required) {
-      if (
+      if (field.type === 'file' || field.type === 'file-multiple') {
+        if (!value || (Array.isArray(value) && value.length === 0)) {
+          return `${field.label} is required`;
+        }
+      } else if (
         value === null ||
         value === undefined ||
         (typeof value === 'string' && value.trim() === '')
@@ -137,6 +152,72 @@ const Form: React.FC<FormProps> = ({
         [fieldName]: '',
       }));
     }
+  };
+
+  const handleFileChange = (fieldName: string, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const field = fields.find((f) => f.name === fieldName);
+    if (!field) return;
+
+    const fileArray = Array.from(files);
+    const newPreviews: FilePreview[] = [];
+
+    fileArray.forEach((file) => {
+      const id = `${Date.now()}-${Math.random()}`;
+      let preview = '';
+
+      if (file.type.startsWith('image/')) {
+        preview = URL.createObjectURL(file);
+      }
+
+      newPreviews.push({ file, preview, id });
+    });
+
+    if (field.type === 'file-multiple' || field.multiple) {
+      setFilePreviews((prev) => ({
+        ...prev,
+        [fieldName]: [...(prev[fieldName] || []), ...newPreviews],
+      }));
+      setFormData((prev) => ({
+        ...prev,
+        [fieldName]: [...(prev[fieldName] || []), ...fileArray],
+      }));
+    } else {
+      setFilePreviews((prev) => ({
+        ...prev,
+        [fieldName]: newPreviews,
+      }));
+      setFormData((prev) => ({
+        ...prev,
+        [fieldName]: fileArray,
+      }));
+    }
+  };
+
+  const removeFile = (fieldName: string, fileId: string) => {
+    setFilePreviews((prev) => {
+      const updated = { ...prev };
+      if (updated[fieldName]) {
+        const fileToRemove = updated[fieldName].find((f) => f.id === fileId);
+        if (fileToRemove && fileToRemove.preview) {
+          URL.revokeObjectURL(fileToRemove.preview);
+        }
+        updated[fieldName] = updated[fieldName].filter((f) => f.id !== fileId);
+      }
+      return updated;
+    });
+
+    setFormData((prev) => {
+      const updated = { ...prev };
+      if (Array.isArray(updated[fieldName])) {
+        updated[fieldName] = updated[fieldName].filter((_, index) => {
+          const previews = filePreviews[fieldName] || [];
+          return previews[index]?.id !== fileId;
+        });
+      }
+      return updated;
+    });
   };
 
   // Dynamic specs handlers
@@ -221,16 +302,26 @@ const Form: React.FC<FormProps> = ({
   };
 
   const handleClear = () => {
+    // Clean up file previews
+    Object.values(filePreviews).forEach((previewArray) => {
+      previewArray.forEach((preview) => {
+        if (preview.preview) {
+          URL.revokeObjectURL(preview.preview);
+        }
+      });
+    });
+
     const clearedData = fields.reduce(
       (acc, field) => ({
         ...acc,
-        [field.name]: field.type === 'checkbox' ? false : '',
+        [field.name]: field.type === 'checkbox' ? false : field.type === 'file' || field.type === 'file-multiple' ? [] : '',
       }),
       {}
     );
 
     setFormData(clearedData);
     setErrors({});
+    setFilePreviews({});
 
     if (enableDynamicSpecs) {
       setDynamicSpecs([
@@ -261,6 +352,83 @@ const Form: React.FC<FormProps> = ({
     } text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`;
 
     switch (field.type) {
+      case 'file':
+      case 'file-multiple':
+        return (
+          <div>
+            <input
+              type="file"
+              id={`file-${field.name}`}
+              accept={field.accept}
+              multiple={field.type === 'file-multiple' || field.multiple}
+              onChange={(e) => handleFileChange(field.name, e.target.files)}
+              className="hidden"
+              disabled={field.disabled}
+            />
+            <label
+              htmlFor={`file-${field.name}`}
+              className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                hasError
+                  ? 'border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-900/20'
+                  : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/50'
+              } ${field.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                <Upload className="w-8 h-8 mb-2 text-gray-400 dark:text-gray-500" />
+                <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+                  <span className="font-semibold">Click to upload</span> or drag and drop
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {field.accept === 'image/*' ? 'PNG, JPG, GIF' : field.accept === 'application/pdf' ? 'PDF' : 'Any file'}
+                </p>
+              </div>
+            </label>
+
+            {/* File Previews */}
+            {filePreviews[field.name] && filePreviews[field.name].length > 0 && (
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                {filePreviews[field.name].map((preview) => (
+                  <div key={preview.id} className="relative group">
+                    {preview.preview ? (
+                      <div className="relative">
+                        <img
+                          src={preview.preview}
+                          alt="Preview"
+                          className="w-full h-24 object-cover rounded-lg border border-gray-300 dark:border-slate-600"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeFile(field.name, preview.id)}
+                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {preview.file.name}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="relative border border-gray-300 dark:border-slate-600 rounded-lg p-4">
+                        <FileText className="w-8 h-8 mx-auto text-gray-400 dark:text-gray-500" />
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {preview.file.name}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(field.name, preview.id)}
+                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
       case 'select':
         return (
           <div className="relative">
@@ -423,6 +591,10 @@ const Form: React.FC<FormProps> = ({
       ? fields.filter((field) => !field.name.startsWith('spec_'))
       : fields;
 
+  // Separate file upload fields from regular fields
+  const regularFields = filteredFields.filter((field) => field.type !== 'file' && field.type !== 'file-multiple');
+  const fileFields = filteredFields.filter((field) => field.type === 'file' || field.type === 'file-multiple');
+
   return (
     <div className={`bg-white dark:bg-slate-800 rounded-lg p-8 shadow-lg ${className}`}>
       {title && (
@@ -434,7 +606,7 @@ const Form: React.FC<FormProps> = ({
       <form onSubmit={handleSubmit}>
         {/* Base fields */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {filteredFields.map((field) => (
+          {regularFields.map((field) => (
             <div
               key={field.name}
               className={`${field.type === 'textarea' ? 'md:col-span-2' : ''} ${
@@ -458,6 +630,33 @@ const Form: React.FC<FormProps> = ({
             </div>
           ))}
         </div>
+
+        {/* File Upload Fields Section */}
+        {fileFields.length > 0 && (
+          <div className="mb-8 border-t border-gray-200 dark:border-slate-700 pt-8">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">
+              Photos & Documents
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {fileFields.map((field) => (
+                <div key={field.name}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {field.label}
+                    {field.required && (
+                      <span className="text-red-500 dark:text-red-400 ml-1">*</span>
+                    )}
+                  </label>
+                  {renderField(field)}
+                  {errors[field.name] && (
+                    <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                      {errors[field.name]}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Dynamic Specifications Section (optional, e.g. for product specs) */}
         {enableDynamicSpecs && (

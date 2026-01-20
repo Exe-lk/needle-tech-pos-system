@@ -16,7 +16,9 @@ export interface FormField {
     | 'radio'
     | 'textarea'
     | 'date'
-    | 'number';
+    | 'number'
+    | 'file'
+    | 'file-multiple';
   placeholder?: string;
   required?: boolean;
   options?: { label: string; value: any }[];
@@ -24,7 +26,9 @@ export interface FormField {
   disabled?: boolean;
   defaultValue?: any;
   className?: string;
-  rows?: number;
+  rows?: number; // for textarea
+  accept?: string; // for file inputs (e.g., 'image/*', 'application/pdf')
+  multiple?: boolean; // for file inputs
 }
 
 export interface UpdateFormProps {
