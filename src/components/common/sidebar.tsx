@@ -14,6 +14,7 @@ import {
   Shield,
   Bell,
   BarChart3,
+  Boxes
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -63,6 +64,11 @@ const Sidebar: React.FC<SidebarProps> = ({
       icon: Truck,
       label: 'Machine Management', href: '/machines',
    
+    },
+    {
+        icon: Boxes,
+        label: 'Inventory Management', href: '/inventory',
+     
     },
     {
       icon: FileText,
@@ -276,19 +282,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
           </button>
-          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700">
-            <div className="flex items-center justify-center px-3 py-1">
-              {isExpanded ? (
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  v{APP_VERSION}
-                </span>
-              ) : (
-                <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                  v{APP_VERSION}
-                </span>
-              )}
-            </div>
-          </div>
+          
         </div>
       </div>
 

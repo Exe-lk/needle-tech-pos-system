@@ -421,10 +421,7 @@ const InvoicePage: React.FC = () => {
     setSelectedInvoice(null);
   };
 
-  const handleUpdateInvoice = (invoice: Invoice) => {
-    setSelectedInvoice(invoice);
-    setIsUpdateModalOpen(true);
-  };
+  
 
   const handleCloseUpdateModal = () => {
     setIsUpdateModalOpen(false);
@@ -489,13 +486,8 @@ Status: ${invoice.paymentDetails.status}
       icon: <Download className="w-4 h-4" />,
       variant: 'secondary',
       onClick: handleDownloadPDF,
-    },
-    {
-      label: 'Update',
-      icon: <Pencil className="w-4 h-4" />,
-      variant: 'primary',
-      onClick: handleUpdateInvoice,
-    },
+    }
+    
   ];
 
   // View Invoice Content
@@ -763,7 +755,7 @@ Status: ${invoice.paymentDetails.status}
 
       {/* Create Invoice Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
@@ -1188,7 +1180,7 @@ Status: ${invoice.paymentDetails.status}
 
       {/* View Invoice Modal */}
       {isViewModalOpen && selectedInvoice && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, X, QrCode, Camera, Printer, CheckCircle2, Calendar, User, FileText, DollarSign, ArrowRight, Package, MapPin, Building2 } from 'lucide-react';
+import { Eye, X, QrCode, Camera, Printer, CheckCircle2, Calendar, User, FileText, DollarSign, ArrowRight, ArrowLeft, Package, MapPin, Building2 } from 'lucide-react';
 
 type ReturnType = 'Standard' | 'Damage' | 'Missing' | 'Exchange';
 type ReturnStatus = 'Pending' | 'Completed' | 'Under Review';
@@ -502,6 +502,19 @@ const ReturnsPage: React.FC = () => {
     setCurrentStep(2);
   };
 
+  const handleBackToStep1 = () => {
+    setCurrentStep(1);
+  };
+
+  const handleBackToStep2 = () => {
+    // Clear damage-related fields when going back
+    setDamageNote('');
+    setDamagePhotos([]);
+    photoPreviews.forEach((preview) => URL.revokeObjectURL(preview));
+    setPhotoPreviews([]);
+    setCurrentStep(2);
+  };
+
   const handleReturnTypeSelect = (type: ReturnType) => {
     setReturnType(type);
     if (type === 'Damage' || type === 'Missing') {
@@ -634,9 +647,9 @@ const ReturnsPage: React.FC = () => {
         </div>
       </main>
 
-      {/* Create Return Modal - Keep existing code */}
+      {/* Create Return Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
@@ -1057,12 +1070,21 @@ const ReturnsPage: React.FC = () => {
                     ))}
                   </div>
 
-                  {returnType && returnType !== 'Damage' && returnType !== 'Missing' && (
-                    <div className="mt-6">
+                  {/* Action Buttons */}
+                  <div className="mt-6 flex items-center gap-4">
+                    <button
+                      onClick={handleBackToStep1}
+                      disabled={isSubmitting}
+                      className="flex-1 px-6 py-3 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-slate-500 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                      <ArrowLeft className="w-5 h-5 mr-2" />
+                      Back
+                    </button>
+                    {returnType && returnType !== 'Damage' && returnType !== 'Missing' && (
                       <button
                         onClick={handleSaveAndPrint}
                         disabled={isSubmitting}
-                        className="w-full px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                        className="flex-1 px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                       >
                         {isSubmitting ? (
                           <>
@@ -1076,8 +1098,8 @@ const ReturnsPage: React.FC = () => {
                           </>
                         )}
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1159,11 +1181,20 @@ const ReturnsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="mt-6">
+                  {/* Action Buttons */}
+                  <div className="mt-6 flex items-center gap-4">
+                    <button
+                      onClick={handleBackToStep2}
+                      disabled={isSubmitting}
+                      className="flex-1 px-6 py-3 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-slate-500 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                      <ArrowLeft className="w-5 h-5 mr-2" />
+                      Back
+                    </button>
                     <button
                       onClick={handleSaveAndPrint}
                       disabled={isSubmitting || !damageNote.trim() || damagePhotos.length === 0}
-                      className="w-full px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                      className="flex-1 px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                     >
                       {isSubmitting ? (
                         <>
@@ -1187,7 +1218,7 @@ const ReturnsPage: React.FC = () => {
 
       {/* Enhanced View Return Modal */}
       {isViewModalOpen && selectedReturn && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">

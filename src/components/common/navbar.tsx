@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Moon, Sun, Menu, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import { APP_VERSION } from '@/src/utils/version';
 
 // ---- Match sidebar structure for titles ----
 type MenuChild = {
@@ -182,8 +183,11 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
                 NeedleTech
               </h1>
               <span className="text-xs text-gray-500 dark:text-gray-400">
-                {currentPageTitle}
+                V {APP_VERSION}
               </span>
+            </div>
+            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700">
+
             </div>
           </div>
 
