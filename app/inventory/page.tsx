@@ -165,6 +165,7 @@ const mockTransactions: StockTransaction[] = [
 
 const InventoryManagementPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isStockInModalOpen, setIsStockInModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -770,10 +771,13 @@ const InventoryManagementPage: React.FC = () => {
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
         onMobileClose={handleMobileSidebarClose}
+        onExpandedChange={setIsSidebarExpanded}
       />
 
       {/* Main content area */}
-      <main className="pt-[70px] lg:ml-[300px] p-6">
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+      }`}>
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Page header */}
           <div className="flex items-center justify-between">
@@ -787,64 +791,7 @@ const InventoryManagementPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Summary Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Total Stock</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {summaryStats.total}
-                  </p>
-                </div>
-                <Package className="w-8 h-8 text-gray-400 dark:text-gray-500" />
-              </div>
-            </div>
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-green-600 dark:text-green-400">Available</p>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                    {summaryStats.available}
-                  </p>
-                </div>
-                <CheckCircle className="w-8 h-8 text-green-400 dark:text-green-500" />
-              </div>
-            </div>
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-blue-600 dark:text-blue-400">Rented</p>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {summaryStats.rented}
-                  </p>
-                </div>
-                <TrendingUp className="w-8 h-8 text-blue-400 dark:text-blue-500" />
-              </div>
-            </div>
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4 border border-yellow-200 dark:border-yellow-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400">Maintenance</p>
-                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                    {summaryStats.maintenance}
-                  </p>
-                </div>
-                <AlertCircle className="w-8 h-8 text-yellow-400 dark:text-yellow-500" />
-              </div>
-            </div>
-            <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-4 border border-gray-200 dark:border-slate-600">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Retired</p>
-                  <p className="text-2xl font-bold text-gray-500 dark:text-gray-400">
-                    {summaryStats.retired}
-                  </p>
-                </div>
-                <Package className="w-8 h-8 text-gray-400 dark:text-gray-500" />
-              </div>
-            </div>
-          </div>
+          
 
           {/* Inventory table card */}
           <Table

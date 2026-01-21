@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import CreateForm, { FormField } from '@/src/components/form-popup/create';
 import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
-import { Eye, Pencil, Trash2, X } from 'lucide-react';
+import { Eye, Pencil, Trash2, X, Plus } from 'lucide-react';
 
 type CustomerType = 'Company' | 'Individual';
 type CustomerStatus = 'Active' | 'Inactive' | 'Blocked';
@@ -83,6 +83,24 @@ interface OutstandingAlert {
   status: 'Active' | 'Resolved';
 }
 
+// Rental Agreement Types (from rental-agreement page)
+interface MachineItem {
+  id: string;
+  brand: string;
+  model: string;
+  type: string;
+  quantity: number;
+  standardPrice: number;
+}
+
+interface AddOnItem {
+  id: string;
+  machineId: string;
+  addOnId: string;
+  quantity: number;
+  price: number;
+}
+
 // Mock customer data
 const mockCustomers: Customer[] = [
   {
@@ -121,6 +139,35 @@ const mockCustomers: Customer[] = [
     status: 'Active',
   },
 ];
+
+// Mock machine data (from rental-agreement page)
+const mockMachineBrands = ['Brother', 'Singer', 'Janome', 'Juki', 'Pfaff', 'Bernina'];
+const mockMachineModels = [
+  { brand: 'Brother', models: ['XL2600i', 'SE600', 'CS6000i'] },
+  { brand: 'Singer', models: ['Heavy Duty 4423', 'Buttonhole 160'] },
+  { brand: 'Janome', models: ['HD3000', 'MB-4S'] },
+  { brand: 'Juki', models: ['MO-654DE'] },
+];
+const mockMachineTypes = ['Industrial', 'Domestic', 'Embroidery', 'Overlock', 'Buttonhole', 'Other'];
+
+// Mock add-ons data (from rental-agreement page)
+const mockAddOns = [
+  { id: 'ADDON-001', name: 'Thread Stand', price: 5000 },
+  { id: 'ADDON-002', name: 'Extension Table', price: 8000 },
+  { id: 'ADDON-003', name: 'Presser Foot Set', price: 3000 },
+  { id: 'ADDON-004', name: 'Bobbin Case', price: 2000 },
+  { id: 'ADDON-005', name: 'Needle Set', price: 1500 },
+];
+
+// Mock standard prices per machine type (from rental-agreement page)
+const standardPrices: Record<string, number> = {
+  Industrial: 50000,
+  Domestic: 35000,
+  Embroidery: 45000,
+  Overlock: 40000,
+  Buttonhole: 30000,
+  Other: 35000,
+};
 
 // Mock function to get customer profile data (replace with API call later)
 const getCustomerProfileData = (customerId: number): CustomerInfo => {
@@ -326,15 +373,71 @@ const columns: TableColumn[] = [
 
 const CustomerListPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isCreateRentalAgreementModalOpen, setIsCreateRentalAgreementModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<'overview' | 'rental-history' | 'payments' | 'damage-records' | 'agreements' | 'outstanding-alerts'>('overview');
   const [activeCreateTab, setActiveCreateTab] = useState<'company' | 'individual'>('company');
   const [activeUpdateTab, setActiveUpdateTab] = useState<'company' | 'individual'>('company');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Rental Agreement Form State
+  const [customerId, setCustomerId] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [machines, setMachines] = useState<MachineItem[]>([
+    { id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0 },
+  ]);
+  const [addOns, setAddOns] = useState<AddOnItem[]>([]);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Calculate pricing
+  const pricing = useMemo(() => {
+    let totalMachinePrice = 0;
+    machines.forEach((machine) => {
+      if (machine.type && machine.quantity > 0) {
+        const pricePerMachine = standardPrices[machine.type] || 0;
+        machine.standardPrice = pricePerMachine;
+        totalMachinePrice += pricePerMachine * machine.quantity;
+      }
+    });
+
+    let totalAddOnPrice = 0;
+    addOns.forEach((addOn) => {
+      if (addOn.addOnId && addOn.quantity > 0) {
+        const addOnData = mockAddOns.find((ao) => ao.id === addOn.addOnId);
+        addOn.price = addOnData?.price || 0;
+        totalAddOnPrice += (addOnData?.price || 0) * addOn.quantity;
+      }
+    });
+
+    return {
+      standardPricePerMachine: machines.length > 0 && machines[0].type ? standardPrices[machines[0].type] || 0 : 0,
+      totalMachinePrice,
+      totalAddOnPrice,
+      totalPrice: totalMachinePrice + totalAddOnPrice,
+    };
+  }, [machines, addOns]);
+
+  // Get available models based on selected brand
+  const getAvailableModels = (brand: string) => {
+    const brandData = mockMachineModels.find((m) => m.brand === brand);
+    return brandData?.models || [];
+  };
+
+  // Get available machine IDs for add-ons
+  const getAvailableMachineIds = () => {
+    return machines
+      .map((m, index) => ({
+        id: m.id,
+        label: `Machine ${index + 1}: ${m.brand} ${m.model} (${m.type})`,
+      }))
+      .filter((m) => m.label.includes(':')); // Only show if machine is selected
+  };
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -356,6 +459,27 @@ const CustomerListPage: React.FC = () => {
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setActiveCreateTab('company');
+  };
+
+  const handleCreateHiringAgreement = () => {
+    setIsCreateRentalAgreementModalOpen(true);
+    // Reset form
+    setCustomerId('');
+    setStartDate('');
+    setEndDate('');
+    setMachines([{ id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0 }]);
+    setAddOns([]);
+    setFormErrors({});
+  };
+
+  const handleCloseCreateRentalAgreementModal = () => {
+    setIsCreateRentalAgreementModalOpen(false);
+    setCustomerId('');
+    setStartDate('');
+    setEndDate('');
+    setMachines([{ id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0 }]);
+    setAddOns([]);
+    setFormErrors({});
   };
 
   const handleViewCustomer = (customer: Customer) => {
@@ -405,6 +529,126 @@ const CustomerListPage: React.FC = () => {
     } catch (error) {
       console.error('Error deleting customer:', error);
       alert('Failed to delete customer. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Rental Agreement Handlers
+  const handleAddMachine = () => {
+    setMachines([
+      ...machines,
+      { id: Date.now().toString(), brand: '', model: '', type: '', quantity: 1, standardPrice: 0 },
+    ]);
+  };
+
+  const handleRemoveMachine = (id: string) => {
+    if (machines.length > 1) {
+      setMachines(machines.filter((m) => m.id !== id));
+      // Remove add-ons associated with this machine
+      setAddOns(addOns.filter((a) => a.machineId !== id));
+    }
+  };
+
+  const handleMachineChange = (id: string, field: keyof MachineItem, value: any) => {
+    setMachines(
+      machines.map((m) => {
+        if (m.id === id) {
+          const updated = { ...m, [field]: value };
+          // Reset model when brand changes
+          if (field === 'brand') {
+            updated.model = '';
+          }
+          // Update standard price when type changes
+          if (field === 'type') {
+            updated.standardPrice = standardPrices[value] || 0;
+          }
+          return updated;
+        }
+        return m;
+      })
+    );
+  };
+
+  const handleAddAddOn = () => {
+    setAddOns([
+      ...addOns,
+      { id: Date.now().toString(), machineId: '', addOnId: '', quantity: 1, price: 0 },
+    ]);
+  };
+
+  const handleRemoveAddOn = (id: string) => {
+    setAddOns(addOns.filter((a) => a.id !== id));
+  };
+
+  const handleAddOnChange = (id: string, field: keyof AddOnItem, value: any) => {
+    setAddOns(
+      addOns.map((a) => {
+        if (a.id === id) {
+          const updated = { ...a, [field]: value };
+          // Update price when add-on ID changes
+          if (field === 'addOnId') {
+            const addOnData = mockAddOns.find((ao) => ao.id === value);
+            updated.price = addOnData?.price || 0;
+          }
+          return updated;
+        }
+        return a;
+      })
+    );
+  };
+
+  const validateRentalAgreementForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!customerId) errors.customerId = 'Customer is required';
+    if (!startDate) errors.startDate = 'Start date is required';
+    if (!endDate) errors.endDate = 'End date is required';
+    if (new Date(endDate) <= new Date(startDate)) {
+      errors.endDate = 'End date must be after start date';
+    }
+
+    machines.forEach((machine, index) => {
+      if (!machine.brand) errors[`machine_brand_${index}`] = 'Brand is required';
+      if (!machine.model) errors[`machine_model_${index}`] = 'Model is required';
+      if (!machine.type) errors[`machine_type_${index}`] = 'Type is required';
+      if (machine.quantity < 1) errors[`machine_quantity_${index}`] = 'Quantity must be at least 1';
+    });
+
+    addOns.forEach((addOn, index) => {
+      if (!addOn.machineId) errors[`addon_machine_${index}`] = 'Machine ID is required';
+      if (!addOn.addOnId) errors[`addon_id_${index}`] = 'Add-on ID is required';
+      if (addOn.quantity < 1) errors[`addon_quantity_${index}`] = 'Quantity must be at least 1';
+    });
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmitRentalAgreement = async () => {
+    if (!validateRentalAgreementForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const selectedCustomer = mockCustomers.find((c) => c.id === Number(customerId));
+      const payload = {
+        customerId,
+        customerName: selectedCustomer?.name || '',
+        startDate,
+        endDate,
+        machines,
+        addOns,
+        pricing,
+      };
+
+      console.log('Create rental agreement payload:', payload);
+      alert(`Rental Agreement created successfully (frontend only).`);
+      handleCloseCreateRentalAgreementModal();
+    } catch (error) {
+      console.error('Error creating rental agreement:', error);
+      alert('Failed to create rental agreement. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1183,10 +1427,13 @@ const CustomerListPage: React.FC = () => {
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
         onMobileClose={handleMobileSidebarClose}
+        onExpandedChange={setIsSidebarExpanded}
       />
 
       {/* Main content area */}
-      <main className="pt-[70px] lg:ml-[300px] p-6">
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+      }`}>
         <div className="max-w-7xl mx-auto space-y-4">
           {/* Page header */}
           <div className="flex items-center justify-between">
@@ -1197,6 +1444,14 @@ const CustomerListPage: React.FC = () => {
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Overview of all customers with their type, outstanding balances, and status.
               </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleCreateHiringAgreement}
+                className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+              >
+                Create Hiring Agreement
+              </button>
             </div>
           </div>
 
@@ -1286,6 +1541,378 @@ const CustomerListPage: React.FC = () => {
                   className="shadow-none border-0 p-0"
                 />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Rental Agreement Modal */}
+      {isCreateRentalAgreementModalOpen && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                Create Rental Agreement
+              </h2>
+              <button
+                onClick={handleCloseCreateRentalAgreementModal}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-6">
+                {/* Agreement Details Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Agreement Details
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Customer <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={customerId}
+                        onChange={(e) => setCustomerId(e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                          formErrors.customerId
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      >
+                        <option value="">Select Customer</option>
+                        {mockCustomers.map((customer) => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.name}
+                          </option>
+                        ))}
+                      </select>
+                      {formErrors.customerId && (
+                        <p className="mt-1 text-sm text-red-500">{formErrors.customerId}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Start Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                          formErrors.startDate
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      />
+                      {formErrors.startDate && (
+                        <p className="mt-1 text-sm text-red-500">{formErrors.startDate}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        End Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        min={startDate}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                          formErrors.endDate
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      />
+                      {formErrors.endDate && (
+                        <p className="mt-1 text-sm text-red-500">{formErrors.endDate}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Machines Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machines</h3>
+                    <button
+                      type="button"
+                      onClick={handleAddMachine}
+                      className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Machine
+                    </button>
+                  </div>
+                  {machines.map((machine, index) => (
+                    <div
+                      key={machine.id}
+                      className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Machine {index + 1}
+                        </span>
+                        {machines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMachine(machine.id)}
+                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Brand <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={machine.brand}
+                            onChange={(e) => handleMachineChange(machine.id, 'brand', e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                              formErrors[`machine_brand_${index}`]
+                                ? 'border-red-500'
+                                : 'border-gray-300 dark:border-slate-600'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          >
+                            <option value="">Select Brand</option>
+                            {mockMachineBrands.map((brand) => (
+                              <option key={brand} value={brand}>
+                                {brand}
+                              </option>
+                            ))}
+                          </select>
+                          {formErrors[`machine_brand_${index}`] && (
+                            <p className="mt-1 text-sm text-red-500">
+                              {formErrors[`machine_brand_${index}`]}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Model <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={machine.model}
+                            onChange={(e) => handleMachineChange(machine.id, 'model', e.target.value)}
+                            disabled={!machine.brand}
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                              formErrors[`machine_model_${index}`]
+                                ? 'border-red-500'
+                                : 'border-gray-300 dark:border-slate-600'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            <option value="">Select Model</option>
+                            {getAvailableModels(machine.brand).map((model) => (
+                              <option key={model} value={model}>
+                                {model}
+                              </option>
+                            ))}
+                          </select>
+                          {formErrors[`machine_model_${index}`] && (
+                            <p className="mt-1 text-sm text-red-500">
+                              {formErrors[`machine_model_${index}`]}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Type <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={machine.type}
+                            onChange={(e) => handleMachineChange(machine.id, 'type', e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                              formErrors[`machine_type_${index}`]
+                                ? 'border-red-500'
+                                : 'border-gray-300 dark:border-slate-600'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          >
+                            <option value="">Select Type</option>
+                            {mockMachineTypes.map((type) => (
+                              <option key={type} value={type}>
+                                {type}
+                              </option>
+                            ))}
+                          </select>
+                          {formErrors[`machine_type_${index}`] && (
+                            <p className="mt-1 text-sm text-red-500">
+                              {formErrors[`machine_type_${index}`]}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Number of Machines <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={machine.quantity}
+                            onChange={(e) =>
+                              handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
+                            }
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                              formErrors[`machine_quantity_${index}`]
+                                ? 'border-red-500'
+                                : 'border-gray-300 dark:border-slate-600'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          />
+                          {formErrors[`machine_quantity_${index}`] && (
+                            <p className="mt-1 text-sm text-red-500">
+                              {formErrors[`machine_quantity_${index}`]}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add-ons Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons</h3>
+                    <button
+                      type="button"
+                      onClick={handleAddAddOn}
+                      className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Add-on
+                    </button>
+                  </div>
+                  {addOns.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                      No add-ons added. Click "Add Add-on" to add one.
+                    </p>
+                  ) : (
+                    addOns.map((addOn, index) => (
+                      <div
+                        key={addOn.id}
+                        className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Add-on {index + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAddOn(addOn.id)}
+                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Machine ID <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={addOn.machineId}
+                              onChange={(e) => handleAddOnChange(addOn.id, 'machineId', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                formErrors[`addon_machine_${index}`]
+                                  ? 'border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            >
+                              <option value="">Select Machine</option>
+                              {getAvailableMachineIds().map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.label}
+                                </option>
+                              ))}
+                            </select>
+                            {formErrors[`addon_machine_${index}`] && (
+                              <p className="mt-1 text-sm text-red-500">
+                                {formErrors[`addon_machine_${index}`]}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Add-on ID <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={addOn.addOnId}
+                              onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                formErrors[`addon_id_${index}`]
+                                  ? 'border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            >
+                              <option value="">Select Add-on</option>
+                              {mockAddOns.map((ao) => (
+                                <option key={ao.id} value={ao.id}>
+                                  {ao.name} (Rs. {ao.price.toLocaleString('en-LK')})
+                                </option>
+                              ))}
+                            </select>
+                            {formErrors[`addon_id_${index}`] && (
+                              <p className="mt-1 text-sm text-red-500">
+                                {formErrors[`addon_id_${index}`]}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Number of Add-ons <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={addOn.quantity}
+                              onChange={(e) =>
+                                handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)
+                              }
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                formErrors[`addon_quantity_${index}`]
+                                  ? 'border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            />
+                            {formErrors[`addon_quantity_${index}`] && (
+                              <p className="mt-1 text-sm text-red-500">
+                                {formErrors[`addon_quantity_${index}`]}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={handleCloseCreateRentalAgreementModal}
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitRentalAgreement}
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? 'Creating...' : 'Create Agreement'}
+              </button>
             </div>
           </div>
         </div>

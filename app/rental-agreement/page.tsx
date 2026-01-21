@@ -5,6 +5,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
+import QRScannerComponent from '@/src/components/qr-scanner';
 import { Eye, Pencil, X, Plus, Trash2 } from 'lucide-react';
 
 type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
@@ -60,6 +61,17 @@ interface AddOnItem {
   addOnId: string;
   quantity: number;
   price: number;
+}
+
+// Machine interface for update form (adding machines to agreement)
+interface MachineForAgreement {
+  id: string;
+  description: string; // brandName + modelName + typeName
+  serialNumber: string;
+  boxNumber: string;
+  brandName?: string;
+  modelName?: string;
+  typeName?: string;
 }
 
 // Mock customer data
@@ -161,6 +173,18 @@ const mockRentalAgreements: RentalAgreement[] = [
     monthlyRent: 60000,
     outstanding: 180000,
     status: 'Active',
+  },
+  {
+    id: 6,
+    agreementNo: 'RA-2024-006',
+    customerNo: 'CUST-006',
+    customerName: 'Alpha Constructions',
+    serialNo: 'SN-2024-006',
+    startDate: '2026-01-01',
+    endDate: '2026-08-01',
+    monthlyRent: 80000,
+    outstanding: 560000,
+    status: 'Pending',
   },
 ];
 
@@ -330,6 +354,13 @@ const columns: TableColumn[] = [
           </span>
         );
       }
+      if (value === 'Pending') {
+        return (
+          <span className={`${base} bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300`}>
+            Pending
+          </span>
+        );
+      }
       return (
         <span className={`${base} bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200`}>
           Cancelled
@@ -341,6 +372,7 @@ const columns: TableColumn[] = [
 
 const RentalAgreementPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -358,6 +390,16 @@ const RentalAgreementPage: React.FC = () => {
   const [signature, setSignature] = useState('');
   const [agreementDate, setAgreementDate] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Machine management state for update form
+  const [machinesForAgreement, setMachinesForAgreement] = useState<MachineForAgreement[]>([]);
+  const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+  const [manualMachineInput, setManualMachineInput] = useState({
+    description: '',
+    serialNumber: '',
+    boxNumber: '',
+  });
+  const [machineErrors, setMachineErrors] = useState<Record<string, string>>({});
 
   // Calculate pricing
   const pricing = useMemo(() => {
@@ -591,11 +633,86 @@ const RentalAgreementPage: React.FC = () => {
   const handleUpdateAgreement = (agreement: RentalAgreement) => {
     setSelectedAgreement(agreement);
     setIsUpdateModalOpen(true);
+    // Initialize machines from agreement (if any exist)
+    // For now, we'll start with empty array
+    setMachinesForAgreement([]);
+    setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
+    setMachineErrors({});
   };
 
   const handleCloseUpdateModal = () => {
     setIsUpdateModalOpen(false);
     setSelectedAgreement(null);
+    setMachinesForAgreement([]);
+    setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
+    setMachineErrors({});
+  };
+
+  // Machine management handlers for update form
+  const handleAddMachineManually = () => {
+    const errors: Record<string, string> = {};
+    
+    if (!manualMachineInput.description.trim()) {
+      errors.description = 'Description is required';
+    }
+    if (!manualMachineInput.serialNumber.trim()) {
+      errors.serialNumber = 'Serial number is required';
+    }
+    if (!manualMachineInput.boxNumber.trim()) {
+      errors.boxNumber = 'Box number is required';
+    }
+
+    setMachineErrors(errors);
+
+    if (Object.keys(errors).length === 0) {
+      const newMachine: MachineForAgreement = {
+        id: Date.now().toString(),
+        description: manualMachineInput.description.trim(),
+        serialNumber: manualMachineInput.serialNumber.trim(),
+        boxNumber: manualMachineInput.boxNumber.trim(),
+      };
+
+      setMachinesForAgreement([...machinesForAgreement, newMachine]);
+      setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
+      setMachineErrors({});
+    }
+  };
+
+  const handleRemoveMachineFromAgreement = (machineId: string) => {
+    setMachinesForAgreement(machinesForAgreement.filter((m) => m.id !== machineId));
+  };
+
+  const handleQRScanSuccess = (qrData: string) => {
+    try {
+      // Parse QR code data - assuming it's JSON format
+      // Format: {"serialNumber": "SN-001", "boxNumber": "BOX-001", "brandName": "Brother", "modelName": "XL2600i", "typeName": "Domestic"}
+      const machineData = JSON.parse(qrData);
+      
+      const newMachine: MachineForAgreement = {
+        id: Date.now().toString(),
+        description: `${machineData.brandName || ''} ${machineData.modelName || ''} ${machineData.typeName || ''}`.trim(),
+        serialNumber: machineData.serialNumber || '',
+        boxNumber: machineData.boxNumber || '',
+        brandName: machineData.brandName,
+        modelName: machineData.modelName,
+        typeName: machineData.typeName,
+      };
+
+      setMachinesForAgreement([...machinesForAgreement, newMachine]);
+      setIsQRScannerOpen(false);
+    } catch (error) {
+      console.error('Error parsing QR code:', error);
+      alert('Invalid QR code format. Please try again.');
+    }
+  };
+
+  const handleOpenQRScanner = () => {
+    setIsQRScannerOpen(true);
+  };
+
+  const handleCloseQRScanner = () => {
+    setIsQRScannerOpen(false);
+    
   };
 
   // Form fields for Update
@@ -677,8 +794,12 @@ const RentalAgreementPage: React.FC = () => {
   const handleAgreementUpdate = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      console.log('Update rental agreement payload:', data);
-      alert(`Rental Agreement "${data.agreementNo}" updated (frontend only).`);
+      const payload = {
+        ...data,
+        machines: machinesForAgreement,
+      };
+      console.log('Update rental agreement payload:', payload);
+      alert(`Rental Agreement "${data.agreementNo}" updated with ${machinesForAgreement.length} machine(s) (frontend only).`);
       handleCloseUpdateModal();
     } finally {
       setIsSubmitting(false);
@@ -712,6 +833,186 @@ const RentalAgreementPage: React.FC = () => {
     },
   ];
 
+  // Machine Management Section Component
+  const renderMachineManagementSection = () => {
+    return (
+      <div className="space-y-4">
+        <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Machines for this Agreement
+          </h3>
+
+          {/* Manual Input Method */}
+          <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 mb-4">
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+              Add Machine Manually
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Description <span className="text-red-500">*</span>
+                  
+                </label>
+                <input
+                  type="text"
+                  value={manualMachineInput.description}
+                  onChange={(e) =>
+                    setManualMachineInput({ ...manualMachineInput, description: e.target.value })
+                  }
+                  placeholder="e.g., Brother XL2600i Domestic"
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                    machineErrors.description
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-slate-600'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                />
+                {machineErrors.description && (
+                  <p className="mt-1 text-sm text-red-500">{machineErrors.description}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Serial Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={manualMachineInput.serialNumber}
+                  onChange={(e) =>
+                    setManualMachineInput({ ...manualMachineInput, serialNumber: e.target.value })
+                  }
+                  placeholder="Enter serial number"
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                    machineErrors.serialNumber
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-slate-600'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                />
+                {machineErrors.serialNumber && (
+                  <p className="mt-1 text-sm text-red-500">{machineErrors.serialNumber}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Box Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={manualMachineInput.boxNumber}
+                  onChange={(e) =>
+                    setManualMachineInput({ ...manualMachineInput, boxNumber: e.target.value })
+                  }
+                  placeholder="Enter box number"
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                    machineErrors.boxNumber
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-slate-600'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                />
+                {machineErrors.boxNumber && (
+                  <p className="mt-1 text-sm text-red-500">{machineErrors.boxNumber}</p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleAddMachineManually}
+              className="mt-4 px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+            >
+              Add Machine
+            </button>
+          </div>
+
+          {/* QR Scanner Method */}
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={handleOpenQRScanner}
+              className="w-full px-4 py-3 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-800 transition-colors flex items-center justify-center space-x-2"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+                />
+              </svg>
+              <span>Scan QR Code to Add Machine</span>
+            </button>
+          </div>
+
+          {/* Added Machines List */}
+          {machinesForAgreement.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Added Machines ({machinesForAgreement.length})
+              </h4>
+              <div className="space-y-2">
+                {machinesForAgreement.map((machine) => (
+                  <div
+                    key={machine.id}
+                    className="bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg p-3 flex items-center justify-between"
+                  >
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {machine.description}
+                      </p>
+                      <div className="flex space-x-4 mt-1 text-xs text-gray-600 dark:text-gray-400">
+                        <span>Serial: {machine.serialNumber}</span>
+                        <span>Box: {machine.boxNumber}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMachineFromAgreement(machine.id)}
+                      className="ml-4 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // QR Scanner Modal Component
+  const renderQRScannerModal = () => {
+    if (!isQRScannerOpen) return null;
+
+    return (
+      <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-[60] flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Scan QR Code
+            </h2>
+            <button
+              onClick={handleCloseQRScanner}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <QRScannerComponent 
+              onScanSuccess={handleQRScanSuccess} 
+              onClose={handleCloseQRScanner}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // View Rental Agreement Content
   const renderAgreementDetails = () => {
     if (!selectedAgreement) return null;
@@ -744,6 +1045,8 @@ const RentalAgreementPage: React.FC = () => {
                         ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                         : agreementInfo.status === 'Completed'
                         ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        : agreementInfo.status === 'Pending'
+                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
                         : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
                     }`}
                   >
@@ -920,10 +1223,13 @@ const RentalAgreementPage: React.FC = () => {
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
         onMobileClose={handleMobileSidebarClose}
+        onExpandedChange={setIsSidebarExpanded}
       />
 
       {/* Main content area */}
-      <main className="pt-[70px] lg:ml-[300px] p-6">
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+      }`}>
         <div className="max-w-7xl mx-auto space-y-4">
           {/* Page header */}
           <div className="flex items-center justify-between">
@@ -1498,11 +1804,15 @@ const RentalAgreementPage: React.FC = () => {
                 loading={isSubmitting}
                 initialData={getUpdateInitialData(selectedAgreement)}
                 className="shadow-none border-0 p-0"
+                customSections={renderMachineManagementSection()}
               />
             </div>
           </div>
         </div>
       )}
+
+      {/* QR Scanner Modal */}
+      {renderQRScannerModal()}
     </div>
   );
 };

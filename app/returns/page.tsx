@@ -429,6 +429,7 @@ const columns: TableColumn[] = [
 
 const ReturnsPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
@@ -615,10 +616,13 @@ const ReturnsPage: React.FC = () => {
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
         onMobileClose={handleMobileSidebarClose}
+        onExpandedChange={setIsSidebarExpanded}
       />
 
       {/* Main content area */}
-      <main className="pt-[70px] lg:ml-[300px] p-6">
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+      }`}>
         <div className="max-w-7xl mx-auto space-y-4">
           {/* Page header */}
           <div className="flex items-center justify-between">

@@ -98,6 +98,7 @@ const mockIdleMachines: IdleMachine[] = [
 
 const AnalyticsPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<'6M' | '12M' | 'YTD'>('6M');
   const [isExporting, setIsExporting] = useState(false);
 
@@ -564,10 +565,13 @@ const AnalyticsPage: React.FC = () => {
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
         onMobileClose={handleMobileSidebarClose}
+        onExpandedChange={setIsSidebarExpanded}
       />
 
       {/* Main content area */}
-      <main className="pt-[70px] lg:ml-[300px] p-6">
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+      }`}>
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Page header */}
           <div className="flex items-center justify-between flex-wrap gap-4">

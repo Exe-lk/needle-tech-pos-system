@@ -5,12 +5,15 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
-import { Eye, Pencil, X, Plus, Download, FileText, Trash2 } from 'lucide-react';
+import { Eye, Pencil, X, Plus, Download, FileText, Trash2, Printer } from 'lucide-react';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
 interface InvoiceItem {
   id: string;
+  itemCode: string;
+  description: string;
+  serialNumber?: string;
   brand: string;
   model: string;
   type: MachineType;
@@ -33,8 +36,11 @@ interface Invoice {
   invoiceNumber: string;
   invoiceType: 'VAT' | 'Non-VAT';
   customerName: string;
+  customerAddress: string;
   vatTinNic: string;
   invoiceDate: string;
+  periodFrom: string;
+  periodTo: string;
   items: InvoiceItem[];
   subtotal: number;
   vatAmount: number;
@@ -43,13 +49,26 @@ interface Invoice {
   status: 'draft' | 'issued' | 'paid' | 'overdue';
 }
 
+// Company information
+const companyInfo = {
+  name: 'NEEDLE TECHNOLOGIES COMPANY (PVT) LTD',
+  address: 'No. 137M, Colombo Road, Biyagama',
+  telephone: ['011-2488735', '011-5737711'],
+  fax: '011-2487623',
+  hotline: '077-7615289',
+  email: 'needletec@slmet.lk',
+  tinNo: '114719676',
+  vatNo: '114719676-7000',
+  role: 'Supplier of industrial Sewing Machines and Accessories',
+};
+
 // Mock customers for dropdown
 const mockCustomers = [
-  { id: 'C001', name: 'ABC Holdings (Pvt) Ltd', type: 'Company', vatTinNic: 'VAT-123456789' },
-  { id: 'C002', name: 'John Perera', type: 'Individual', vatTinNic: 'NIC-123456789V' },
-  { id: 'C003', name: 'XYZ Engineering', type: 'Company', vatTinNic: 'VAT-987654321' },
-  { id: 'C004', name: 'Kamal Silva', type: 'Individual', vatTinNic: 'NIC-987654321V' },
-  { id: 'C005', name: 'Mega Constructions', type: 'Company', vatTinNic: 'VAT-456789123' },
+  { id: 'C001', name: 'ABC Holdings (Pvt) Ltd', type: 'Company', vatTinNic: 'VAT-123456789', address: '123 Main Street, Colombo 05' },
+  { id: 'C002', name: 'John Perera', type: 'Individual', vatTinNic: 'NIC-123456789V', address: '45 Galle Road, Mount Lavinia' },
+  { id: 'C003', name: 'XYZ Engineering', type: 'Company', vatTinNic: 'VAT-987654321', address: '78 Kandy Road, Kurunegala' },
+  { id: 'C004', name: 'Kamal Silva', type: 'Individual', vatTinNic: 'NIC-987654321V', address: '12 Negombo Road, Wattala' },
+  { id: 'C005', name: 'Mega Constructions', type: 'Company', vatTinNic: 'VAT-456789123', address: '90 Jaffna Road, Anuradhapura' },
 ];
 
 // Mock brands and types for dropdowns (matching machines page)
@@ -59,7 +78,7 @@ const mockModels: Record<string, string[]> = {
   Brother: ['XL2600i', 'SE600', 'CS6000i', 'Other'],
   Singer: ['Heavy Duty 4423', 'Buttonhole 160', 'Other'],
   Janome: ['HD3000', 'MB-4S', 'Other'],
-  Juki: ['MO-654DE', 'Other'],
+  Juki: ['MO-654DE', 'LK1900A-SS', 'LX-1900B-SS', 'Other'],
   Pfaff: ['Other'],
   Bernina: ['Other'],
   Other: ['Other'],
@@ -78,69 +97,71 @@ const mockTypes: { label: string; value: MachineType }[] = [
 const mockInvoices: Invoice[] = [
   {
     id: 1,
-    invoiceNumber: 'INV-2024-001',
+    invoiceNumber: '00415',
     invoiceType: 'VAT',
     customerName: 'ABC Holdings (Pvt) Ltd',
+    customerAddress: '123 Main Street, Colombo 05',
     vatTinNic: 'VAT-123456789',
-    invoiceDate: '2024-01-15',
+    invoiceDate: '2024-12-31',
+    periodFrom: '2024-12-01',
+    periodTo: '2024-12-31',
     items: [
       {
         id: '1',
-        brand: 'Brother',
-        model: 'XL2600i',
-        type: 'Domestic',
-        numberOfMachines: 3,
-        monthlyRentPerMachine: 5000,
+        itemCode: '212WG00032',
+        description: 'JUKI LK1900A-SS-ELECTRONIC BAR TACK MACHINE',
+        brand: 'Juki',
+        model: 'LK1900A-SS',
+        type: 'Industrial',
+        numberOfMachines: 1,
+        monthlyRentPerMachine: 15000,
         subtotal: 15000,
       },
-      {
-        id: '2',
-        brand: 'Singer',
-        model: 'Heavy Duty 4423',
-        type: 'Industrial',
-        numberOfMachines: 2,
-        monthlyRentPerMachine: 8000,
-        subtotal: 16000,
-      },
     ],
-    subtotal: 31000,
-    vatAmount: 5580,
-    totalAmount: 36580,
+    subtotal: 15000,
+    vatAmount: 2700,
+    totalAmount: 17700,
     paymentDetails: {
       paymentMethod: 'Bank Transfer',
       paymentDate: '2024-01-20',
       receiptNumber: 'RCP-2024-001',
-      amount: 36580,
+      amount: 17700,
       status: 'paid',
     },
     status: 'paid',
   },
   {
     id: 2,
-    invoiceNumber: 'INV-2024-002',
+    invoiceNumber: '056832',
     invoiceType: 'Non-VAT',
     customerName: 'John Perera',
+    customerAddress: '45 Galle Road, Mount Lavinia',
     vatTinNic: 'NIC-123456789V',
-    invoiceDate: '2024-02-10',
+    invoiceDate: '2024-12-01',
+    periodFrom: '2024-12-01',
+    periodTo: '2024-12-31',
     items: [
       {
         id: '1',
-        brand: 'Janome',
-        model: 'HD3000',
-        type: 'Domestic',
+        itemCode: '212WG00033',
+        description: 'JUKI LX-1900B-SS - ELECTRONIC BAR TACK MACHINE',
+        serialNumber: '2LIHK00181',
+        brand: 'Juki',
+        model: 'LX-1900B-SS',
+        type: 'Industrial',
         numberOfMachines: 1,
-        monthlyRentPerMachine: 3000,
-        subtotal: 3000,
+        monthlyRentPerMachine: 17000,
+        subtotal: 17000,
       },
     ],
-    subtotal: 3000,
+    subtotal: 17000,
     vatAmount: 0,
-    totalAmount: 3000,
+    totalAmount: 17000,
     paymentDetails: {
       paymentMethod: 'Cash',
       paymentDate: '2024-02-12',
       receiptNumber: 'RCP-2024-002',
-      amount: 3000,
+      amount: 17000,
       status: 'paid',
     },
     status: 'paid',
@@ -229,6 +250,7 @@ const columns: TableColumn[] = [
 ];
 
 const InvoicePage: React.FC = () => {
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -240,6 +262,8 @@ const InvoicePage: React.FC = () => {
   const [customerId, setCustomerId] = useState('');
   const [invoiceType, setInvoiceType] = useState<'VAT' | 'Non-VAT'>('VAT');
   const [invoiceDate, setInvoiceDate] = useState('');
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo] = useState('');
   const [items, setItems] = useState<Omit<InvoiceItem, 'id' | 'subtotal'>[]>([]);
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
@@ -265,6 +289,8 @@ const InvoicePage: React.FC = () => {
     setCustomerId('');
     setInvoiceType('VAT');
     setInvoiceDate('');
+    setPeriodFrom('');
+    setPeriodTo('');
     setItems([]);
     setPaymentMethod('');
     setPaymentDate('');
@@ -278,6 +304,8 @@ const InvoicePage: React.FC = () => {
     setCustomerId('');
     setInvoiceType('VAT');
     setInvoiceDate('');
+    setPeriodFrom('');
+    setPeriodTo('');
     setItems([]);
     setPaymentMethod('');
     setPaymentDate('');
@@ -294,10 +322,23 @@ const InvoicePage: React.FC = () => {
     }
   };
 
+  const generateItemCode = (index: number): string => {
+    return `212WG${String(index + 1).padStart(5, '0')}`;
+  };
+
+  const generateDescription = (brand: string, model: string, type: MachineType): string => {
+    if (brand === 'Juki' && (model.includes('LK1900A-SS') || model.includes('LX-1900B-SS'))) {
+      return `${brand.toUpperCase()} ${model}-ELECTRONIC BAR TACK MACHINE`;
+    }
+    return `${brand.toUpperCase()} ${model} - ${type}`;
+  };
+
   const addItem = () => {
     setItems([
       ...items,
       {
+        itemCode: generateItemCode(items.length),
+        description: '',
         brand: '',
         model: '',
         type: 'Domestic',
@@ -309,15 +350,33 @@ const InvoicePage: React.FC = () => {
 
   const removeItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
+    // Regenerate item codes
+    const updatedItems = items.filter((_, i) => i !== index).map((item, idx) => ({
+      ...item,
+      itemCode: generateItemCode(idx),
+    }));
+    setItems(updatedItems);
   };
 
   const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
     const updatedItems = [...items];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
     
+    // If brand or model changes, update description
+    if (field === 'brand' || field === 'model' || field === 'type') {
+      if (updatedItems[index].brand && updatedItems[index].model && updatedItems[index].type) {
+        updatedItems[index].description = generateDescription(
+          updatedItems[index].brand,
+          updatedItems[index].model,
+          updatedItems[index].type
+        );
+      }
+    }
+    
     // If brand changes, reset model
     if (field === 'brand') {
       updatedItems[index].model = '';
+      updatedItems[index].description = '';
     }
     
     setItems(updatedItems);
@@ -343,6 +402,8 @@ const InvoicePage: React.FC = () => {
 
     if (!customerId) errors.customerId = 'Customer is required';
     if (!invoiceDate) errors.invoiceDate = 'Invoice Date is required';
+    if (!periodFrom) errors.periodFrom = 'Period From is required';
+    if (!periodTo) errors.periodTo = 'Period To is required';
     if (items.length === 0) errors.items = 'At least one item is required';
     
     items.forEach((item, index) => {
@@ -380,11 +441,14 @@ const InvoicePage: React.FC = () => {
       }));
 
       const payload = {
-        invoiceNumber: `INV-${new Date().getFullYear()}-${String(mockInvoices.length + 1).padStart(3, '0')}`,
+        invoiceNumber: String(mockInvoices.length + 1).padStart(5, '0'),
         invoiceType,
         customerName: customer?.name || '',
+        customerAddress: customer?.address || '',
         vatTinNic: customer?.vatTinNic || '',
         invoiceDate,
+        periodFrom,
+        periodTo,
         items: invoiceItems,
         subtotal,
         vatAmount,
@@ -421,56 +485,13 @@ const InvoicePage: React.FC = () => {
     setSelectedInvoice(null);
   };
 
-  
-
   const handleCloseUpdateModal = () => {
     setIsUpdateModalOpen(false);
     setSelectedInvoice(null);
   };
 
-  const handleDownloadPDF = (invoice: Invoice) => {
-    // TODO: Implement PDF generation using a library like jsPDF or react-pdf
-    // For now, we'll create a simple downloadable text representation
-    const invoiceText = `
-INVOICE
-Invoice Number: ${invoice.invoiceNumber}
-Invoice Type: ${invoice.invoiceType}
-Customer: ${invoice.customerName}
-VAT/TIN/NIC: ${invoice.vatTinNic}
-Invoice Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-LK')}
-
-ITEMS:
-${invoice.items.map((item, idx) => `
-${idx + 1}. ${item.brand} ${item.model} - ${item.type}
-   Number of Machines: ${item.numberOfMachines}
-   Monthly Rent per Machine: LKR ${item.monthlyRentPerMachine.toLocaleString()}
-   Subtotal: LKR ${item.subtotal.toLocaleString()}
-`).join('')}
-
-SUBTOTAL: LKR ${invoice.subtotal.toLocaleString()}
-${invoice.vatAmount > 0 ? `VAT (18%): LKR ${invoice.vatAmount.toLocaleString()}` : ''}
-TOTAL: LKR ${invoice.totalAmount.toLocaleString()}
-
-PAYMENT DETAILS:
-Payment Method: ${invoice.paymentDetails.paymentMethod}
-Payment Date: ${new Date(invoice.paymentDetails.paymentDate).toLocaleDateString('en-LK')}
-${invoice.paymentDetails.receiptNumber ? `Receipt Number: ${invoice.paymentDetails.receiptNumber}` : ''}
-Amount: LKR ${invoice.paymentDetails.amount.toLocaleString()}
-Status: ${invoice.paymentDetails.status}
-    `.trim();
-
-    const blob = new Blob([invoiceText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${invoice.invoiceNumber}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    // In production, replace this with actual PDF generation
-    alert('PDF download initiated. In production, this will generate a proper PDF file.');
+  const handlePrint = () => {
+    window.print();
   };
 
   // Action buttons
@@ -481,224 +502,259 @@ Status: ${invoice.paymentDetails.status}
       variant: 'secondary',
       onClick: handleViewInvoice,
     },
-    {
-      label: 'Download PDF',
-      icon: <Download className="w-4 h-4" />,
-      variant: 'secondary',
-      onClick: handleDownloadPDF,
-    }
-    
   ];
 
-  // View Invoice Content
+  // View Invoice Content - Formatted like actual invoice
   const renderInvoiceDetails = () => {
     if (!selectedInvoice) return null;
 
     const { subtotal, vatAmount, totalAmount } = selectedInvoice;
+    const isVAT = selectedInvoice.invoiceType === 'VAT';
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="space-y-6 print:space-y-4">
+        {/* Print Button - Hidden when printing */}
+        <div className="flex items-center justify-between mb-4 print:hidden">
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Invoice Details</h3>
           <button
-            onClick={() => handleDownloadPDF(selectedInvoice)}
+            onClick={handlePrint}
             className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
           >
-            <Download className="w-4 h-4" />
-            <span>Download PDF</span>
+            <Printer className="w-4 h-4" />
+            <span>Print</span>
           </button>
         </div>
 
-        {/* Invoice Header */}
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-            Invoice Information
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Invoice Number:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedInvoice.invoiceNumber}
-              </span>
+        {/* Invoice Document - Print Format */}
+        <div className="bg-white dark:bg-slate-800 rounded-lg p-8 print:p-6 print:shadow-none border border-gray-200 dark:border-slate-700 print:border-0">
+          {/* Company Header */}
+          <div className="mb-6 print:mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white print:text-xl">
+                {isVAT ? companyInfo.name : 'NEEDLE TECHNOLOGIES'}
+              </h1>
             </div>
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Invoice Type:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedInvoice.invoiceType}
-                {selectedInvoice.invoiceType === 'VAT' && ' (18%)'}
-              </span>
+            {!isVAT && (
+              <p className="text-sm text-gray-600 dark:text-gray-400 print:text-xs mb-2">
+                {companyInfo.role}
+              </p>
+            )}
+            <p className="text-sm text-gray-700 dark:text-gray-300 print:text-xs">
+              {companyInfo.address}
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-600 dark:text-gray-400 print:text-xs">
+              <span>Tel: {companyInfo.telephone.join(', ')}</span>
+              {isVAT && <span>Fax: {companyInfo.fax}</span>}
+              {isVAT && <span>Hotline: {companyInfo.hotline}</span>}
+              <span>E-Mail: {companyInfo.email}</span>
             </div>
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Invoice Date:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {new Date(selectedInvoice.invoiceDate).toLocaleDateString('en-LK', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Status:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
-              </span>
+            {isVAT && (
+              <div className="flex gap-x-4 mt-2 text-xs text-gray-600 dark:text-gray-400 print:text-xs">
+                <span>TIN No.: {companyInfo.tinNo}</span>
+                <span>Vat No.: {companyInfo.vatNo}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Invoice Title and Details */}
+          <div className="mb-6 print:mb-4 border-b border-gray-300 dark:border-slate-600 pb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white print:text-lg">
+                {isVAT ? 'TAX INVOICE' : 'INVOICE'}
+              </h2>
+              <div className="text-right text-sm print:text-xs">
+                <div className="mb-1">
+                  <span className="text-gray-600 dark:text-gray-400">Date: </span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {new Date(selectedInvoice.invoiceDate).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-600 dark:text-gray-400">Invoice No.: </span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {selectedInvoice.invoiceNumber}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Customer Information */}
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-            Customer Information
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Customer Name:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
+          {/* Customer Information */}
+          <div className="mb-6 print:mb-4">
+            <div className="mb-2">
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 print:text-xs">
+                {isVAT ? 'Supplier Name: ' : 'Customer: '}
+              </span>
+              <span className="text-sm text-gray-900 dark:text-white print:text-xs font-medium">
                 {selectedInvoice.customerName}
               </span>
             </div>
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">VAT/TIN/NIC:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedInvoice.vatTinNic}
+            <div className="mb-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400 print:text-xs">Address: </span>
+              <span className="text-sm text-gray-900 dark:text-white print:text-xs">
+                {selectedInvoice.customerAddress}
               </span>
             </div>
+            {isVAT && (
+              <div className="mb-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400 print:text-xs">Customer VAT No: </span>
+                <span className="text-sm text-gray-900 dark:text-white print:text-xs">
+                  {selectedInvoice.vatTinNic}
+                </span>
+              </div>
+            )}
+            {!isVAT && (
+              <div className="mb-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400 print:text-xs">NIC: </span>
+                <span className="text-sm text-gray-900 dark:text-white print:text-xs">
+                  {selectedInvoice.vatTinNic}
+                </span>
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Items Table */}
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-            Items
-          </h4>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gray-100 dark:bg-slate-600">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">
-                    Brand
+          {/* Period */}
+          <div className="mb-6 print:mb-4">
+            <div className="flex gap-x-6 text-sm print:text-xs">
+              <div>
+                <span className="text-gray-600 dark:text-gray-400">From: </span>
+                <span className="text-gray-900 dark:text-white font-medium">
+                  {new Date(selectedInvoice.periodFrom).toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-600 dark:text-gray-400">To: </span>
+                <span className="text-gray-900 dark:text-white font-medium">
+                  {new Date(selectedInvoice.periodTo).toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="mb-6 print:mb-4">
+            <table className="w-full border-collapse border border-gray-300 dark:border-slate-600 print:text-xs">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-slate-700">
+                  <th className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Item
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">
-                    Model
+                  <th className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Description
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">
-                    Type
+                  {!isVAT && (
+                    <th className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      Serial No
+                    </th>
+                  )}
+                  <th className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-right text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Rate
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">
-                    No. of Machines
+                  <th className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-right text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Qty
                   </th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">
-                    Monthly Rent/Machine
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">
-                    Subtotal
+                  <th className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-right text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Amount
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-slate-600">
+              <tbody>
                 {selectedInvoice.items.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700">
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{item.brand}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{item.model}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center ${
-                          item.type === 'Industrial'
-                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                            : item.type === 'Domestic'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                            : item.type === 'Embroidery'
-                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                            : item.type === 'Overlock'
-                            ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
-                            : item.type === 'Buttonhole'
-                            ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300'
-                            : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
-                        }`}
-                      >
-                        {item.type}
-                      </span>
+                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700 print:hover:bg-transparent">
+                    <td className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm text-gray-900 dark:text-white print:text-xs">
+                      {item.itemCode}
                     </td>
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{item.numberOfMachines}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white text-right">
-                      LKR {item.monthlyRentPerMachine.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    <td className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm text-gray-900 dark:text-white print:text-xs">
+                      {item.description}
                     </td>
-                    <td className="px-4 py-2 text-sm text-gray-900 dark:text-white font-medium text-right">
-                      LKR {item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    {!isVAT && (
+                      <td className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm text-gray-900 dark:text-white print:text-xs">
+                        {item.serialNumber || '-'}
+                      </td>
+                    )}
+                    <td className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm text-gray-900 dark:text-white text-right print:text-xs">
+                      {item.monthlyRentPerMachine.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm text-gray-900 dark:text-white text-right print:text-xs">
+                      {item.numberOfMachines}
+                    </td>
+                    <td className="border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm text-gray-900 dark:text-white text-right font-medium print:text-xs">
+                      {item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
 
-        {/* Totals */}
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-            Payment & Billing Details
-          </h4>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500 dark:text-gray-400">Subtotal:</span>
-              <span className="text-gray-900 dark:text-white font-medium">
-                LKR {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-            {vatAmount > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-500 dark:text-gray-400">VAT (18%):</span>
-                <span className="text-gray-900 dark:text-white font-medium">
-                  LKR {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                </span>
+          {/* Totals */}
+          <div className="mb-6 print:mb-4">
+            <div className="flex justify-end">
+              <div className="w-full max-w-md space-y-2 text-sm print:text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-700 dark:text-gray-300 font-medium">Sub Amount:</span>
+                  <span className="text-gray-900 dark:text-white font-medium">
+                    Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {isVAT && vatAmount > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium">VAT (18.0%):</span>
+                    <span className="text-gray-900 dark:text-white font-medium">
+                      Rs. {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+                {!isVAT && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium">Monthly Rental:</span>
+                    <span className="text-gray-900 dark:text-white font-medium">
+                      {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-2 border-t border-gray-300 dark:border-slate-600">
+                  <span className="text-lg font-bold text-gray-900 dark:text-white print:text-base">
+                    {isVAT ? 'Total Amount:' : 'Total Amount:'}
+                  </span>
+                  <span className="text-lg font-bold text-gray-900 dark:text-white print:text-base">
+                    Rs. {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
               </div>
-            )}
-            <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-slate-600">
-              <span className="text-lg font-semibold text-gray-900 dark:text-white">Total Amount:</span>
-              <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                LKR {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-              </span>
             </div>
           </div>
-        </div>
 
-        {/* Payment Details */}
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-            Payment Information
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Payment Method:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedInvoice.paymentDetails.paymentMethod}
-              </span>
+          {/* Payment Instructions for Non-VAT */}
+          {!isVAT && (
+            <div className="mb-6 print:mb-4 text-sm print:text-xs text-gray-700 dark:text-gray-300">
+              <p>All Cheques should be drawn in favor of "Needle Technologies"</p>
             </div>
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Payment Date:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {new Date(selectedInvoice.paymentDetails.paymentDate).toLocaleDateString('en-LK', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </span>
-            </div>
-            {selectedInvoice.paymentDetails.receiptNumber && (
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Receipt Number:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {selectedInvoice.paymentDetails.receiptNumber}
-                </span>
+          )}
+
+          {/* Signatures */}
+          <div className="mt-8 print:mt-6 flex justify-between">
+            <div className="w-48 print:w-40">
+              <div className="border-t border-gray-300 dark:border-slate-600 pt-1 mt-12 print:mt-8">
+                <p className="text-xs text-gray-600 dark:text-gray-400 print:text-xs">Authorized By</p>
               </div>
-            )}
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Payment Status:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedInvoice.paymentDetails.status.charAt(0).toUpperCase() + selectedInvoice.paymentDetails.status.slice(1)}
-              </span>
+            </div>
+            <div className="w-48 print:w-40">
+              <div className="border-t border-gray-300 dark:border-slate-600 pt-1 mt-12 print:mt-8">
+                <p className="text-xs text-gray-600 dark:text-gray-400 print:text-xs">Received By</p>
+              </div>
             </div>
           </div>
         </div>
@@ -719,17 +775,20 @@ Status: ${invoice.paymentDetails.status}
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
         onMobileClose={handleMobileSidebarClose}
+        onExpandedChange={setIsSidebarExpanded}
       />
 
       {/* Main content area */}
-      <main className="pt-[70px] lg:ml-[300px] p-6">
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+      }`}>
         <div className="max-w-7xl mx-auto space-y-4">
           {/* Page header */}
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Invoice & Payments</h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Manage invoices, payments, and generate downloadable PDFs for VAT and Non-VAT invoices.
+                Manage invoices, payments, and generate printable invoices for VAT and Non-VAT invoices.
               </p>
             </div>
             <button
@@ -800,6 +859,18 @@ Status: ${invoice.paymentDetails.status}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Customer Address
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedCustomer?.address || ''}
+                      disabled
+                      className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       VAT/TIN/NIC Number
                     </label>
                     <input
@@ -838,6 +909,44 @@ Status: ${invoice.paymentDetails.status}
                     />
                     {formErrors.invoiceDate && (
                       <p className="mt-1 text-sm text-red-500">{formErrors.invoiceDate}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Period From <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={periodFrom}
+                      onChange={(e) => setPeriodFrom(e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                        formErrors.periodFrom
+                          ? 'border-red-500'
+                          : 'border-gray-300 dark:border-slate-600'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                    />
+                    {formErrors.periodFrom && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.periodFrom}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Period To <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={periodTo}
+                      onChange={(e) => setPeriodTo(e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                        formErrors.periodTo
+                          ? 'border-red-500'
+                          : 'border-gray-300 dark:border-slate-600'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                    />
+                    {formErrors.periodTo && (
+                      <p className="mt-1 text-sm text-red-500">{formErrors.periodTo}</p>
                     )}
                   </div>
                 </div>
@@ -883,6 +992,18 @@ Status: ${invoice.paymentDetails.status}
                             </button>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Item Code
+                              </label>
+                              <input
+                                type="text"
+                                value={item.itemCode}
+                                disabled
+                                className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm"
+                              />
+                            </div>
+
                             <div>
                               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Brand <span className="text-red-500">*</span>
@@ -970,7 +1091,34 @@ Status: ${invoice.paymentDetails.status}
 
                             <div>
                               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Number of Machines <span className="text-red-500">*</span>
+                                Description
+                              </label>
+                              <input
+                                type="text"
+                                value={item.description}
+                                disabled
+                                className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm"
+                              />
+                            </div>
+
+                            {invoiceType === 'Non-VAT' && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                  Serial Number
+                                </label>
+                                <input
+                                  type="text"
+                                  value={item.serialNumber || ''}
+                                  onChange={(e) => updateItem(index, 'serialNumber', e.target.value)}
+                                  placeholder="Enter serial number"
+                                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                />
+                              </div>
+                            )}
+
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Quantity (No. of Machines) <span className="text-red-500">*</span>
                               </label>
                               <input
                                 type="number"
@@ -992,7 +1140,7 @@ Status: ${invoice.paymentDetails.status}
 
                             <div>
                               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Monthly Rent per Machine <span className="text-red-500">*</span>
+                                Rate (Monthly Rent per Machine) <span className="text-red-500">*</span>
                               </label>
                               <input
                                 type="number"
@@ -1015,7 +1163,7 @@ Status: ${invoice.paymentDetails.status}
 
                             <div>
                               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Subtotal
+                                Amount (Subtotal)
                               </label>
                               <input
                                 type="text"
@@ -1129,7 +1277,7 @@ Status: ${invoice.paymentDetails.status}
                   </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-700 dark:text-gray-300">Subtotal:</span>
+                      <span className="text-gray-700 dark:text-gray-300">Sub Amount:</span>
                       <span className="text-gray-900 dark:text-white font-medium">
                         LKR {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </span>
@@ -1171,7 +1319,7 @@ Status: ${invoice.paymentDetails.status}
                 disabled={isSubmitting}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Creating...' : 'Create & Download PDF'}
+                {isSubmitting ? 'Creating...' : 'Create Invoice'}
               </button>
             </div>
           </div>
@@ -1180,10 +1328,10 @@ Status: ${invoice.paymentDetails.status}
 
       {/* View Invoice Modal */}
       {isViewModalOpen && selectedInvoice && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:relative print:inset-0 print:backdrop-blur-0 print:bg-white">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col print:shadow-none print:max-h-none print:rounded-none">
+            {/* Modal Header - Hidden when printing */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700 print:hidden">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Invoice Details</h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
@@ -1199,12 +1347,12 @@ Status: ${invoice.paymentDetails.status}
             </div>
 
             {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">{renderInvoiceDetails()}</div>
+            <div className="flex-1 overflow-y-auto p-6 print:p-0 print:overflow-visible">
+              {renderInvoiceDetails()}
+            </div>
           </div>
         </div>
       )}
-
-      
     </div>
   );
 };

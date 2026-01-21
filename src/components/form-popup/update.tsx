@@ -41,6 +41,7 @@ export interface UpdateFormProps {
   className?: string;
   loading?: boolean;
   initialData?: Record<string, any>;
+  customSections?: React.ReactNode; // New prop for custom sections
 }
 
 const UpdateForm: React.FC<UpdateFormProps> = ({
@@ -53,6 +54,7 @@ const UpdateForm: React.FC<UpdateFormProps> = ({
   className = '',
   loading = false,
   initialData = {},
+  customSections,
 }) => {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -377,6 +379,13 @@ const UpdateForm: React.FC<UpdateFormProps> = ({
             </div>
           ))}
         </div>
+
+        {/* Custom Sections */}
+        {customSections && (
+          <div className="mb-8">
+            {customSections}
+          </div>
+        )}
 
         {/* Form Actions */}
         <div className="flex justify-end space-x-4">
