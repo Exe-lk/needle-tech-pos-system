@@ -52,7 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     {
       icon: Monitor,
       label: 'Dashboard',
-      href: '/home',
+      href: '/dashboard',
     },
     {
       icon: Users,
@@ -66,7 +66,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       icon: FileText,
-      label: 'Rental Agreement', href: '/rentalAgreement',
+      label: 'Rental Agreement', href: '/rental-agreement',
       
     },
     {
