@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, unauthorizedResponse, validationErrorResponse } from '@/lib/api-response';
+import { generateAccessToken, generateRefreshToken, verifyPassword } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
 /**
@@ -57,9 +58,9 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse('Account is inactive');
     }
     
-    // TODO: Implement proper password verification (bcrypt.compare)
-    // For now, placeholder check
-    if (user.passwordHash !== password) {
+    // Verify password using bcrypt
+    const isPasswordValid = await verifyPassword(password, user.passwordHash);
+    if (!isPasswordValid) {
       return unauthorizedResponse('Invalid username or password');
     }
     
@@ -69,21 +70,23 @@ export async function POST(request: NextRequest) {
       ? await rolesCollection.findOne({ _id: user.roleId })
       : null;
     
+    const roleName = role?.name || 'USER';
+    
     // Update last login
     await db.collection('users').updateOne(
       { _id: user._id },
       { $set: { lastLoginAt: new Date() } }
     );
     
-    // TODO: Generate JWT tokens
-    const accessToken = 'PLACEHOLDER_ACCESS_TOKEN';
-    const refreshToken = 'PLACEHOLDER_REFRESH_TOKEN';
+    // Generate JWT tokens
+    const accessToken = generateAccessToken(user._id.toString(), user.username, roleName);
+    const refreshToken = generateRefreshToken(user._id.toString(), user.username, roleName);
     
     return successResponse(
       {
         userId: user._id.toString(),
         username: user.username,
-        role: role?.name || '',
+        role: roleName,
         accessToken,
         refreshToken,
       },

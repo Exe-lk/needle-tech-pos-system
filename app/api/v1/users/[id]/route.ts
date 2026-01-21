@@ -2,18 +2,23 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
+import { withAuth, withAuthAndRole } from '@/lib/auth';
 
-export async function GET(
+// Only ADMIN and MANAGER can view user details
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid user ID');
     }
     
     const db = await getDatabase();
-    const userId = toObjectId(params.id);
+    const userId = toObjectId(id);
     
     const user = await db.collection('users').findOne({ _id: userId });
     
@@ -48,14 +53,18 @@ export async function GET(
     console.error('Error fetching user:', error);
     return errorResponse('Failed to retrieve user', 500);
   }
-}
+});
 
-export async function PUT(
+// Only ADMIN can update users
+export const PUT = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid user ID');
     }
     
@@ -63,7 +72,7 @@ export async function PUT(
     const { firstName, lastName, email, phone, role, isActive } = body;
     
     const db = await getDatabase();
-    const userId = toObjectId(params.id);
+    const userId = toObjectId(id);
     
     const existingUser = await db.collection('users').findOne({ _id: userId });
     if (!existingUser) {
@@ -76,8 +85,8 @@ export async function PUT(
     
     if (firstName !== undefined || lastName !== undefined) {
       const currentName = existingUser.fullName?.split(' ') || [];
-      const newFirstName = firstName !== undefined ? firstName : currentName[0] || '';
-      const newLastName = lastName !== undefined ? lastName : currentName.slice(1).join(' ') : '';
+      const newFirstName = firstName !== undefined ? firstName : (currentName[0] || '');
+      const newLastName = lastName !== undefined ? lastName : (currentName.slice(1).join(' ') || '');
       updateData.fullName = `${newFirstName} ${newLastName}`.trim();
     }
     
@@ -131,19 +140,23 @@ export async function PUT(
     console.error('Error updating user:', error);
     return errorResponse('Failed to update user', 500);
   }
-}
+});
 
-export async function DELETE(
+// Only ADMIN can delete users
+export const DELETE = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid user ID');
     }
     
     const db = await getDatabase();
-    const userId = toObjectId(params.id);
+    const userId = toObjectId(id);
     
     const user = await db.collection('users').findOne({ _id: userId });
     if (!user) {
@@ -166,4 +179,4 @@ export async function DELETE(
     console.error('Error deleting user:', error);
     return errorResponse('Failed to delete user', 500);
   }
-}
+});

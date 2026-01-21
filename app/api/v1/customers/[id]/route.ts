@@ -2,18 +2,22 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(
+export const GET = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid customer ID');
     }
     
     const db = await getDatabase();
-    const customerId = toObjectId(params.id);
+    const customerId = toObjectId(id);
     
     const customer = await db.collection('customers').findOne({ _id: customerId });
     
@@ -26,20 +30,23 @@ export async function GET(
     console.error('Error fetching customer:', error);
     return errorResponse('Failed to retrieve customer', 500);
   }
-}
+});
 
-export async function PUT(
+export const PUT = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid customer ID');
     }
     
     const body = await request.json();
     const db = await getDatabase();
-    const customerId = toObjectId(params.id);
+    const customerId = toObjectId(id);
     
     const existingCustomer = await db.collection('customers').findOne({ _id: customerId });
     if (!existingCustomer) {
@@ -72,19 +79,22 @@ export async function PUT(
     console.error('Error updating customer:', error);
     return errorResponse('Failed to update customer', 500);
   }
-}
+});
 
-export async function DELETE(
+export const DELETE = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid customer ID');
     }
     
     const db = await getDatabase();
-    const customerId = toObjectId(params.id);
+    const customerId = toObjectId(id);
     
     const customer = await db.collection('customers').findOne({ _id: customerId });
     if (!customer) {
@@ -107,4 +117,4 @@ export async function DELETE(
     console.error('Error deleting customer:', error);
     return errorResponse('Failed to delete customer', 500);
   }
-}
+});

@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
@@ -82,9 +83,9 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching rentals:', error);
     return errorResponse('Failed to retrieve rentals', 500);
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { customerId, agreementType, startDate, expectedEndDate, machines } = body;
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Get settings for agreement number generation
-    const settings = await db.collection('settings').findOne({ _id: 'global' });
+    const settings = await db.collection('settings').findOne({ _id: 'global' } as any);
     const agreementPrefix = settings?.rentalSettings?.agreementPrefix || 'AGR-';
     const startNumber = settings?.rentalSettings?.startNumber || 1000;
     
@@ -217,7 +218,7 @@ export async function POST(request: NextRequest) {
               note: `Rented via ${agreementNumber}`,
             },
           },
-        }
+        } as any
       );
     }
     
@@ -228,4 +229,4 @@ export async function POST(request: NextRequest) {
     console.error('Error creating rental:', error);
     return errorResponse('Failed to create rental', 500);
   }
-}
+});

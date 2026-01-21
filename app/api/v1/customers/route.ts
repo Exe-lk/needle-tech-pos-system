@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta, sanitizeObject } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
 /**
@@ -67,7 +68,7 @@ import { ObjectId } from 'mongodb';
  *                     data:
  *                       $ref: '#/components/schemas/PaginatedResponse'
  */
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
@@ -125,7 +126,7 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching customers:', error);
     return errorResponse('Failed to retrieve customers', 500);
   }
-}
+});
 
 /**
  * @swagger
@@ -190,8 +191,10 @@ export async function GET(request: NextRequest) {
  *                       $ref: '#/components/schemas/Customer'
  *       400:
  *         description: Validation error - missing required fields or duplicate code
+ *     security:
+ *       - bearerAuth: []
  */
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { code, type, name, contactPerson, phones, emails, billingAddress, shippingAddress, taxProfile } = body;
@@ -254,4 +257,4 @@ export async function POST(request: NextRequest) {
     console.error('Error creating customer:', error);
     return errorResponse('Failed to create customer', 500);
   }
-}
+});

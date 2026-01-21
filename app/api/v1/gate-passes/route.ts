@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
@@ -64,9 +65,9 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching gate passes:', error);
     return errorResponse('Failed to retrieve gate passes', 500);
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { rentalId, driverName, vehicleNumber, machines, departureTime } = body;
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Get settings for gate pass number
-    const settings = await db.collection('settings').findOne({ _id: 'global' });
+    const settings = await db.collection('settings').findOne({ _id: 'global' } as any);
     const gatePassPrefix = settings?.gatePassSettings?.prefix || 'GP-';
     const startNumber = settings?.gatePassSettings?.startNumber || 1000;
     
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
     // Update rental with gate pass ID
     await db.collection('rentals').updateOne(
       { _id: toObjectId(rentalId) },
-      { $push: { gatePassIds: result.insertedId } }
+      { $push: { gatePassIds: result.insertedId } } as any
     );
     
     const createdGatePass = await db.collection('gatePasses').findOne({ _id: result.insertedId });
@@ -160,4 +161,4 @@ export async function POST(request: NextRequest) {
     console.error('Error creating gate pass:', error);
     return errorResponse('Failed to create gate pass', 500);
   }
-}
+});

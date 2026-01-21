@@ -5,15 +5,17 @@ import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid customer ID');
     }
     
     const db = await getDatabase();
-    const customerId = toObjectId(params.id);
+    const customerId = toObjectId(id);
     
     // Verify customer exists
     const customer = await db.collection('customers').findOne({ _id: customerId });

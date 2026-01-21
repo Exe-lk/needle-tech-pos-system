@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
@@ -64,9 +65,9 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching returns:', error);
     return errorResponse('Failed to retrieve returns', 500);
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { rentalId, machineId, returnDate, condition, triageCategory, notes, photos } = body;
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Get settings for return number
-    const settings = await db.collection('settings').findOne({ _id: 'global' });
+    const settings = await db.collection('settings').findOne({ _id: 'global' } as any);
     const returnPrefix = settings?.returnSettings?.returnPrefix || 'RET-';
     const startNumber = settings?.returnSettings?.startNumber || 1000;
     
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
             note: `Returned via ${returnNumber}`,
           },
         },
-      }
+      } as any
     );
     
     // Update rental
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest) {
           actualEndDate: new Date(returnDate),
           updatedAt: now,
         },
-      }
+      } as any
     );
     
     const createdReturn = await db.collection('returns').findOne({ _id: result.insertedId });
@@ -203,4 +204,4 @@ export async function POST(request: NextRequest) {
     console.error('Error creating return:', error);
     return errorResponse('Failed to create return', 500);
   }
-}
+});

@@ -2,9 +2,11 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta, sanitizeObject } from '@/lib/utils';
+import { withAuth, withAuthAndRole, hashPassword } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+// Only ADMIN and MANAGER can view users list
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
@@ -90,9 +92,10 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching users:', error);
     return errorResponse('Failed to retrieve users', 500);
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+// Only ADMIN can create new users
+export const POST = withAuthAndRole(['ADMIN'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { firstName, lastName, email, phone, username, password, role } = body;
@@ -127,8 +130,8 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // TODO: Hash password properly (bcrypt)
-    const passwordHash = password; // Placeholder - implement proper hashing
+    // Hash password using bcrypt
+    const passwordHash = await hashPassword(password);
     
     const fullName = `${firstName} ${lastName}`;
     const now = new Date();
@@ -165,4 +168,4 @@ export async function POST(request: NextRequest) {
     console.error('Error creating user:', error);
     return errorResponse('Failed to create user', 500);
   }
-}
+});

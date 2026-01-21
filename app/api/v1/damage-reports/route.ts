@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
@@ -69,9 +70,9 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching damage reports:', error);
     return errorResponse('Failed to retrieve damage reports', 500);
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { machineId, rentalId, returnId, severity, category, description, photos, estimatedRepairCost, approvedChargeToCustomer } = body;
@@ -124,4 +125,4 @@ export async function POST(request: NextRequest) {
     console.error('Error creating damage report:', error);
     return errorResponse('Failed to create damage report', 500);
   }
-}
+});

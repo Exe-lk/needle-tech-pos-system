@@ -2,18 +2,22 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(
+export const GET = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid gate pass ID');
     }
     
     const db = await getDatabase();
-    const gatePassId = toObjectId(params.id);
+    const gatePassId = toObjectId(id);
     
     const gatePass = await db.collection('gatePasses').findOne({ _id: gatePassId });
     
@@ -26,20 +30,23 @@ export async function GET(
     console.error('Error fetching gate pass:', error);
     return errorResponse('Failed to retrieve gate pass', 500);
   }
-}
+});
 
-export async function PUT(
+export const PUT = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid gate pass ID');
     }
     
     const body = await request.json();
     const db = await getDatabase();
-    const gatePassId = toObjectId(params.id);
+    const gatePassId = toObjectId(id);
     
     const existingGatePass = await db.collection('gatePasses').findOne({ _id: gatePassId });
     if (!existingGatePass) {
@@ -66,4 +73,4 @@ export async function PUT(
     console.error('Error updating gate pass:', error);
     return errorResponse('Failed to update gate pass', 500);
   }
-}
+});

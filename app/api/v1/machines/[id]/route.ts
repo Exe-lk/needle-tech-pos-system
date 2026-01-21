@@ -2,18 +2,22 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(
+export const GET = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid machine ID');
     }
     
     const db = await getDatabase();
-    const machineId = toObjectId(params.id);
+    const machineId = toObjectId(id);
     
     const machine = await db.collection('machines').findOne({ _id: machineId });
     
@@ -26,20 +30,23 @@ export async function GET(
     console.error('Error fetching machine:', error);
     return errorResponse('Failed to retrieve machine', 500);
   }
-}
+});
 
-export async function PUT(
+export const PUT = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid machine ID');
     }
     
     const body = await request.json();
     const db = await getDatabase();
-    const machineId = toObjectId(params.id);
+    const machineId = toObjectId(id);
     
     const existingMachine = await db.collection('machines').findOne({ _id: machineId });
     if (!existingMachine) {
@@ -84,19 +91,22 @@ export async function PUT(
     console.error('Error updating machine:', error);
     return errorResponse('Failed to update machine', 500);
   }
-}
+});
 
-export async function DELETE(
+export const DELETE = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid machine ID');
     }
     
     const db = await getDatabase();
-    const machineId = toObjectId(params.id);
+    const machineId = toObjectId(id);
     
     const machine = await db.collection('machines').findOne({ _id: machineId });
     if (!machine) {
@@ -119,4 +129,4 @@ export async function DELETE(
     console.error('Error deleting machine:', error);
     return errorResponse('Failed to delete machine', 500);
   }
-}
+});

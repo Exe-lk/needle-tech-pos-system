@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
@@ -65,9 +66,9 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching invoices:', error);
     return errorResponse('Failed to retrieve invoices', 500);
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { customerId, rentalId, type, lineItems, issueDate, dueDate } = body;
@@ -176,4 +177,4 @@ export async function POST(request: NextRequest) {
     console.error('Error creating invoice:', error);
     return errorResponse('Failed to create invoice', 500);
   }
-}
+});

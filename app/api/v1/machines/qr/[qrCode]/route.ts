@@ -5,11 +5,12 @@ import { sanitizeObject } from '@/lib/utils';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { qrCode: string } }
+  { params }: { params: Promise<{ qrCode: string }> }
 ) {
   try {
+    const { qrCode: qrCodeParam } = await params;
     const db = await getDatabase();
-    const qrCode = decodeURIComponent(params.qrCode);
+    const qrCode = decodeURIComponent(qrCodeParam);
     
     const machine = await db.collection('machines').findOne({ 'qrCode.value': qrCode });
     

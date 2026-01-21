@@ -2,18 +2,22 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(
+export const GET = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid damage report ID');
     }
     
     const db = await getDatabase();
-    const reportId = toObjectId(params.id);
+    const reportId = toObjectId(id);
     
     const report = await db.collection('damageReports').findOne({ _id: reportId });
     
@@ -26,20 +30,23 @@ export async function GET(
     console.error('Error fetching damage report:', error);
     return errorResponse('Failed to retrieve damage report', 500);
   }
-}
+});
 
-export async function PUT(
+export const PUT = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid damage report ID');
     }
     
     const body = await request.json();
     const db = await getDatabase();
-    const reportId = toObjectId(params.id);
+    const reportId = toObjectId(id);
     
     const existingReport = await db.collection('damageReports').findOne({ _id: reportId });
     if (!existingReport) {
@@ -75,4 +82,4 @@ export async function PUT(
     console.error('Error updating damage report:', error);
     return errorResponse('Failed to update damage report', 500);
   }
-}
+});

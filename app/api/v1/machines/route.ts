@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta, sanitizeObject } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
@@ -61,9 +62,9 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching machines:', error);
     return errorResponse('Failed to retrieve machines', 500);
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { brand, model, category, serialNumber, boxNumber, photos, specs, currentLocation } = body;
@@ -132,4 +133,4 @@ export async function POST(request: NextRequest) {
     console.error('Error creating machine:', error);
     return errorResponse('Failed to create machine', 500);
   }
-}
+});

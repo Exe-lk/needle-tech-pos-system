@@ -2,11 +2,12 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, validationErrorResponse } from '@/lib/api-response';
 import { sanitizeObject } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const db = await getDatabase();
-    const settings = await db.collection('settings').findOne({ _id: 'global' });
+    const settings = await db.collection('settings').findOne({ _id: 'global' } as any);
     
     if (!settings) {
       // Return default settings structure
@@ -60,9 +61,9 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching settings:', error);
     return errorResponse('Failed to retrieve settings', 500);
   }
-}
+});
 
-export async function PUT(request: NextRequest) {
+export const PUT = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const db = await getDatabase();
@@ -80,11 +81,11 @@ export async function PUT(request: NextRequest) {
     if (body.gatePassSettings !== undefined) updateData.gatePassSettings = body.gatePassSettings;
     if (body.returnSettings !== undefined) updateData.returnSettings = body.returnSettings;
     
-    const existingSettings = await db.collection('settings').findOne({ _id: 'global' });
+    const existingSettings = await db.collection('settings').findOne({ _id: 'global' } as any);
     
     if (existingSettings) {
       await db.collection('settings').updateOne(
-        { _id: 'global' },
+        { _id: 'global' } as any,
         { $set: updateData }
       );
     } else {
@@ -95,11 +96,11 @@ export async function PUT(request: NextRequest) {
       });
     }
     
-    const updatedSettings = await db.collection('settings').findOne({ _id: 'global' });
+    const updatedSettings = await db.collection('settings').findOne({ _id: 'global' } as any);
     
     return successResponse(sanitizeObject(updatedSettings!), 'Settings updated successfully');
   } catch (error: any) {
     console.error('Error updating settings:', error);
     return errorResponse('Failed to update settings', 500);
   }
-}
+});

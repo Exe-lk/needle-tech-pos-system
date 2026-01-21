@@ -2,18 +2,22 @@ import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(
+export const GET = withAuth(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    
+    if (!isValidObjectId(id)) {
       return validationErrorResponse('Invalid return ID');
     }
     
     const db = await getDatabase();
-    const returnId = toObjectId(params.id);
+    const returnId = toObjectId(id);
     
     const returnItem = await db.collection('returns').findOne({ _id: returnId });
     
@@ -26,4 +30,4 @@ export async function GET(
     console.error('Error fetching return:', error);
     return errorResponse('Failed to retrieve return', 500);
   }
-}
+});
