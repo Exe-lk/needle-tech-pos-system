@@ -817,21 +817,23 @@ const RentalAgreementPage: React.FC = () => {
     return '';
   };
 
-  // Action buttons
-  const actions: ActionButton[] = [
-    {
-      label: 'View',
-      icon: <Eye className="w-4 h-4" />,
-      variant: 'secondary',
-      onClick: handleViewAgreement,
-    },
-    {
-      label: 'Update',
-      icon: <Pencil className="w-4 h-4" />,
-      variant: 'primary',
-      onClick: handleUpdateAgreement,
-    },
-  ];
+    // Action buttons
+    const actions: ActionButton[] = [
+      {
+        label: '',
+        icon: <Eye className="w-4 h-4" />,
+        variant: 'secondary',
+        onClick: handleViewAgreement,
+        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+      },
+      {
+        label: '',
+        icon: <Pencil className="w-4 h-4" />,
+        variant: 'primary',
+        onClick: handleUpdateAgreement,
+        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+      },
+    ];
 
   // Machine Management Section Component
   const renderMachineManagementSection = () => {

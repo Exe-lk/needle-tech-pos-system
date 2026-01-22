@@ -25,6 +25,8 @@ interface SidebarProps {
     isMobileOpen?: boolean;
     onMobileClose?: () => void;
     onExpandedChange?: (isExpanded: boolean) => void;
+    hasNavbar?: boolean;
+    navbarHeight?: number;
 }
 
 type MenuChild = {
@@ -46,6 +48,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     isMobileOpen,
     onMobileClose,
     onExpandedChange,
+    hasNavbar = true,
+    navbarHeight = 70,
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -59,23 +63,23 @@ const Sidebar: React.FC<SidebarProps> = ({
         },
         {
             icon: Users,
-            label: 'Customer Management', href: '/customers',
-
+            label: 'Customer Management',
+            href: '/customers',
         },
         {
             icon: Truck,
-            label: 'Machine Management', href: '/machines',
-
+            label: 'Machine Management',
+            href: '/machines',
         },
         {
             icon: Boxes,
-            label: 'Inventory Management', href: '/inventory',
-
+            label: 'Inventory Management',
+            href: '/inventory',
         },
         {
             icon: FileText,
-            label: 'Rental Agreement', href: '/rental-agreement',
-
+            label: 'Rental Agreement',
+            href: '/rental-agreement',
         },
         {
             icon: Truck,
@@ -136,7 +140,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     const isGroupOpen = (label: string, section: MenuSection): boolean => {
         if (openGroups[label] !== undefined) return openGroups[label];
-        // default: open if this section (or one of its children) is active
         return isSectionActive(section);
     };
 
@@ -161,6 +164,10 @@ const Sidebar: React.FC<SidebarProps> = ({
         }
     };
 
+    // Calculate sidebar position and height based on navbar presence
+    const sidebarTop = hasNavbar ? `${navbarHeight}px` : '0';
+    const sidebarHeight = hasNavbar ? `calc(100vh - ${navbarHeight}px)` : '100vh';
+
     return (
         <>
             <div
@@ -168,26 +175,34 @@ const Sidebar: React.FC<SidebarProps> = ({
                     } flex flex-col ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
                     } ${className}`}
                 style={{
-                    top: '70px',
-                    height: 'calc(100vh - 70px)',
+                    top: sidebarTop,
+                    height: sidebarHeight,
                 }}
             >
-                {/* Header with toggle button */}
-                <div className="p-4 flex items-center justify-end border-b border-gray-200 dark:border-slate-700">
+                {/* Top Section - Collapse/Expand Toggle Button */}
+                <div className={`border-b border-gray-200 dark:border-slate-700 ${isExpanded ? 'p-4' : 'p-2'}`}>
                     <button
                         onClick={toggleSidebar}
-                        className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-800 transition-[background-color] duration-150"
+                        className={`flex items-center rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-indigo-400 group relative w-full ${isExpanded ? 'p-3' : 'p-2 justify-center'}`}
                     >
                         {isExpanded ? (
-                            <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                            <>
+                                <ChevronLeft className="w-5 h-5 flex-shrink-0" />
+                                <span className="ml-3 text-sm font-medium">Collapse</span>
+                            </>
                         ) : (
-                            <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                            <>
+                                <ChevronRight className="w-5 h-5 flex-shrink-0" />
+                                <div className="absolute left-full ml-2 bg-gray-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap">
+                                    Expand
+                                </div>
+                            </>
                         )}
                     </button>
                 </div>
 
-                {/* Menu Sections */}
-                <nav className="flex-1 p-4 overflow-y-auto">
+                {/* Menu Sections - Start from top with padding */}
+                <nav className={`flex-1 ${isExpanded ? 'p-4 overflow-y-auto' : 'p-2 overflow-hidden'}`}>
                     <ul className="space-y-2">
                         {menuSections.map((section, index) => {
                             const sectionActive = isSectionActive(section);
@@ -200,15 +215,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 <li key={index}>
                                     {/* Parent item */}
                                     <div
-                                        className={`flex items-center p-3 rounded-lg transition-[background-color,box-shadow] duration-150 group relative cursor-pointer ${sectionActive
-                                                ? 'bg-white dark:bg-slate-800 shadow-sm text-blue-600 dark:text-indigo-400 font-semibold'
-                                                : 'text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm hover:text-blue-600 dark:hover:text-indigo-400'
+                                        className={`flex items-center rounded-lg transition-[background-color,box-shadow] duration-150 group relative cursor-pointer ${isExpanded ? 'p-3' : 'p-2 justify-center'} ${sectionActive
+                                            ? 'bg-white dark:bg-slate-800 shadow-sm text-blue-600 dark:text-indigo-400 font-semibold'
+                                            : 'text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm hover:text-blue-600 dark:hover:text-indigo-400'
                                             }`}
                                         onClick={() => {
                                             if (hasChildren) {
                                                 toggleGroup(section.label);
                                             } else if (section.href) {
-                                                // Use normal navigation for now
                                                 window.location.href = section.href;
                                                 if (onMobileClose) onMobileClose();
                                             }
@@ -224,7 +238,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             </span>
                                         )}
                                         {!isExpanded && (
-                                            <div className="absolute left-16 bg-gray-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap">
+                                            <div className="absolute left-full ml-2 bg-gray-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap">
                                                 {section.label}
                                             </div>
                                         )}
@@ -253,8 +267,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                         <a
                                                             href={child.href}
                                                             className={`flex items-center p-2 rounded-lg text-xs transition-[background-color,color] duration-150 ${childActive
-                                                                    ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-indigo-400 font-semibold shadow-sm'
-                                                                    : 'text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-indigo-400'
+                                                                ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-indigo-400 font-semibold shadow-sm'
+                                                                : 'text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-indigo-400'
                                                                 }`}
                                                             onClick={onMobileClose}
                                                         >
@@ -272,30 +286,29 @@ const Sidebar: React.FC<SidebarProps> = ({
                     </ul>
                 </nav>
 
-                {/* Logout Button */}
-                <div className="p-4 border-t border-gray-200 dark:border-slate-700">
+                {/* Bottom Section - Logout Button */}
+                <div className={`border-t border-gray-200 dark:border-slate-700 ${isExpanded ? 'p-4' : 'p-2'}`}>
                     <button
                         onClick={handleLogout}
-                        className="flex items-center p-3 w-full rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 group relative"
+                        className={`flex items-center rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 group relative w-full ${isExpanded ? 'p-3' : 'p-2 justify-center'}`}
                     >
                         <LogOut className="w-5 h-5 flex-shrink-0" />
                         {isExpanded && (
                             <span className="ml-3 text-sm font-medium">Logout</span>
                         )}
                         {!isExpanded && (
-                            <div className="absolute left-16 bg-gray-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                            <div className="absolute left-full ml-2 bg-gray-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap">
                                 Logout
                             </div>
                         )}
                     </button>
-
                 </div>
             </div>
 
             {/* Mobile Overlay */}
             {isMobileOpen && (
                 <div
-                    className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+                    className="fixed inset-0 backdrop-blur-md bg-black/10 dark:bg-black/20 z-40 lg:hidden"
                     onClick={onMobileClose}
                 />
             )}

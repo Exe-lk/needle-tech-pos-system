@@ -599,10 +599,11 @@ const ReturnsPage: React.FC = () => {
   // Action buttons
   const actions: ActionButton[] = [
     {
-      label: 'View',
+      label: '',
       icon: <Eye className="w-4 h-4" />,
       variant: 'secondary',
       onClick: handleViewReturn,
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
     },
   ];
 

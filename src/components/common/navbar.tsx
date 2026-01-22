@@ -180,15 +180,13 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
             {/* Project Name + Current Page */}
             <div className="flex flex-col">
               <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight leading-tight">
-                NeedleTech
+                NeedleTech POS
               </h1>
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 V {APP_VERSION}
               </span>
             </div>
-            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700">
-
-            </div>
+           
           </div>
 
           {/* Right side - Dark Mode Toggle */}

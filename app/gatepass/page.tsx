@@ -7,6 +7,8 @@ import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Trash2, Printer } from 'lucide-react';
 
+// ... existing interfaces and mock data remain the same ...
+
 interface GatePassItem {
   id: string;
   description: string;
@@ -449,21 +451,23 @@ const GatePassPage: React.FC = () => {
     }
   };
 
-  // Action buttons
-  const actions: ActionButton[] = [
-    {
-      label: 'View',
-      icon: <Eye className="w-4 h-4" />,
-      variant: 'secondary',
-      onClick: handleViewGatePass,
-    },
-    {
-      label: 'Update',
-      icon: <Pencil className="w-4 h-4" />,
-      variant: 'primary',
-      onClick: handleUpdateGatePass,
-    },
-  ];
+    // Action buttons
+    const actions: ActionButton[] = [
+      {
+        label: '',
+        icon: <Eye className="w-4 h-4" />,
+        variant: 'secondary',
+        onClick: handleViewGatePass,
+        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+      },
+      {
+        label: '',
+        icon: <Pencil className="w-4 h-4" />,
+        variant: 'primary',
+        onClick: handleUpdateGatePass,
+        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+      },
+    ];
 
   // Render Gate Pass Document (matches the image format)
   const renderGatePassDocument = (gatePass: GatePass) => {
@@ -615,458 +619,456 @@ const GatePassPage: React.FC = () => {
     if (!selectedGatePass) return null;
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Gate Pass Details
-          </h3>
-          <button
-            onClick={handlePrintGatePass}
-            className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Print</span>
-          </button>
-        </div>
-
-        {/* Printable Gate Pass Document */}
-        <div className="hidden print:block">{renderGatePassDocument(selectedGatePass)}</div>
-
+      <div>
         {/* Screen View */}
         <div className="print:hidden">{renderGatePassDocument(selectedGatePass)}</div>
+        
+        {/* Print View - Only visible when printing */}
+        <div className="hidden print:block print:fixed print:inset-0 print:z-50 print:bg-white print:p-0 print:m-0">
+          {renderGatePassDocument(selectedGatePass)}
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-      {/* Top navbar */}
-      <Navbar onMenuClick={handleMenuClick} />
-
-      {/* Left sidebar */}
-      <Sidebar
-        onLogout={handleLogout}
-        isMobileOpen={isMobileSidebarOpen}
-        onMobileClose={handleMobileSidebarClose}
-        onExpandedChange={setIsSidebarExpanded}
-      />
-
-      {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
-        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-      }`}>
-        <div className="max-w-7xl mx-auto space-y-4">
-          {/* Page header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Gate Pass List</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Overview of all gate passes with agreement references, driver information, and dispatch
-                details.
-              </p>
-            </div>
-            <button
-              onClick={handleCreateGatePass}
-              className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-            >
-              Create Gate Pass
-            </button>
-          </div>
-
-          {/* Gate Pass table card */}
-          <Table
-            data={mockGatePasses}
-            columns={columns}
-            actions={actions}
-            itemsPerPage={10}
-            searchable
-            filterable
-            emptyMessage="No gate passes found."
-          />
-        </div>
-      </main>
-
-      {/* Create Gate Pass Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Gate Pass Form
-              </h2>
-              <button
-                onClick={handleCloseCreateModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-6">
-                {/* Form Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Agreement Reference */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Agreement Reference <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={agreementReference}
-                      onChange={(e) => setAgreementReference(e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                        formErrors.agreementReference
-                          ? 'border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
-                      } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                    >
-                      <option value="">Select Agreement Reference</option>
-                      {mockRentalAgreements.map((agreement) => (
-                        <option key={agreement.id} value={agreement.id}>
-                          {agreement.id} - {agreement.customerName}
-                        </option>
-                      ))}
-                    </select>
-                    {formErrors.agreementReference && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.agreementReference}</p>
-                    )}
-                  </div>
-
-                  {/* Date of Issue */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Date of Issue <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={dateOfIssue}
-                      onChange={(e) => setDateOfIssue(e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                        formErrors.dateOfIssue
-                          ? 'border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
-                      } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                    />
-                    {formErrors.dateOfIssue && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.dateOfIssue}</p>
-                    )}
-                  </div>
-
-                  {/* Returnable */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Returnable <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={returnable ? 'true' : 'false'}
-                      onChange={(e) => setReturnable(e.target.value === 'true')}
-                      className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                    >
-                      <option value="true">YES</option>
-                      <option value="false">NO</option>
-                    </select>
-                  </div>
-
-                  {/* Entry */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Entry <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={entry}
-                      onChange={(e) => setEntry(e.target.value as 'IN' | 'OUT')}
-                      className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                    >
-                      <option value="OUT">OUT</option>
-                      <option value="IN">IN</option>
-                    </select>
-                  </div>
-
-                  {/* Vehicle Number */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Vehicle Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={vehicleNumber}
-                      onChange={(e) => setVehicleNumber(e.target.value)}
-                      placeholder="Enter vehicle number"
-                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                        formErrors.vehicleNumber
-                          ? 'border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
-                      } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                    />
-                    {formErrors.vehicleNumber && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.vehicleNumber}</p>
-                    )}
-                  </div>
-
-                  {/* Driver Name */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Driver Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={driverName}
-                      onChange={(e) => setDriverName(e.target.value)}
-                      placeholder="Enter driver name"
-                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                        formErrors.driverName
-                          ? 'border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
-                      } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                    />
-                    {formErrors.driverName && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.driverName}</p>
-                    )}
-                  </div>
-
-                  {/* Issued By */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Issued By
-                    </label>
-                    <input
-                      type="text"
-                      value={issuedBy}
-                      onChange={(e) => setIssuedBy(e.target.value)}
-                      placeholder="Enter issuer name"
-                      className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                    />
-                  </div>
-
-                  {/* Received By */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Received By
-                    </label>
-                    <input
-                      type="text"
-                      value={receivedBy}
-                      onChange={(e) => setReceivedBy(e.target.value)}
-                      placeholder="Enter receiver name"
-                      className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Items Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Items</h3>
-                    <button
-                      type="button"
-                      onClick={handleAddItem}
-                      className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Item
-                    </button>
-                  </div>
-                  {items.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Item {index + 1}
-                        </span>
-                        {items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Description <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
-                            placeholder="e.g., JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE"
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`item_description_${index}`]
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          />
-                          {formErrors[`item_description_${index}`] && (
-                            <p className="mt-1 text-sm text-red-500">
-                              {formErrors[`item_description_${index}`]}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Status <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={item.status}
-                            onChange={(e) => handleItemChange(item.id, 'status', e.target.value)}
-                            className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                          >
-                            <option value="GOOD">GOOD</option>
-                            <option value="FAIR">FAIR</option>
-                            <option value="POOR">POOR</option>
-                            <option value="DAMAGED">DAMAGED</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Serial No <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={item.serialNo}
-                            onChange={(e) => handleItemChange(item.id, 'serialNo', e.target.value)}
-                            placeholder="Enter serial number"
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`item_serialNo_${index}`]
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          />
-                          {formErrors[`item_serialNo_${index}`] && (
-                            <p className="mt-1 text-sm text-red-500">
-                              {formErrors[`item_serialNo_${index}`]}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Motor / Box No <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={item.motorBoxNo}
-                            onChange={(e) => handleItemChange(item.id, 'motorBoxNo', e.target.value)}
-                            placeholder="Enter motor/box number"
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`item_motorBoxNo_${index}`]
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          />
-                          {formErrors[`item_motorBoxNo_${index}`] && (
-                            <p className="mt-1 text-sm text-red-500">
-                              {formErrors[`item_motorBoxNo_${index}`]}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={handleCloseCreateModal}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmitCreate}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Creating...' : 'Create & Print'}
-              </button>
-            </div>
-          </div>
+    <>
+      {/* Print-only gate pass document - hidden on screen, visible when printing */}
+      {selectedGatePass && (
+        <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white">
+          {renderGatePassDocument(selectedGatePass)}
         </div>
       )}
 
-      {/* View Gate Pass Modal */}
-      {isViewModalOpen && selectedGatePass && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+      <div className="min-h-screen bg-gray-100 dark:bg-slate-950 print:hidden">
+        {/* Top navbar */}
+        <Navbar onMenuClick={handleMenuClick} />
+
+        {/* Left sidebar */}
+        <Sidebar
+          onLogout={handleLogout}
+          isMobileOpen={isMobileSidebarOpen}
+          onMobileClose={handleMobileSidebarClose}
+          onExpandedChange={setIsSidebarExpanded}
+        />
+
+        {/* Main content area */}
+        <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+          isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+        }`}>
+          <div className="max-w-7xl mx-auto space-y-4">
+            {/* Page header */}
+            <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  Gate Pass Details
-                </h2>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Gate Pass List</h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  {selectedGatePass.gatepassNo}
+                  Overview of all gate passes with agreement references, driver information, and dispatch
+                  details.
                 </p>
               </div>
-              <div className="flex items-center space-x-2">
+              <button
+                onClick={handleCreateGatePass}
+                className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+              >
+                Create Gate Pass
+              </button>
+            </div>
+
+            {/* Gate Pass table card */}
+            <Table
+              data={mockGatePasses}
+              columns={columns}
+              actions={actions}
+              itemsPerPage={10}
+              searchable
+              filterable
+              emptyMessage="No gate passes found."
+            />
+          </div>
+        </main>
+
+        {/* Create Gate Pass Modal */}
+        {isCreateModalOpen && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  Gate Pass Form
+                </h2>
                 <button
-                  onClick={handlePrintGatePass}
-                  className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print</span>
-                </button>
-                <button
-                  onClick={handleCloseViewModal}
+                  onClick={handleCloseCreateModal}
                   className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-            </div>
 
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">{renderGatePassDetails()}</div>
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                  {/* Form Fields */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Agreement Reference */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Agreement Reference <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={agreementReference}
+                        onChange={(e) => setAgreementReference(e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                          formErrors.agreementReference
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      >
+                        <option value="">Select Agreement Reference</option>
+                        {mockRentalAgreements.map((agreement) => (
+                          <option key={agreement.id} value={agreement.id}>
+                            {agreement.id} - {agreement.customerName}
+                          </option>
+                        ))}
+                      </select>
+                      {formErrors.agreementReference && (
+                        <p className="mt-1 text-sm text-red-500">{formErrors.agreementReference}</p>
+                      )}
+                    </div>
+
+                    {/* Date of Issue */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Date of Issue <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={dateOfIssue}
+                        onChange={(e) => setDateOfIssue(e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                          formErrors.dateOfIssue
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      />
+                      {formErrors.dateOfIssue && (
+                        <p className="mt-1 text-sm text-red-500">{formErrors.dateOfIssue}</p>
+                      )}
+                    </div>
+
+                    {/* Returnable */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Returnable <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={returnable ? 'true' : 'false'}
+                        onChange={(e) => setReturnable(e.target.value === 'true')}
+                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                      >
+                        <option value="true">YES</option>
+                        <option value="false">NO</option>
+                      </select>
+                    </div>
+
+                    {/* Entry */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Entry <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={entry}
+                        onChange={(e) => setEntry(e.target.value as 'IN' | 'OUT')}
+                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                      >
+                        <option value="OUT">OUT</option>
+                        <option value="IN">IN</option>
+                      </select>
+                    </div>
+
+                    {/* Vehicle Number */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Vehicle Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicleNumber}
+                        onChange={(e) => setVehicleNumber(e.target.value)}
+                        placeholder="Enter vehicle number"
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                          formErrors.vehicleNumber
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      />
+                      {formErrors.vehicleNumber && (
+                        <p className="mt-1 text-sm text-red-500">{formErrors.vehicleNumber}</p>
+                      )}
+                    </div>
+
+                    {/* Driver Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Driver Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={driverName}
+                        onChange={(e) => setDriverName(e.target.value)}
+                        placeholder="Enter driver name"
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                          formErrors.driverName
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      />
+                      {formErrors.driverName && (
+                        <p className="mt-1 text-sm text-red-500">{formErrors.driverName}</p>
+                      )}
+                    </div>
+
+                    {/* Issued By */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Issued By
+                      </label>
+                      <input
+                        type="text"
+                        value={issuedBy}
+                        onChange={(e) => setIssuedBy(e.target.value)}
+                        placeholder="Enter issuer name"
+                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    {/* Received By */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Received By
+                      </label>
+                      <input
+                        type="text"
+                        value={receivedBy}
+                        onChange={(e) => setReceivedBy(e.target.value)}
+                        placeholder="Enter receiver name"
+                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Items Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Items</h3>
+                      <button
+                        type="button"
+                        onClick={handleAddItem}
+                        className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Item
+                      </button>
+                    </div>
+                    {items.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Item {index + 1}
+                          </span>
+                          {items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Description <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
+                              placeholder="e.g., JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE"
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                formErrors[`item_description_${index}`]
+                                  ? 'border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            />
+                            {formErrors[`item_description_${index}`] && (
+                              <p className="mt-1 text-sm text-red-500">
+                                {formErrors[`item_description_${index}`]}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Status <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={item.status}
+                              onChange={(e) => handleItemChange(item.id, 'status', e.target.value)}
+                              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                            >
+                              <option value="GOOD">GOOD</option>
+                              <option value="FAIR">FAIR</option>
+                              <option value="POOR">POOR</option>
+                              <option value="DAMAGED">DAMAGED</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Serial No <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={item.serialNo}
+                              onChange={(e) => handleItemChange(item.id, 'serialNo', e.target.value)}
+                              placeholder="Enter serial number"
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                formErrors[`item_serialNo_${index}`]
+                                  ? 'border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            />
+                            {formErrors[`item_serialNo_${index}`] && (
+                              <p className="mt-1 text-sm text-red-500">
+                                {formErrors[`item_serialNo_${index}`]}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Motor / Box No <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={item.motorBoxNo}
+                              onChange={(e) => handleItemChange(item.id, 'motorBoxNo', e.target.value)}
+                              placeholder="Enter motor/box number"
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                formErrors[`item_motorBoxNo_${index}`]
+                                  ? 'border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            />
+                            {formErrors[`item_motorBoxNo_${index}`] && (
+                              <p className="mt-1 text-sm text-red-500">
+                                {formErrors[`item_motorBoxNo_${index}`]}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={handleCloseCreateModal}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitCreate}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Creating...' : 'Create & Print'}
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Update Gate Pass Modal */}
-      {isUpdateModalOpen && selectedGatePass && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Update Gate Pass
-              </h2>
-              <button
-                onClick={handleCloseUpdateModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        {/* View Gate Pass Modal */}
+        {isViewModalOpen && selectedGatePass && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <div>
+                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                    Gate Pass Details
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    {selectedGatePass.gatepassNo}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handlePrintGatePass}
+                    className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print</span>
+                  </button>
+                  <button
+                    onClick={handleCloseViewModal}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
 
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <UpdateForm
-                title="Update Gate Pass Details"
-                fields={updateFields}
-                onSubmit={handleGatePassUpdate}
-                submitButtonLabel="Update"
-                clearButtonLabel="Reset"
-                loading={isSubmitting}
-                initialData={getUpdateInitialData(selectedGatePass)}
-                className="shadow-none border-0 p-0"
-              />
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">{renderGatePassDetails()}</div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {/* Update Gate Pass Modal */}
+        {isUpdateModalOpen && selectedGatePass && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  Update Gate Pass
+                </h2>
+                <button
+                  onClick={handleCloseUpdateModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <UpdateForm
+                  title="Update Gate Pass Details"
+                  fields={updateFields}
+                  onSubmit={handleGatePassUpdate}
+                  submitButtonLabel="Update"
+                  clearButtonLabel="Reset"
+                  loading={isSubmitting}
+                  initialData={getUpdateInitialData(selectedGatePass)}
+                  className="shadow-none border-0 p-0"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 
