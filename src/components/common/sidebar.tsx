@@ -173,17 +173,17 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div
                 className={`bg-[#F6F9FF] dark:bg-slate-900 fixed left-0 z-50 transition-[width,transform] duration-300 ease-in-out ${isExpanded ? 'w-[300px]' : 'w-16'
                     } flex flex-col ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-                    } ${className}`}
+                    } border-r border-gray-200 dark:border-slate-800 ${className}`}
                 style={{
                     top: sidebarTop,
                     height: sidebarHeight,
                 }}
             >
                 {/* Top Section - Collapse/Expand Toggle Button */}
-                <div className={`border-b border-gray-200 dark:border-slate-700 ${isExpanded ? 'p-4' : 'p-2'}`}>
+                <div className={`border-b border-gray-200 dark:border-slate-800 ${isExpanded ? 'p-4' : 'p-2'}`}>
                     <button
                         onClick={toggleSidebar}
-                        className={`flex items-center rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-indigo-400 group relative w-full ${isExpanded ? 'p-3' : 'p-2 justify-center'}`}
+                        className={`flex items-center rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-indigo-400 group relative w-full ${isExpanded ? 'p-3' : 'p-2 justify-center'}`}
                     >
                         {isExpanded ? (
                             <>
@@ -193,7 +193,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         ) : (
                             <>
                                 <ChevronRight className="w-5 h-5 flex-shrink-0" />
-                                <div className="absolute left-full ml-2 bg-gray-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap">
+                                <div className="absolute left-full ml-2 bg-slate-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap shadow-lg">
                                     Expand
                                 </div>
                             </>
@@ -216,8 +216,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     {/* Parent item */}
                                     <div
                                         className={`flex items-center rounded-lg transition-[background-color,box-shadow] duration-150 group relative cursor-pointer ${isExpanded ? 'p-3' : 'p-2 justify-center'} ${sectionActive
-                                            ? 'bg-white dark:bg-slate-800 shadow-sm text-blue-600 dark:text-indigo-400 font-semibold'
-                                            : 'text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm hover:text-blue-600 dark:hover:text-indigo-400'
+                                            ? 'bg-white dark:bg-slate-800 shadow-sm text-blue-600 dark:text-indigo-400 font-semibold border border-blue-100 dark:border-indigo-500/30'
+                                            : 'text-gray-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm hover:text-blue-600 dark:hover:text-indigo-400'
                                             }`}
                                         onClick={() => {
                                             if (hasChildren) {
@@ -238,17 +238,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             </span>
                                         )}
                                         {!isExpanded && (
-                                            <div className="absolute left-full ml-2 bg-gray-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap">
+                                            <div className="absolute left-full ml-2 bg-slate-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap shadow-lg">
                                                 {section.label}
                                             </div>
                                         )}
                                         {hasChildren && isExpanded && (
-                                            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                            <span className="ml-2 text-xs text-gray-500 dark:text-slate-400">
                                                 {groupOpen ? '−' : '+'}
                                             </span>
                                         )}
                                         {section.adminOnly && isExpanded && (
-                                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300">
+                                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800">
                                                 Admin
                                             </span>
                                         )}
@@ -267,12 +267,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                         <a
                                                             href={child.href}
                                                             className={`flex items-center p-2 rounded-lg text-xs transition-[background-color,color] duration-150 ${childActive
-                                                                ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-indigo-400 font-semibold shadow-sm'
-                                                                : 'text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-indigo-400'
+                                                                ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-indigo-400 font-semibold shadow-sm border border-blue-100 dark:border-indigo-500/30'
+                                                                : 'text-gray-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-indigo-400'
                                                                 }`}
                                                             onClick={onMobileClose}
                                                         >
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500 mr-2" />
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-slate-500 mr-2" />
                                                             <span className="whitespace-nowrap">{child.label}</span>
                                                         </a>
                                                     </li>
@@ -287,17 +287,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </nav>
 
                 {/* Bottom Section - Logout Button */}
-                <div className={`border-t border-gray-200 dark:border-slate-700 ${isExpanded ? 'p-4' : 'p-2'}`}>
+                <div className={`border-t border-gray-200 dark:border-slate-800 ${isExpanded ? 'p-4' : 'p-2'}`}>
                     <button
                         onClick={handleLogout}
-                        className={`flex items-center rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 group relative w-full ${isExpanded ? 'p-3' : 'p-2 justify-center'}`}
+                        className={`flex items-center rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 group relative w-full ${isExpanded ? 'p-3' : 'p-2 justify-center'}`}
                     >
                         <LogOut className="w-5 h-5 flex-shrink-0" />
                         {isExpanded && (
                             <span className="ml-3 text-sm font-medium">Logout</span>
                         )}
                         {!isExpanded && (
-                            <div className="absolute left-full ml-2 bg-gray-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap">
+                            <div className="absolute left-full ml-2 bg-slate-800 dark:bg-slate-700 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 whitespace-nowrap shadow-lg">
                                 Logout
                             </div>
                         )}
@@ -308,7 +308,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {/* Mobile Overlay */}
             {isMobileOpen && (
                 <div
-                    className="fixed inset-0 backdrop-blur-md bg-black/10 dark:bg-black/20 z-40 lg:hidden"
+                    className="fixed inset-0 backdrop-blur-md bg-black/10 dark:bg-black/40 z-40 lg:hidden"
                     onClick={onMobileClose}
                 />
             )}
