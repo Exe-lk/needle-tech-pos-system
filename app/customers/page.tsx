@@ -518,7 +518,7 @@ const CustomerListPage: React.FC = () => {
 
   const handleConfirmDelete = async () => {
     if (!selectedCustomer) return;
-    
+
     setIsSubmitting(true);
     try {
       console.log('Delete customer payload:', selectedCustomer);
@@ -840,33 +840,33 @@ const CustomerListPage: React.FC = () => {
   };
 
   // Action buttons
-    // Action buttons
-    const actions: ActionButton[] = [
-      {
-        label: '',
-        icon: <Eye className="w-4 h-4" />,
-        variant: 'secondary',
-        onClick: handleViewCustomer,
-        tooltip: 'View Customer',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
-      },
-      {
-        label: '',
-        icon: <Pencil className="w-4 h-4" />,
-        variant: 'primary',
-        onClick: handleUpdateCustomer,
-        tooltip: 'Update Customer',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
-      },
-      {
-        label: '',
-        icon: <Trash2 className="w-4 h-4" />,
-        variant: 'danger',
-        onClick: handleDeleteCustomer,
-        tooltip: 'Delete Customer',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
-      },
-    ];
+  // Action buttons
+  const actions: ActionButton[] = [
+    {
+      label: '',
+      icon: <Eye className="w-4 h-4" />,
+      variant: 'secondary',
+      onClick: handleViewCustomer,
+      tooltip: 'View Customer',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+    },
+    {
+      label: '',
+      icon: <Pencil className="w-4 h-4" />,
+      variant: 'primary',
+      onClick: handleUpdateCustomer,
+      tooltip: 'Update Customer',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+    },
+    {
+      label: '',
+      icon: <Trash2 className="w-4 h-4" />,
+      variant: 'danger',
+      onClick: handleDeleteCustomer,
+      tooltip: 'Delete Customer',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
+    },
+  ];
 
   // Profile Content Components
   const renderProfileContent = () => {
@@ -883,7 +883,7 @@ const CustomerListPage: React.FC = () => {
     const overviewContent = (
       <div className="space-y-6">
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Overview</h3>
-        
+
         <div className="space-y-4">
           {/* Customer Info */}
           <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
@@ -947,11 +947,10 @@ const CustomerListPage: React.FC = () => {
             </h4>
             <div>
               <span
-                className={`px-3 py-1.5 rounded-full text-sm font-semibold inline-flex items-center ${
-                  customerInfo.creditStatus === 'Active'
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold inline-flex items-center ${customerInfo.creditStatus === 'Active'
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
                     : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                }`}
+                  }`}
               >
                 {customerInfo.creditStatus}
               </span>
@@ -965,11 +964,10 @@ const CustomerListPage: React.FC = () => {
             </h4>
             <div>
               <span
-                className={`text-2xl font-bold ${
-                  customerInfo.totalOutstanding > 0
+                className={`text-2xl font-bold ${customerInfo.totalOutstanding > 0
                     ? 'text-red-600 dark:text-red-400'
                     : 'text-green-600 dark:text-green-400'
-                }`}
+                  }`}
               >
                 Rs. {customerInfo.totalOutstanding.toLocaleString('en-LK', {
                   minimumFractionDigits: 2,
@@ -1439,9 +1437,8 @@ const CustomerListPage: React.FC = () => {
       />
 
       {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
-        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-      }`}>
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+        }`}>
         <div className="max-w-7xl mx-auto space-y-4">
           {/* Page header */}
           <div className="flex items-center justify-between">
@@ -1455,12 +1452,12 @@ const CustomerListPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-3">
               <Tooltip content="Create Hiring Agreement">
-              <button
-                onClick={handleCreateHiringAgreement}
-                className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-              >
-                Create Hiring Agreement
-              </button>
+                <button
+                  onClick={handleCreateHiringAgreement}
+                  className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                >
+                  Create Hiring Agreement
+                </button>
               </Tooltip>
             </div>
           </div>
@@ -1490,37 +1487,41 @@ const CustomerListPage: React.FC = () => {
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Create Customer
               </h2>
-              <button
-                onClick={handleCloseCreateModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <Tooltip content="Close">
+                <button
+                  onClick={handleCloseCreateModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </Tooltip>
             </div>
 
             {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-slate-700 px-6">
               <div className="flex space-x-4">
-                <button
-                  onClick={() => setActiveCreateTab('company')}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeCreateTab === 'company'
-                      ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Company
-                </button>
-                <button
-                  onClick={() => setActiveCreateTab('individual')}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeCreateTab === 'individual'
-                      ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Individual
-                </button>
+                <Tooltip content="Company">
+                  <button
+                    onClick={() => setActiveCreateTab('company')}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'company'
+                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                  >
+                    Company
+                  </button>
+                </Tooltip>
+                <Tooltip content="Individual">
+                  <button
+                    onClick={() => setActiveCreateTab('individual')}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'individual'
+                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                  >
+                    Individual
+                  </button>
+                </Tooltip>
               </div>
             </div>
 
@@ -1565,12 +1566,14 @@ const CustomerListPage: React.FC = () => {
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Create Rental Agreement
               </h2>
-              <button
-                onClick={handleCloseCreateRentalAgreementModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <Tooltip content="Close">
+                <button
+                  onClick={handleCloseCreateRentalAgreementModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </Tooltip>
             </div>
 
             {/* Modal Content - Scrollable */}
@@ -1589,11 +1592,10 @@ const CustomerListPage: React.FC = () => {
                       <select
                         value={customerId}
                         onChange={(e) => setCustomerId(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.customerId
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors.customerId
                             ? 'border-red-500'
                             : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                       >
                         <option value="">Select Customer</option>
                         {mockCustomers.map((customer) => (
@@ -1614,11 +1616,10 @@ const CustomerListPage: React.FC = () => {
                         type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.startDate
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors.startDate
                             ? 'border-red-500'
                             : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                       />
                       {formErrors.startDate && (
                         <p className="mt-1 text-sm text-red-500">{formErrors.startDate}</p>
@@ -1633,11 +1634,10 @@ const CustomerListPage: React.FC = () => {
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
                         min={startDate}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.endDate
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors.endDate
                             ? 'border-red-500'
                             : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                       />
                       {formErrors.endDate && (
                         <p className="mt-1 text-sm text-red-500">{formErrors.endDate}</p>
@@ -1650,14 +1650,16 @@ const CustomerListPage: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machines</h3>
-                    <button
-                      type="button"
-                      onClick={handleAddMachine}
-                      className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Machine
-                    </button>
+                    <Tooltip content="Add Machine">
+                      <button
+                        type="button"
+                        onClick={handleAddMachine}
+                        className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Machine
+                      </button>
+                    </Tooltip>
                   </div>
                   {machines.map((machine, index) => (
                     <div
@@ -1669,13 +1671,15 @@ const CustomerListPage: React.FC = () => {
                           Machine {index + 1}
                         </span>
                         {machines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveMachine(machine.id)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <Tooltip content="Remove Machine">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMachine(machine.id)}
+                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </Tooltip>
                         )}
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1686,11 +1690,10 @@ const CustomerListPage: React.FC = () => {
                           <select
                             value={machine.brand}
                             onChange={(e) => handleMachineChange(machine.id, 'brand', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`machine_brand_${index}`]
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`machine_brand_${index}`]
                                 ? 'border-red-500'
                                 : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           >
                             <option value="">Select Brand</option>
                             {mockMachineBrands.map((brand) => (
@@ -1713,11 +1716,10 @@ const CustomerListPage: React.FC = () => {
                             value={machine.model}
                             onChange={(e) => handleMachineChange(machine.id, 'model', e.target.value)}
                             disabled={!machine.brand}
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`machine_model_${index}`]
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`machine_model_${index}`]
                                 ? 'border-red-500'
                                 : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             <option value="">Select Model</option>
                             {getAvailableModels(machine.brand).map((model) => (
@@ -1739,11 +1741,10 @@ const CustomerListPage: React.FC = () => {
                           <select
                             value={machine.type}
                             onChange={(e) => handleMachineChange(machine.id, 'type', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`machine_type_${index}`]
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`machine_type_${index}`]
                                 ? 'border-red-500'
                                 : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           >
                             <option value="">Select Type</option>
                             {mockMachineTypes.map((type) => (
@@ -1769,11 +1770,10 @@ const CustomerListPage: React.FC = () => {
                             onChange={(e) =>
                               handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
                             }
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`machine_quantity_${index}`]
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`machine_quantity_${index}`]
                                 ? 'border-red-500'
                                 : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           />
                           {formErrors[`machine_quantity_${index}`] && (
                             <p className="mt-1 text-sm text-red-500">
@@ -1790,14 +1790,16 @@ const CustomerListPage: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons</h3>
-                    <button
-                      type="button"
-                      onClick={handleAddAddOn}
-                      className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Add-on
-                    </button>
+                    <Tooltip content="Add Add-on">
+                      <button
+                        type="button"
+                        onClick={handleAddAddOn}
+                        className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Add-on
+                      </button>
+                    </Tooltip>
                   </div>
                   {addOns.length === 0 ? (
                     <p className="text-sm text-gray-500 dark:text-gray-400 italic">
@@ -1813,13 +1815,15 @@ const CustomerListPage: React.FC = () => {
                           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                             Add-on {index + 1}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveAddOn(addOn.id)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <Tooltip content="Remove Add-on">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAddOn(addOn.id)}
+                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </Tooltip>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
@@ -1829,11 +1833,10 @@ const CustomerListPage: React.FC = () => {
                             <select
                               value={addOn.machineId}
                               onChange={(e) => handleAddOnChange(addOn.id, 'machineId', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`addon_machine_${index}`]
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`addon_machine_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                             >
                               <option value="">Select Machine</option>
                               {getAvailableMachineIds().map((m) => (
@@ -1855,11 +1858,10 @@ const CustomerListPage: React.FC = () => {
                             <select
                               value={addOn.addOnId}
                               onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`addon_id_${index}`]
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`addon_id_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                             >
                               <option value="">Select Add-on</option>
                               {mockAddOns.map((ao) => (
@@ -1885,11 +1887,10 @@ const CustomerListPage: React.FC = () => {
                               onChange={(e) =>
                                 handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)
                               }
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`addon_quantity_${index}`]
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`addon_quantity_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                             />
                             {formErrors[`addon_quantity_${index}`] && (
                               <p className="mt-1 text-sm text-red-500">
@@ -1907,22 +1908,26 @@ const CustomerListPage: React.FC = () => {
 
             {/* Modal Footer */}
             <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={handleCloseCreateRentalAgreementModal}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmitRentalAgreement}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Creating...' : 'Create Agreement'}
-              </button>
+              <Tooltip content="Cancel">
+                <button
+                  type="button"
+                  onClick={handleCloseCreateRentalAgreementModal}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </Tooltip>
+              <Tooltip content="Create Agreement">
+                <button
+                  type="button"
+                  onClick={handleSubmitRentalAgreement}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Agreement'}
+                </button>
+              </Tooltip>
             </div>
           </div>
         </div>
@@ -1937,39 +1942,43 @@ const CustomerListPage: React.FC = () => {
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Update Customer
               </h2>
-              <button
-                onClick={handleCloseUpdateModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <Tooltip content="Close">
+                <button
+                  onClick={handleCloseUpdateModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </Tooltip>
             </div>
 
             {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-slate-700 px-6">
               <div className="flex space-x-4">
-                <button
-                  onClick={() => setActiveUpdateTab('company')}
-                  disabled={selectedCustomer.type === 'Individual'}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeUpdateTab === 'company'
-                      ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  } ${selectedCustomer.type === 'Individual' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  Company
-                </button>
-                <button
-                  onClick={() => setActiveUpdateTab('individual')}
-                  disabled={selectedCustomer.type === 'Company'}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeUpdateTab === 'individual'
-                      ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  } ${selectedCustomer.type === 'Company' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  Individual
-                </button>
+                <Tooltip content="Company">
+                  <button
+                    onClick={() => setActiveUpdateTab('company')}
+                    disabled={selectedCustomer.type === 'Individual'}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeUpdateTab === 'company'
+                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      } ${selectedCustomer.type === 'Individual' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    Company
+                  </button>
+                </Tooltip>
+                <Tooltip content="Individual">
+                  <button
+                    onClick={() => setActiveUpdateTab('individual')}
+                    disabled={selectedCustomer.type === 'Company'}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeUpdateTab === 'individual'
+                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      } ${selectedCustomer.type === 'Company' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    Individual
+                  </button>
+                </Tooltip>
               </div>
             </div>
 
@@ -2014,13 +2023,15 @@ const CustomerListPage: React.FC = () => {
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Delete Customer
               </h2>
-              <button
-                onClick={handleCloseDeleteModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                disabled={isSubmitting}
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <Tooltip content="Close">
+                <button
+                  onClick={handleCloseDeleteModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  disabled={isSubmitting}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </Tooltip>
             </div>
 
             {/* Modal Content */}
@@ -2056,12 +2067,14 @@ const CustomerListPage: React.FC = () => {
                   {selectedCustomer.name}
                 </p>
               </div>
-              <button
-                onClick={handleCloseViewModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <Tooltip content="Close">
+                <button
+                  onClick={handleCloseViewModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </Tooltip>
             </div>
 
             {/* Profile Tabs */}
@@ -2075,17 +2088,18 @@ const CustomerListPage: React.FC = () => {
                   { key: 'agreements', label: 'Agreements' },
                   { key: 'outstanding-alerts', label: 'Outstanding Alerts' },
                 ].map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveProfileTab(tab.key as any)}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                      activeProfileTab === tab.key
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
+                  <Tooltip content={tab.label}>
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveProfileTab(tab.key as any)}
+                      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeProfileTab === tab.key
+                          ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
+                    >
+                      {tab.label}
+                    </button>
+                  </Tooltip>
                 ))}
               </div>
             </div>
