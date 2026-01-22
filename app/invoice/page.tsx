@@ -6,6 +6,7 @@ import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Download, FileText, Trash2, Printer } from 'lucide-react';
+import Tooltip from '@/src/components/common/tooltip';
 
 // ... existing type definitions and interfaces remain the same ...
 
@@ -505,6 +506,7 @@ const InvoicePage: React.FC = () => {
       icon: <Eye className="w-4 h-4" />,
       variant: 'secondary',
       onClick: handleViewInvoice,
+      tooltip: 'View Invoice',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
     },
   ];
@@ -818,12 +820,14 @@ const InvoicePage: React.FC = () => {
                   Manage invoices, payments, and generate printable invoices for VAT and Non-VAT invoices.
                 </p>
               </div>
-              <button
-                onClick={handleCreateInvoice}
-                className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-              >
-                Create Invoice
-              </button>
+              <Tooltip content="Create Invoice">
+                <button
+                  onClick={handleCreateInvoice}
+                  className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                >
+                  Create Invoice
+                </button>
+              </Tooltip>
             </div>
 
             {/* Invoice table card */}

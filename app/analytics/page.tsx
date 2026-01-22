@@ -3,12 +3,12 @@
 import React, { useState, useMemo } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  Package, 
-  AlertTriangle, 
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Package,
+  AlertTriangle,
   Activity,
   Calendar,
   BarChart3,
@@ -21,6 +21,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import Tooltip from '@/src/components/common/tooltip';
 
 // Data Types
 interface MonthlyRevenue {
@@ -118,11 +119,11 @@ const AnalyticsPage: React.FC = () => {
   const summaryStats = useMemo(() => {
     const currentMonth = mockMonthlyRevenue[mockMonthlyRevenue.length - 1];
     const previousMonth = mockMonthlyRevenue[mockMonthlyRevenue.length - 2];
-    
+
     const totalRevenue = mockMonthlyRevenue.reduce((sum, m) => sum + m.totalRevenue, 0);
     const avgMonthlyRevenue = totalRevenue / mockMonthlyRevenue.length;
-    const revenueGrowth = previousMonth 
-      ? ((currentMonth.totalRevenue - previousMonth.totalRevenue) / previousMonth.totalRevenue) * 100 
+    const revenueGrowth = previousMonth
+      ? ((currentMonth.totalRevenue - previousMonth.totalRevenue) / previousMonth.totalRevenue) * 100
       : 0;
 
     const totalVatRevenue = mockMonthlyRevenue.reduce((sum, m) => sum + m.vatRevenue, 0);
@@ -569,9 +570,8 @@ const AnalyticsPage: React.FC = () => {
       />
 
       {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
-        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-      }`}>
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+        }`}>
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Page header */}
           <div className="flex items-center justify-between flex-wrap gap-4">
@@ -586,52 +586,53 @@ const AnalyticsPage: React.FC = () => {
             <div className="flex items-center gap-3">
               {/* Export Buttons */}
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handleExportToPDF}
-                  disabled={isExporting}
-                  className="px-4 py-2 bg-red-600 dark:bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 dark:hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-500 transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <FileText className="w-4 h-4" />
-                  {isExporting ? 'Exporting...' : 'Export PDF'}
-                </button>
-                <button
-                  onClick={handleExportToExcel}
-                  disabled={isExporting}
-                  className="px-4 py-2 bg-green-600 dark:bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-500 transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  {isExporting ? 'Exporting...' : 'Export Excel'}
-                </button>
+                <Tooltip content="Export As a PDF">
+                  <button
+                    onClick={handleExportToPDF}
+                    disabled={isExporting}
+                    className="px-4 py-2 bg-red-600 dark:bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 dark:hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-500 transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <FileText className="w-4 h-4" />
+                    {isExporting ? 'Exporting...' : 'Export PDF'}
+                  </button>
+                </Tooltip>
+                <Tooltip content="Export As a Excel">
+                  <button
+                    onClick={handleExportToExcel}
+                    disabled={isExporting}
+                    className="px-4 py-2 bg-green-600 dark:bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-500 transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    {isExporting ? 'Exporting...' : 'Export Excel'}
+                  </button>
+                </Tooltip>
               </div>
               {/* Period Selector */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setSelectedPeriod('6M')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                    selectedPeriod === '6M'
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${selectedPeriod === '6M'
                       ? 'bg-blue-600 dark:bg-indigo-600 text-white'
                       : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'
-                  }`}
+                    }`}
                 >
                   6M
                 </button>
                 <button
                   onClick={() => setSelectedPeriod('12M')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                    selectedPeriod === '12M'
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${selectedPeriod === '12M'
                       ? 'bg-blue-600 dark:bg-indigo-600 text-white'
                       : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'
-                  }`}
+                    }`}
                 >
                   12M
                 </button>
                 <button
                   onClick={() => setSelectedPeriod('YTD')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                    selectedPeriod === 'YTD'
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${selectedPeriod === 'YTD'
                       ? 'bg-blue-600 dark:bg-indigo-600 text-white'
                       : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'
-                  }`}
+                    }`}
                 >
                   YTD
                 </button>
@@ -656,11 +657,10 @@ const AnalyticsPage: React.FC = () => {
                       <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
                     )}
                     <span
-                      className={`text-xs font-medium ${
-                        summaryStats.revenueGrowth >= 0
+                      className={`text-xs font-medium ${summaryStats.revenueGrowth >= 0
                           ? 'text-green-600 dark:text-green-400'
                           : 'text-red-600 dark:text-red-400'
-                      }`}
+                        }`}
                     >
                       {Math.abs(summaryStats.revenueGrowth).toFixed(1)}%
                     </span>
@@ -818,13 +818,12 @@ const AnalyticsPage: React.FC = () => {
                               {machine.brand} {machine.model}
                             </h4>
                             <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                machine.status === 'Available'
+                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${machine.status === 'Available'
                                   ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
                                   : machine.status === 'Maintenance'
-                                  ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                                  : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
-                              }`}
+                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                                    : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
+                                }`}
                             >
                               {machine.status}
                             </span>

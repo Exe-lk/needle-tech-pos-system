@@ -6,17 +6,18 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn } from '@/src/components/table/table';
 import { Download, FileText, Filter, Calendar, User, Search } from 'lucide-react';
+import Tooltip from '@/src/components/common/tooltip';
 
 type TransactionCategory = 'Inventory' | 'Rental' | 'Return' | 'Invoice' | 'Maintenance' | 'Other';
-type TransactionType = 
-  | 'Stock In' 
-  | 'Stock Out' 
-  | 'Rental Created' 
-  | 'Rental Completed' 
-  | 'Return Processed' 
-  | 'Invoice Generated' 
-  | 'Payment Received' 
-  | 'Maintenance Out' 
+type TransactionType =
+  | 'Stock In'
+  | 'Stock Out'
+  | 'Rental Created'
+  | 'Rental Completed'
+  | 'Return Processed'
+  | 'Invoice Generated'
+  | 'Payment Received'
+  | 'Maintenance Out'
   | 'Maintenance In'
   | 'Machine Retired';
 
@@ -523,9 +524,8 @@ const TransactionLogPage: React.FC = () => {
       />
 
       {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
-        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-      }`}>
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+        }`}>
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Page header */}
           <div className="flex items-center justify-between">
@@ -537,23 +537,25 @@ const TransactionLogPage: React.FC = () => {
                 Comprehensive log of all system transactions including inventory, rentals, returns, invoices, and maintenance.
               </p>
             </div>
-            <button
-              onClick={handleExport}
-              className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
-            >
-              <Download className="w-4 h-4" />
-              <span>Export</span>
-            </button>
+            <Tooltip content="Export Transaction Log">
+              <button
+                onClick={handleExport}
+                className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export</span>
+              </button>
+            </Tooltip>
           </div>
 
-          
-          
+
+
 
           {/* Transaction Log Table */}
           <Table
             data={filteredTransactions}
             columns={columns}
-            itemsPerPage={20}
+            itemsPerPage={10}
             searchable
             filterable
             emptyMessage="No transactions found matching the filters."

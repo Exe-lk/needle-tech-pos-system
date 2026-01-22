@@ -7,6 +7,7 @@ import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { Eye, Pencil, X, Plus, Trash2 } from 'lucide-react';
+import Tooltip from '@/src/components/common/tooltip';
 
 type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
 
@@ -824,6 +825,7 @@ const RentalAgreementPage: React.FC = () => {
         icon: <Eye className="w-4 h-4" />,
         variant: 'secondary',
         onClick: handleViewAgreement,
+        tooltip: 'View Agreement',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
       },
       {
@@ -831,6 +833,7 @@ const RentalAgreementPage: React.FC = () => {
         icon: <Pencil className="w-4 h-4" />,
         variant: 'primary',
         onClick: handleUpdateAgreement,
+        tooltip: 'Update Agreement',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
       },
     ];
@@ -1242,12 +1245,14 @@ const RentalAgreementPage: React.FC = () => {
                 outstanding balances.
               </p>
             </div>
-            <button
-              onClick={handleCreateAgreement}
-              className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-            >
-              Create Rental Agreement
-            </button>
+            <Tooltip content="Create Rental Agreement">
+              <button
+                onClick={handleCreateAgreement}
+                className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+              >
+                Create Rental Agreement
+              </button>
+            </Tooltip>
           </div>
 
           {/* Rental Agreement table card */}

@@ -8,6 +8,7 @@ import CreateForm, { FormField } from '@/src/components/form-popup/create';
 import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, Plus } from 'lucide-react';
+import Tooltip from '@/src/components/common/tooltip';
 
 type CustomerType = 'Company' | 'Individual';
 type CustomerStatus = 'Active' | 'Inactive' | 'Blocked';
@@ -846,6 +847,7 @@ const CustomerListPage: React.FC = () => {
         icon: <Eye className="w-4 h-4" />,
         variant: 'secondary',
         onClick: handleViewCustomer,
+        tooltip: 'View Customer',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
       },
       {
@@ -853,6 +855,7 @@ const CustomerListPage: React.FC = () => {
         icon: <Pencil className="w-4 h-4" />,
         variant: 'primary',
         onClick: handleUpdateCustomer,
+        tooltip: 'Update Customer',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
       },
       {
@@ -860,6 +863,7 @@ const CustomerListPage: React.FC = () => {
         icon: <Trash2 className="w-4 h-4" />,
         variant: 'danger',
         onClick: handleDeleteCustomer,
+        tooltip: 'Delete Customer',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
       },
     ];
@@ -1450,12 +1454,14 @@ const CustomerListPage: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <Tooltip content="Create Hiring Agreement">
               <button
                 onClick={handleCreateHiringAgreement}
                 className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
               >
                 Create Hiring Agreement
               </button>
+              </Tooltip>
             </div>
           </div>
 

@@ -6,6 +6,7 @@ import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import CreateForm, { FormField } from '@/src/components/form-popup/create';
 import { Eye, X, Package, TrendingUp, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import Tooltip from '@/src/components/common/tooltip';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type StockType = 'New' | 'Used';
@@ -512,13 +513,15 @@ const InventoryManagementPage: React.FC = () => {
         icon: <Eye className="w-4 h-4" />,
         variant: 'secondary',
         onClick: handleViewDetails,
+        tooltip: 'View Details',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
       },
       {
         label: '',
         icon: <Clock className="w-4 h-4" />,
         variant: 'primary',
-        onClick: handleViewHistory,
+        onClick: handleViewHistory, 
+        tooltip: 'View History',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
       },
     ];

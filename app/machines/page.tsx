@@ -9,6 +9,7 @@ import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, History, Image as ImageIcon, ChevronLeft, ChevronRight, QrCode, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import Tooltip from '@/src/components/common/tooltip';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
@@ -684,6 +685,7 @@ const MachineListPage: React.FC = () => {
         icon: <Eye className="w-4 h-4" />,
         variant: 'secondary',
         onClick: handleViewMachine,
+        tooltip: 'View Machine',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
       },
       {
@@ -691,6 +693,7 @@ const MachineListPage: React.FC = () => {
         icon: <Pencil className="w-4 h-4" />,
         variant: 'primary',
         onClick: handleUpdateMachine,
+        tooltip: 'Update Machine',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
       },
       {
@@ -698,6 +701,7 @@ const MachineListPage: React.FC = () => {
         icon: <QrCode className="w-4 h-4" />,
         variant: 'secondary',
         onClick: handleGenerateQR,
+        tooltip: 'Generate QR Code',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
       },
       {
@@ -705,6 +709,7 @@ const MachineListPage: React.FC = () => {
         icon: <Trash2 className="w-4 h-4" />,
         variant: 'danger',
         onClick: handleDeleteMachine,
+        tooltip: 'Delete Machine',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
       },
     ];

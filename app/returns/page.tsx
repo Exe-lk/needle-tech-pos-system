@@ -5,6 +5,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, QrCode, Camera, Printer, CheckCircle2, Calendar, User, FileText, DollarSign, ArrowRight, ArrowLeft, Package, MapPin, Building2 } from 'lucide-react';
+import Tooltip from '@/src/components/common/tooltip';
 
 type ReturnType = 'Standard' | 'Damage' | 'Missing' | 'Exchange';
 type ReturnStatus = 'Pending' | 'Completed' | 'Under Review';
@@ -603,6 +604,7 @@ const ReturnsPage: React.FC = () => {
       icon: <Eye className="w-4 h-4" />,
       variant: 'secondary',
       onClick: handleViewReturn,
+      tooltip: 'View Return',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
     },
   ];
