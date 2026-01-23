@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* Ensure dark mode is enabled via class strategy */
-@variant dark (&:is(.dark, .dark *));
+@variant dark (.dark &);
 
 @theme {
   --color-background: var(--background);
