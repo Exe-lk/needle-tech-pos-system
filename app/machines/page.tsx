@@ -10,6 +10,7 @@ import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, History, Image as ImageIcon, ChevronLeft, ChevronRight, QrCode, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Tooltip from '@/src/components/common/tooltip';
+import { validateSerialNumber, validateBoxNumber } from '@/src/utils/validation';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
@@ -503,6 +504,7 @@ const MachineListPage: React.FC = () => {
       type: 'text',
       placeholder: 'Enter serial number',
       required: true,
+      validation: validateSerialNumber,
     },
     {
       name: 'boxNo',
@@ -510,6 +512,7 @@ const MachineListPage: React.FC = () => {
       type: 'text',
       placeholder: 'Enter BOX number',
       required: true,
+      validation: validateBoxNumber,
     },
     {
       name: 'manufactureYear',

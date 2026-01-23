@@ -256,9 +256,13 @@ const Table: React.FC<TableProps> = ({
   // Use provided maxHeight or calculated responsive height
   const tableMaxHeight = maxHeight || calculatedHeight;
 
+  const showHeader = searchable || filterable || !!onCreateClick;
+
+
   return (
     <div className={`bg-white dark:bg-slate-800 rounded-lg overflow-hidden flex flex-col ${className}`} style={{ maxHeight: tableMaxHeight }}>
       {/* Header with search, filter and create button */}
+      {showHeader && (
       <div className="p-6 bg-gray-50 dark:bg-slate-700/50 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3 flex-1">
@@ -348,6 +352,7 @@ const Table: React.FC<TableProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* Table Container with flexible height - grows to content but respects maxHeight */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">

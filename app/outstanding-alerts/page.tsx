@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, X } from 'lucide-react';
+import { Eye, X, Pencil } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 
 type AlertType = 'Payment Overdue' | 'High Balance' | 'Credit Limit Exceeded' | 'Agreement Expiring';
@@ -30,7 +30,7 @@ interface OutstandingAlert {
 }
 
 // Mock data for all outstanding alerts
-const mockOutstandingAlerts: OutstandingAlert[] = [
+const initialMockOutstandingAlerts: OutstandingAlert[] = [
   {
     id: 1,
     customerId: 1,
@@ -264,7 +264,13 @@ const OutstandingAlertsPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<OutstandingAlert | null>(null);
+  const [alerts, setAlerts] = useState<OutstandingAlert[]>(initialMockOutstandingAlerts);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Update form state
+  const [alertStatus, setAlertStatus] = useState<AlertStatus>('Active');
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -288,6 +294,47 @@ const OutstandingAlertsPage: React.FC = () => {
     setSelectedAlert(null);
   };
 
+  const handleEditAlert = (alert: OutstandingAlert) => {
+    setSelectedAlert(alert);
+    setAlertStatus(alert.status);
+    setIsUpdateModalOpen(true);
+  };
+
+  const handleCloseUpdateModal = () => {
+    setIsUpdateModalOpen(false);
+    setSelectedAlert(null);
+    setAlertStatus('Active');
+  };
+
+  const handleSubmitUpdate = async () => {
+    if (!selectedAlert) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const updatedAlert: OutstandingAlert = {
+        ...selectedAlert,
+        status: alertStatus,
+        resolvedAt: alertStatus === 'Resolved' && !selectedAlert.resolvedAt
+          ? new Date().toISOString().split('T')[0]
+          : alertStatus === 'Active'
+          ? undefined
+          : selectedAlert.resolvedAt,
+      };
+
+      setAlerts(alerts.map(alert => alert.id === selectedAlert.id ? updatedAlert : alert));
+      console.log('Update alert payload:', updatedAlert);
+      alert('Alert status updated successfully.');
+      handleCloseUpdateModal();
+    } catch (error) {
+      console.error('Error updating alert:', error);
+      alert('Failed to update alert. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getRowClassName = (alert: OutstandingAlert) => {
     if (alert.status === 'Resolved') return 'bg-green-50/60 dark:bg-green-950/20';
     if (alert.severity === 'Critical') return 'bg-red-50/60 dark:bg-red-950/40';
@@ -305,7 +352,198 @@ const OutstandingAlertsPage: React.FC = () => {
       tooltip: 'View Alert',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
     },
+    {
+      label: '',
+      icon: <Pencil className="w-4 h-4" />,
+      variant: 'primary',
+      onClick: handleEditAlert,
+      tooltip: 'Edit Alert',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+    },
   ];
+
+  // Render Update Form
+  const renderUpdateForm = () => {
+    if (!selectedAlert) return null;
+
+    return (
+      <div className="space-y-6">
+        {/* Alert Information - Read Only */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Customer Name
+            </label>
+            <input
+              type="text"
+              value={selectedAlert.customerName}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Customer Type
+            </label>
+            <input
+              type="text"
+              value={selectedAlert.customerType}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Alert Type
+            </label>
+            <input
+              type="text"
+              value={selectedAlert.alertType}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Severity
+            </label>
+            <input
+              type="text"
+              value={selectedAlert.severity}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Amount
+            </label>
+            <input
+              type="text"
+              value={selectedAlert.amount > 0 
+                ? `Rs. ${selectedAlert.amount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : 'N/A'}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Due Date
+            </label>
+            <input
+              type="text"
+              value={new Date(selectedAlert.dueDate).toLocaleDateString('en-LK', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Created At
+            </label>
+            <input
+              type="text"
+              value={new Date(selectedAlert.createdAt).toLocaleDateString('en-LK', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          {selectedAlert.resolvedAt && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Resolved At
+              </label>
+              <input
+                type="text"
+                value={new Date(selectedAlert.resolvedAt).toLocaleDateString('en-LK', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+                disabled
+                className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Status <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={alertStatus}
+              onChange={(e) => setAlertStatus(e.target.value as AlertStatus)}
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+            >
+              <option value="Active">Active</option>
+              <option value="Resolved">Resolved</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Description - Read Only */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Description
+          </label>
+          <textarea
+            value={selectedAlert.description}
+            disabled
+            rows={4}
+            className="w-full px-4 py-3 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+          />
+        </div>
+
+        {/* Related Information - Read Only */}
+        {(selectedAlert.relatedAgreement || selectedAlert.relatedMachine) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {selectedAlert.relatedAgreement && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Agreement Number
+                </label>
+                <input
+                  type="text"
+                  value={selectedAlert.relatedAgreement}
+                  disabled
+                  className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+                />
+              </div>
+            )}
+            {selectedAlert.relatedMachine && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Machine
+                </label>
+                <input
+                  type="text"
+                  value={selectedAlert.relatedMachine}
+                  disabled
+                  className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
@@ -339,7 +577,7 @@ const OutstandingAlertsPage: React.FC = () => {
 
           {/* Alerts table card */}
           <Table
-            data={mockOutstandingAlerts}
+            data={alerts}
             columns={columns}
             actions={actions}
             itemsPerPage={10}
@@ -350,6 +588,54 @@ const OutstandingAlertsPage: React.FC = () => {
           />
         </div>
       </main>
+
+      {/* Update Alert Modal */}
+      {isUpdateModalOpen && selectedAlert && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Update Alert</h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Alert ID: {selectedAlert.id} - {selectedAlert.alertType}
+                </p>
+              </div>
+              <button
+                onClick={handleCloseUpdateModal}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {renderUpdateForm()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={handleCloseUpdateModal}
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitUpdate}
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? 'Updating...' : 'Update Alert'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View Alert Details Modal */}
       {isViewModalOpen && selectedAlert && (

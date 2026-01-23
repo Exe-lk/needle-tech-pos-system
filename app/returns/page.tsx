@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, X, QrCode, Camera, Printer, CheckCircle2, Calendar, User, FileText, DollarSign, ArrowRight, ArrowLeft, Package, MapPin, Building2 } from 'lucide-react';
+import QRScannerComponent from '@/src/components/qr-scanner';
+import { Eye, X, QrCode, Camera, Printer, CheckCircle2, Calendar, User, FileText, DollarSign, ArrowRight, ArrowLeft, Package, MapPin, Building2, Pencil } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 
 type ReturnType = 'Standard' | 'Damage' | 'Missing' | 'Exchange';
@@ -433,7 +434,9 @@ const ReturnsPage: React.FC = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
+  const [returns, setReturns] = useState<Return[]>(mockReturns);
 
   // Step-based form state
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -444,6 +447,14 @@ const ReturnsPage: React.FC = () => {
   const [damagePhotos, setDamagePhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // QR Scanner state
+  const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+
+  // Update form state
+  const [returnStatus, setReturnStatus] = useState<ReturnStatus>('Pending');
+  const [repairCost, setRepairCost] = useState<number | undefined>(undefined);
+  const [inspectedBy, setInspectedBy] = useState('');
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -466,6 +477,7 @@ const ReturnsPage: React.FC = () => {
     setDamageNote('');
     setDamagePhotos([]);
     setPhotoPreviews([]);
+    setIsQRScannerOpen(false);
   };
 
   const handleCloseCreateModal = () => {
@@ -478,8 +490,51 @@ const ReturnsPage: React.FC = () => {
     setDamagePhotos([]);
     photoPreviews.forEach((preview) => URL.revokeObjectURL(preview));
     setPhotoPreviews([]);
+    setIsQRScannerOpen(false);
   };
 
+  // QR Scanner handlers
+  const handleOpenQRScanner = () => {
+    setIsQRScannerOpen(true);
+  };
+
+  const handleCloseQRScanner = () => {
+    setIsQRScannerOpen(false);
+  };
+
+  const handleQRScanSuccess = (qrData: string) => {
+    try {
+      // Try to parse as JSON first (for structured QR codes)
+      let machineId = qrData;
+      
+      try {
+        const parsedData = JSON.parse(qrData);
+        // If QR code contains machineId or id field, use it
+        machineId = parsedData.machineId || parsedData.id || parsedData.serialNumber || qrData;
+      } catch {
+        // If not JSON, use the raw QR data as machine ID
+        machineId = qrData;
+      }
+
+      // Get machine by QR code
+      const machine = getMachineByQR(machineId.trim());
+      
+      if (machine) {
+        setScannedMachine(machine);
+        setQrCode(machineId.trim());
+        setIsQRScannerOpen(false);
+      } else {
+        alert('Machine not found. Please check the QR code.');
+        setIsQRScannerOpen(false);
+      }
+    } catch (error) {
+      console.error('Error processing QR code:', error);
+      alert('Invalid QR code format. Please try again.');
+      setIsQRScannerOpen(false);
+    }
+  };
+
+  // Keep the manual QR scan handler for backward compatibility
   const handleQRScan = () => {
     if (!qrCode.trim()) {
       alert('Please enter a QR code');
@@ -566,12 +621,45 @@ const ReturnsPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       // In real app, this would be an API call
-      console.log('Return data:', {
-        machineId: scannedMachine?.id,
-        returnType,
-        damageNote: returnType === 'Damage' || returnType === 'Missing' ? damageNote : undefined,
-        photos: damagePhotos,
-      });
+      const newReturn: Return = {
+        id: returns.length > 0 ? Math.max(...returns.map(r => r.id)) + 1 : 1,
+        returnNumber: `RET-2024-${String(returns.length + 1).padStart(3, '0')}`,
+        machineName: scannedMachine?.name || '',
+        machineId: scannedMachine?.id || '',
+        customerName: scannedMachine?.rentalDetails?.customerName || 'N/A',
+        returnDate: new Date().toISOString().split('T')[0],
+        returnType: returnType as ReturnType,
+        status: 'Pending',
+        damageNote: (returnType === 'Damage' || returnType === 'Missing') ? damageNote : undefined,
+        photosCount: (returnType === 'Damage' || returnType === 'Missing') ? damagePhotos.length : undefined,
+        inspectedBy: 'Current User', // In real app, get from auth context
+        machineDetails: scannedMachine ? {
+          model: scannedMachine.model,
+          serialNumber: scannedMachine.serialNumber,
+          manufacturer: scannedMachine.manufacturer,
+          year: scannedMachine.year,
+          category: scannedMachine.category,
+          location: scannedMachine.location,
+        } : undefined,
+        rentalDetails: scannedMachine?.rentalDetails ? {
+          agreementNumber: scannedMachine.rentalDetails.agreementNumber,
+          customerPhone: scannedMachine.rentalDetails.customerPhone,
+          customerEmail: scannedMachine.rentalDetails.customerEmail,
+          rentalStartDate: scannedMachine.rentalDetails.rentalStartDate,
+          rentalEndDate: scannedMachine.rentalDetails.rentalEndDate,
+          rentalPeriod: scannedMachine.rentalDetails.rentalPeriod,
+          monthlyRate: scannedMachine.rentalDetails.monthlyRate,
+          totalAmount: scannedMachine.rentalDetails.totalAmount,
+          paidAmount: scannedMachine.rentalDetails.paidAmount,
+          outstandingAmount: scannedMachine.rentalDetails.outstandingAmount,
+          securityDeposit: scannedMachine.rentalDetails.securityDeposit,
+          dispatchedDate: scannedMachine.rentalDetails.dispatchedDate,
+          expectedReturnDate: scannedMachine.rentalDetails.expectedReturnDate,
+        } : undefined,
+      };
+
+      setReturns([...returns, newReturn]);
+      console.log('Return data:', newReturn);
 
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -597,6 +685,48 @@ const ReturnsPage: React.FC = () => {
     setSelectedReturn(null);
   };
 
+  const handleEditReturn = (returnItem: Return) => {
+    setSelectedReturn(returnItem);
+    setReturnStatus(returnItem.status);
+    setRepairCost(returnItem.repairCost);
+    setInspectedBy(returnItem.inspectedBy);
+    setIsUpdateModalOpen(true);
+  };
+
+  const handleCloseUpdateModal = () => {
+    setIsUpdateModalOpen(false);
+    setSelectedReturn(null);
+    setReturnStatus('Pending');
+    setRepairCost(undefined);
+    setInspectedBy('');
+  };
+
+  const handleSubmitUpdate = async () => {
+    if (!selectedReturn) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const updatedReturn: Return = {
+        ...selectedReturn,
+        status: returnStatus,
+        repairCost: repairCost,
+        inspectedBy: inspectedBy || selectedReturn.inspectedBy,
+      };
+
+      setReturns(returns.map(ret => ret.id === selectedReturn.id ? updatedReturn : ret));
+      console.log('Update return payload:', updatedReturn);
+      alert('Return updated successfully.');
+      handleCloseUpdateModal();
+    } catch (error) {
+      console.error('Error updating return:', error);
+      alert('Failed to update return. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Action buttons
   const actions: ActionButton[] = [
     {
@@ -607,7 +737,180 @@ const ReturnsPage: React.FC = () => {
       tooltip: 'View Return',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
     },
+    {
+      label: '',
+      icon: <Pencil className="w-4 h-4" />,
+      variant: 'primary',
+      onClick: handleEditReturn,
+      tooltip: 'Edit Return',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+    },
   ];
+
+  // Render Update Form
+  const renderUpdateForm = () => {
+    if (!selectedReturn) return null;
+
+    return (
+      <div className="space-y-6">
+        {/* Return Information - Read Only */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Return Number
+            </label>
+            <input
+              type="text"
+              value={selectedReturn.returnNumber}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Machine Name
+            </label>
+            <input
+              type="text"
+              value={selectedReturn.machineName}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Customer Name
+            </label>
+            <input
+              type="text"
+              value={selectedReturn.customerName}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Return Date
+            </label>
+            <input
+              type="text"
+              value={new Date(selectedReturn.returnDate).toLocaleDateString('en-LK', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Return Type
+            </label>
+            <input
+              type="text"
+              value={selectedReturn.returnType}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Status <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={returnStatus}
+              onChange={(e) => setReturnStatus(e.target.value as ReturnStatus)}
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+            >
+              <option value="Pending">Pending</option>
+              <option value="Under Review">Under Review</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+
+          {(selectedReturn.returnType === 'Damage' || selectedReturn.returnType === 'Missing') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Repair Cost (Rs.)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={repairCost || ''}
+                onChange={(e) => setRepairCost(e.target.value ? parseFloat(e.target.value) : undefined)}
+                placeholder="Enter repair cost"
+                className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Inspected By
+            </label>
+            <input
+              type="text"
+              value={inspectedBy}
+              onChange={(e) => setInspectedBy(e.target.value)}
+              placeholder="Enter inspector name"
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+
+        {/* Damage Note - Read Only if exists */}
+        {(selectedReturn.returnType === 'Damage' || selectedReturn.returnType === 'Missing') && selectedReturn.damageNote && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              {selectedReturn.returnType === 'Damage' ? 'Damage Note' : 'Missing Parts Note'}
+            </label>
+            <textarea
+              value={selectedReturn.damageNote}
+              disabled
+              rows={4}
+              className="w-full px-4 py-3 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // QR Scanner Modal Component
+  const renderQRScannerModal = () => {
+    if (!isQRScannerOpen) return null;
+
+    return (
+      <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-[60] flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Scan QR Code
+            </h2>
+            <button
+              onClick={handleCloseQRScanner}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <QRScannerComponent 
+              onScanSuccess={handleQRScanSuccess} 
+              onClose={handleCloseQRScanner}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
@@ -641,7 +944,7 @@ const ReturnsPage: React.FC = () => {
 
           {/* Returns table card */}
           <Table
-            data={mockReturns}
+            data={returns}
             columns={columns}
             actions={actions}
             itemsPerPage={10}
@@ -734,9 +1037,25 @@ const ReturnsPage: React.FC = () => {
                   </div>
 
                   <div className="space-y-4">
+                    {/* QR Scanner Button */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        QR Code
+                        Scan QR Code
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleOpenQRScanner}
+                        className="w-full px-4 py-3 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-800 transition-colors flex items-center justify-center space-x-2"
+                      >
+                        <QrCode className="w-5 h-5" />
+                        <span>Scan QR Code to Add Machine</span>
+                      </button>
+                    </div>
+
+                    {/* Manual QR Code Input (Alternative Method) */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Or Enter QR Code Manually
                       </label>
                       <div className="flex items-center space-x-3">
                         <div className="relative flex-1">
@@ -752,16 +1071,15 @@ const ReturnsPage: React.FC = () => {
                                 handleQRScan();
                               }
                             }}
-                            placeholder="Enter or scan QR code"
+                            placeholder="Enter QR code manually"
                             className="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
-                            autoFocus
                           />
                         </div>
                         <button
                           onClick={handleQRScan}
                           className="px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors font-medium"
                         >
-                          Scan
+                          Search
                         </button>
                       </div>
                     </div>
@@ -1218,6 +1536,57 @@ const ReturnsPage: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Scanner Modal */}
+      {renderQRScannerModal()}
+
+      {/* Update Return Modal */}
+      {isUpdateModalOpen && selectedReturn && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Update Return</h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Return Number: {selectedReturn.returnNumber}
+                </p>
+              </div>
+              <button
+                onClick={handleCloseUpdateModal}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {renderUpdateForm()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={handleCloseUpdateModal}
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitUpdate}
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? 'Updating...' : 'Update Return'}
+              </button>
             </div>
           </div>
         </div>

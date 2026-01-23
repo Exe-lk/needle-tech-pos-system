@@ -6,7 +6,7 @@ import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import QRScannerComponent from '@/src/components/qr-scanner';
-import { Eye, Pencil, X, Plus, Trash2 } from 'lucide-react';
+import { Eye, Pencil, X, Plus, Trash2, Printer } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 
 type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
@@ -30,10 +30,13 @@ interface RentalAgreementInfo {
   agreementNo: string;
   customerNo: string;
   customerName: string;
+  customerAddress?: string;
   serialNo: string;
   machineBrand: string;
   machineModel: string;
   machineType: string;
+  machineDescription: string;
+  motorBoxNo?: string;
   startDate: string;
   endDate: string | null;
   monthlyRent: number;
@@ -43,6 +46,11 @@ interface RentalAgreementInfo {
   paidAmount: number;
   deposit: number;
   notes?: string;
+  additionalParts?: string;
+  customerIdNo?: string;
+  customerFullName?: string;
+  customerSignatureDate?: string;
+  customerSignature?: string;
 }
 
 // Machine interface for create form
@@ -77,11 +85,12 @@ interface MachineForAgreement {
 
 // Mock customer data
 const mockCustomers = [
-  { id: 'CUST-001', name: 'ABC Holdings (Pvt) Ltd' },
-  { id: 'CUST-002', name: 'John Perera' },
-  { id: 'CUST-003', name: 'XYZ Engineering' },
-  { id: 'CUST-004', name: 'Kamal Silva' },
-  { id: 'CUST-005', name: 'Mega Constructions' },
+  { id: 'CUST-001', name: 'ABC Holdings (Pvt) Ltd', address: '123 Main Street, Colombo 05' },
+  { id: 'CUST-002', name: 'John Perera', address: '456 Galle Road, Mount Lavinia' },
+  { id: 'CUST-003', name: 'XYZ Engineering', address: '789 Kandy Road, Peradeniya' },
+  { id: 'CUST-004', name: 'Kamal Silva', address: '321 Negombo Road, Wattala' },
+  { id: 'CUST-005', name: 'Mega Constructions', address: '654 High Level Road, Maharagama' },
+  { id: 'CUST-006', name: 'VIHANGA SHADE STRUCTURES', address: '317/2, NEW KANDY ROAD, BIYAGAMA' },
 ];
 
 // Mock machine data
@@ -90,7 +99,7 @@ const mockMachineModels = [
   { brand: 'Brother', models: ['XL2600i', 'SE600', 'CS6000i'] },
   { brand: 'Singer', models: ['Heavy Duty 4423', 'Buttonhole 160'] },
   { brand: 'Janome', models: ['HD3000', 'MB-4S'] },
-  { brand: 'Juki', models: ['MO-654DE'] },
+  { brand: 'Juki', models: ['MO-654DE', 'LK-1903A-SS'] },
 ];
 const mockMachineTypes = ['Industrial', 'Domestic', 'Embroidery', 'Overlock', 'Buttonhole', 'Other'];
 
@@ -179,28 +188,64 @@ const mockRentalAgreements: RentalAgreement[] = [
     id: 6,
     agreementNo: 'RA-2024-006',
     customerNo: 'CUST-006',
-    customerName: 'Alpha Constructions',
-    serialNo: 'SN-2024-006',
-    startDate: '2026-01-01',
+    customerName: 'VIHANGA SHADE STRUCTURES',
+    serialNo: '2LIDH01733',
+    startDate: '2026-01-02',
     endDate: '2026-08-01',
-    monthlyRent: 80000,
-    outstanding: 560000,
-    status: 'Pending',
+    monthlyRent: 17000,
+    outstanding: 0,
+    status: 'Active',
   },
 ];
 
 // Mock function to get rental agreement detail data (replace with API call later)
 const getRentalAgreementInfo = (agreementId: number): RentalAgreementInfo => {
   const agreement = mockRentalAgreements.find((r) => r.id === agreementId);
+  const customer = mockCustomers.find((c) => c.id === agreement?.customerNo);
+  
+  // Special handling for the example agreement from image
+  if (agreementId === 6) {
+    return {
+      id: agreement?.id || 0,
+      agreementNo: agreement?.agreementNo || '',
+      customerNo: agreement?.customerNo || '',
+      customerName: agreement?.customerName || '',
+      customerAddress: customer?.address || '',
+      serialNo: agreement?.serialNo || '',
+      machineBrand: 'Juki',
+      machineModel: 'LK-1903A-SS',
+      machineType: 'Electronic Bar Tack Machine',
+      machineDescription: 'JUKI LK-1903A-SS - ELECTRONIC BAR TACK MACHINE',
+      motorBoxNo: 'NMBDH01171',
+      startDate: agreement?.startDate || '',
+      endDate: agreement?.endDate || null,
+      monthlyRent: agreement?.monthlyRent || 0,
+      outstanding: agreement?.outstanding || 0,
+      status: agreement?.status || 'Active',
+      totalAmount: (agreement?.monthlyRent || 0) * 3,
+      paidAmount: (agreement?.monthlyRent || 0) * 1,
+      deposit: (agreement?.monthlyRent || 0) * 2,
+      notes: 'Regular maintenance required. Customer has good payment history.',
+      additionalParts: 'Complete timeline',
+      customerIdNo: '72348.961V',
+      customerFullName: 'SURAJ PRANAWEERA',
+      customerSignatureDate: '2026-01-02',
+      customerSignature: 'SURAJ PRANAWEERA',
+    };
+  }
+  
   return {
     id: agreement?.id || 0,
     agreementNo: agreement?.agreementNo || '',
     customerNo: agreement?.customerNo || '',
     customerName: agreement?.customerName || '',
+    customerAddress: customer?.address || '',
     serialNo: agreement?.serialNo || '',
     machineBrand: 'Brother',
     machineModel: 'XL2600i',
     machineType: 'Domestic',
+    machineDescription: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE',
+    motorBoxNo: 'BOX-2024-001',
     startDate: agreement?.startDate || '',
     endDate: agreement?.endDate || null,
     monthlyRent: agreement?.monthlyRent || 0,
@@ -210,64 +255,11 @@ const getRentalAgreementInfo = (agreementId: number): RentalAgreementInfo => {
     paidAmount: (agreement?.monthlyRent || 0) * 1,
     deposit: (agreement?.monthlyRent || 0) * 0.5,
     notes: 'Regular maintenance required. Customer has good payment history.',
+    customerIdNo: '123456789V',
+    customerFullName: customer?.name || '',
+    customerSignatureDate: agreement?.startDate || '',
+    customerSignature: customer?.name || '',
   };
-};
-
-// Generate agreement text
-const generateAgreementText = (
-  customerName: string,
-  machines: MachineItem[],
-  addOns: AddOnItem[],
-  startDate: string,
-  endDate: string,
-  totalPrice: number
-): string => {
-  if (!customerName || machines.length === 0) {
-    return 'Please fill in customer and machine details to generate agreement text.';
-  }
-
-  const machineList = machines
-    .map((m) => `${m.quantity}x ${m.brand} ${m.model} (${m.type})`)
-    .join(', ');
-
-  const addOnList =
-    addOns.length > 0
-      ? addOns
-          .map((a) => {
-            const addOn = mockAddOns.find((ao) => ao.id === a.addOnId);
-            return `${a.quantity}x ${addOn?.name || a.addOnId}`;
-          })
-          .join(', ')
-      : 'None';
-
-  return `RENTAL AGREEMENT
-
-This Rental Agreement is entered into on ${new Date(startDate).toLocaleDateString('en-LK')} between ${customerName} (hereinafter referred to as "Lessee") and Needle Tech POS System (hereinafter referred to as "Lessor").
-
-1. RENTAL ITEMS:
-   - Machines: ${machineList}
-   ${addOns.length > 0 ? `   - Add-ons: ${addOnList}` : ''}
-
-2. RENTAL PERIOD:
-   The rental period shall commence on ${new Date(startDate).toLocaleDateString('en-LK')} and terminate on ${new Date(endDate).toLocaleDateString('en-LK')}.
-
-3. RENTAL FEE:
-   The total monthly rental fee is Rs. ${totalPrice.toLocaleString('en-LK', {
-     minimumFractionDigits: 2,
-     maximumFractionDigits: 2,
-   })}.
-
-4. TERMS AND CONDITIONS:
-   - The Lessee shall be responsible for the proper care and maintenance of all rented items.
-   - Any damage or loss shall be the responsibility of the Lessee.
-   - Payment shall be made monthly in advance.
-   - Late payment may result in additional charges.
-
-5. SIGNATURE:
-   Both parties agree to the terms and conditions set forth in this agreement.
-
-Lessee: _____________________    Lessor: _____________________
-Date: _____________________      Date: _____________________`;
 };
 
 // Table column configuration
@@ -390,6 +382,10 @@ const RentalAgreementPage: React.FC = () => {
   const [addOns, setAddOns] = useState<AddOnItem[]>([]);
   const [signature, setSignature] = useState('');
   const [agreementDate, setAgreementDate] = useState('');
+  // New fields for customer signature section
+  const [customerIdNo, setCustomerIdNo] = useState('');
+  const [customerFullName, setCustomerFullName] = useState('');
+  const [customerSignatureDate, setCustomerSignatureDate] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Machine management state for update form
@@ -430,19 +426,6 @@ const RentalAgreementPage: React.FC = () => {
     };
   }, [machines, addOns]);
 
-  // Generate agreement text
-  const agreementText = useMemo(() => {
-    const selectedCustomer = mockCustomers.find((c) => c.id === customerId);
-    return generateAgreementText(
-      selectedCustomer?.name || '',
-      machines,
-      addOns,
-      startDate,
-      endDate,
-      pricing.totalPrice
-    );
-  }, [customerId, machines, addOns, startDate, endDate, pricing.totalPrice]);
-
   // Get available models based on selected brand
   const getAvailableModels = (brand: string) => {
     const brandData = mockMachineModels.find((m) => m.brand === brand);
@@ -481,6 +464,9 @@ const RentalAgreementPage: React.FC = () => {
     setAddOns([]);
     setSignature('');
     setAgreementDate('');
+    setCustomerIdNo('');
+    setCustomerFullName('');
+    setCustomerSignatureDate('');
     setFormErrors({});
   };
 
@@ -493,6 +479,9 @@ const RentalAgreementPage: React.FC = () => {
     setAddOns([]);
     setSignature('');
     setAgreementDate('');
+    setCustomerIdNo('');
+    setCustomerFullName('');
+    setCustomerSignatureDate('');
     setFormErrors({});
   };
 
@@ -584,6 +573,9 @@ const RentalAgreementPage: React.FC = () => {
 
     if (!signature) errors.signature = 'Signature is required';
     if (!agreementDate) errors.agreementDate = 'Date is required';
+    if (!customerIdNo.trim()) errors.customerIdNo = 'ID NO is required';
+    if (!customerFullName.trim()) errors.customerFullName = 'Full Name is required';
+    if (!customerSignatureDate) errors.customerSignatureDate = 'Customer signature date is required';
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -605,9 +597,11 @@ const RentalAgreementPage: React.FC = () => {
         machines,
         addOns,
         pricing,
-        agreementText,
         signature,
         agreementDate,
+        customerIdNo,
+        customerFullName,
+        customerSignatureDate,
       };
 
       console.log('Create rental agreement payload:', payload);
@@ -629,6 +623,10 @@ const RentalAgreementPage: React.FC = () => {
   const handleCloseViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedAgreement(null);
+  };
+
+  const handlePrintAgreement = () => {
+    window.print();
   };
 
   const handleUpdateAgreement = (agreement: RentalAgreement) => {
@@ -713,7 +711,6 @@ const RentalAgreementPage: React.FC = () => {
 
   const handleCloseQRScanner = () => {
     setIsQRScannerOpen(false);
-    
   };
 
   // Form fields for Update
@@ -818,25 +815,189 @@ const RentalAgreementPage: React.FC = () => {
     return '';
   };
 
-    // Action buttons
-    const actions: ActionButton[] = [
-      {
-        label: '',
-        icon: <Eye className="w-4 h-4" />,
-        variant: 'secondary',
-        onClick: handleViewAgreement,
-        tooltip: 'View Agreement',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
-      },
-      {
-        label: '',
-        icon: <Pencil className="w-4 h-4" />,
-        variant: 'primary',
-        onClick: handleUpdateAgreement,
-        tooltip: 'Update Agreement',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
-      },
-    ];
+  // Action buttons
+  const actions: ActionButton[] = [
+    {
+      label: '',
+      icon: <Eye className="w-4 h-4" />,
+      variant: 'secondary',
+      onClick: handleViewAgreement,
+      tooltip: 'View Agreement',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+    },
+    {
+      label: '',
+      icon: <Pencil className="w-4 h-4" />,
+      variant: 'primary',
+      onClick: handleUpdateAgreement,
+      tooltip: 'Update Agreement',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+    },
+  ];
+
+  // Render Rental Agreement Document for Printing (matches the image format exactly)
+  const renderRentalAgreementDocument = (agreementInfo: RentalAgreementInfo) => {
+    return (
+      <div className="bg-white p-8 max-w-4xl mx-auto" style={{ fontFamily: 'Arial, sans-serif' }}>
+        {/* Header */}
+        <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
+          <div className="flex items-center justify-center mb-2">
+            <div className="text-3xl font-bold text-gray-900">NEEDLE TECHNOLOGIES</div>
+          </div>
+          <div className="text-sm text-gray-700 mt-1">
+            Supplier of industrial Sewing Machines and Accessories
+          </div>
+          <div className="text-4xl font-bold text-gray-900 mt-2">HIRING MACHINE AGREEMENT</div>
+        </div>
+
+        {/* Agreement Details */}
+        <div className="mb-6 space-y-3">
+          <div>
+            <span className="text-sm font-semibold text-gray-700">Customer:</span>
+            <span className="ml-2 text-sm text-gray-900">{agreementInfo.customerName}</span>
+          </div>
+          <div>
+            <span className="text-sm font-semibold text-gray-700">Address:</span>
+            <span className="ml-2 text-sm text-gray-900">{agreementInfo.customerAddress || 'N/A'}</span>
+          </div>
+          <div className="flex space-x-6">
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Agreement:</span>
+              <span className="ml-2 text-sm text-gray-900">{agreementInfo.agreementNo || 'TBD'}</span>
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Date of Issue:</span>
+              <span className="ml-2 text-sm text-gray-900">
+                {agreementInfo.startDate ? new Date(agreementInfo.startDate).toLocaleDateString('en-LK', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                }) : 'TBD'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Machines Table */}
+        <div className="mb-6">
+          <table className="w-full border-collapse border border-gray-800">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900">
+                  Model - Description
+                </th>
+                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                  Serial No
+                </th>
+                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                  Motor / Box No
+                </th>
+                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                  Monthly Res
+                </th>
+                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                  Total
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border border-gray-800 px-4 py-2 text-sm text-gray-900">
+                  {agreementInfo.machineDescription}
+                </td>
+                <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                  {agreementInfo.serialNo}
+                </td>
+                <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                  {agreementInfo.motorBoxNo || 'N/A'}
+                </td>
+                <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                  Rs. {agreementInfo.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                  Rs. {agreementInfo.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          
+          {agreementInfo.additionalParts && (
+            <div className="mt-4">
+              <div className="text-sm font-semibold text-gray-700 mb-1">Additional Parts:</div>
+              <div className="text-sm text-gray-900">{agreementInfo.additionalParts}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Terms & Conditions */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Terms & Conditions</h3>
+          <div className="space-y-3 text-sm text-gray-900">
+            <p>
+              <span className="font-semibold">(01)</span> You have to be paid in cash double monthly rental fee on the date of rent machine issues. 
+              The excess payment would be immediately return to you as and when you returned the hired 
+              machine within the stipulated period.
+            </p>
+            <p>
+              <span className="font-semibold">(02)</span> Above payment has to be paid 05 days prior to next month.
+            </p>
+            <p>
+              <span className="font-semibold">(03)</span> Customer has to take total responsibility with regard to security of the machine.
+            </p>
+            <p>
+              <span className="font-semibold">(04)</span> Both the parties can withdraw or return the machine with one month prior notice.
+            </p>
+            <p>
+              <span className="font-semibold">(05)</span> Company will examine the machine at the point of returning and will release due security deposit.
+            </p>
+          </div>
+        </div>
+
+        {/* Customer Signature Section */}
+        <div className="mb-6">
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-gray-700 mb-2">Customer Signature:</div>
+            <div className="border-b border-gray-800 pb-2 min-h-[50px]">
+              {agreementInfo.customerSignature && (
+                <div className="text-sm text-gray-900">{agreementInfo.customerSignature}</div>
+              )}
+            </div>
+            <div className="text-xs text-gray-600 mt-1">(Agreed upon the terms & Conditions)</div>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">ID NO:</div>
+              <div className="text-sm text-gray-900">{agreementInfo.customerIdNo || 'N/A'}</div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">Full Name:</div>
+              <div className="text-sm text-gray-900">{agreementInfo.customerFullName || 'N/A'}</div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">Date:</div>
+              <div className="text-sm text-gray-900">
+                {agreementInfo.customerSignatureDate 
+                  ? new Date(agreementInfo.customerSignatureDate).toLocaleDateString('en-LK', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                    })
+                  : 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-300 pt-4 mt-6">
+          <div className="text-xs text-gray-700 text-center">
+            No. 137M, Colombo Road, Biyagama, Tel: 0112488735, 011-5737712 Fax: 2487623, Email: needletec@sitnet.lk
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Machine Management Section Component
   const renderMachineManagementSection = () => {
@@ -856,7 +1017,6 @@ const RentalAgreementPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Description <span className="text-red-500">*</span>
-                  
                 </label>
                 <input
                   type="text"
@@ -1018,809 +1178,698 @@ const RentalAgreementPage: React.FC = () => {
     );
   };
 
-  // View Rental Agreement Content
+  // View Rental Agreement Content - Updated to match image format
   const renderAgreementDetails = () => {
     if (!selectedAgreement) return null;
 
     const agreementInfo = getRentalAgreementInfo(selectedAgreement.id);
 
     return (
-      <div className="space-y-6">
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Agreement Details</h3>
-
-        <div className="space-y-4">
-          {/* Agreement Information */}
-          <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-              Agreement Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Agreement No:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {agreementInfo.agreementNo}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Status:</span>
-                <div className="mt-1">
-                  <span
-                    className={`px-3 py-1 rounded-full text-sm font-semibold inline-flex items-center ${
-                      agreementInfo.status === 'Active'
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                        : agreementInfo.status === 'Completed'
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                        : agreementInfo.status === 'Pending'
-                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                        : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
-                    }`}
-                  >
-                    {agreementInfo.status}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Customer Information */}
-          <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-              Customer Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Customer No:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {agreementInfo.customerNo}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Customer Name:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {agreementInfo.customerName}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Machine Information */}
-          <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-              Machine Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Serial No:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {agreementInfo.serialNo}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Brand:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {agreementInfo.machineBrand}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Model:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {agreementInfo.machineModel}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Type:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {agreementInfo.machineType}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Rental Period */}
-          <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-              Rental Period
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Start Date:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {new Date(agreementInfo.startDate).toLocaleDateString('en-LK')}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">End Date:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {agreementInfo.endDate
-                    ? new Date(agreementInfo.endDate).toLocaleDateString('en-LK')
-                    : 'Ongoing'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Financial Information */}
-          <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-              Financial Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Monthly Rent:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  Rs.{' '}
-                  {agreementInfo.monthlyRent.toLocaleString('en-LK', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Total Amount:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  Rs.{' '}
-                  {agreementInfo.totalAmount.toLocaleString('en-LK', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Paid Amount:</span>
-                <span className="ml-2 text-green-600 dark:text-green-400 font-medium">
-                  Rs.{' '}
-                  {agreementInfo.paidAmount.toLocaleString('en-LK', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Outstanding:</span>
-                <span
-                  className={`ml-2 font-medium ${
-                    agreementInfo.outstanding > 0
-                      ? 'text-red-600 dark:text-red-400'
-                      : 'text-green-600 dark:text-green-400'
-                  }`}
-                >
-                  Rs.{' '}
-                  {agreementInfo.outstanding.toLocaleString('en-LK', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Deposit:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  Rs.{' '}
-                  {agreementInfo.deposit.toLocaleString('en-LK', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Notes */}
-          {agreementInfo.notes && (
-            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-                Notes
-              </h4>
-              <p className="text-sm text-gray-900 dark:text-white">{agreementInfo.notes}</p>
-            </div>
-          )}
+      <div>
+        {/* Screen View */}
+        <div className="print:hidden">{renderRentalAgreementDocument(agreementInfo)}</div>
+        
+        {/* Print View - Only visible when printing */}
+        <div className="hidden print:block print:fixed print:inset-0 print:z-50 print:bg-white print:p-0 print:m-0">
+          {renderRentalAgreementDocument(agreementInfo)}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-      {/* Top navbar */}
-      <Navbar onMenuClick={handleMenuClick} />
-
-      {/* Left sidebar */}
-      <Sidebar
-        onLogout={handleLogout}
-        isMobileOpen={isMobileSidebarOpen}
-        onMobileClose={handleMobileSidebarClose}
-        onExpandedChange={setIsSidebarExpanded}
-      />
-
-      {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
-        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-      }`}>
-        <div className="max-w-7xl mx-auto space-y-4">
-          {/* Page header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Rental List</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Overview of all rental agreements with their details, customer information, and
-                outstanding balances.
-              </p>
-            </div>
-            <Tooltip content="Create Rental Agreement">
-              <button
-                onClick={handleCreateAgreement}
-                className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-              >
-                Create Rental Agreement
-              </button>
-            </Tooltip>
-          </div>
-
-          {/* Rental Agreement table card */}
-          <Table
-            data={mockRentalAgreements}
-            columns={columns}
-            actions={actions}
-            itemsPerPage={10}
-            searchable
-            filterable
-            getRowClassName={getRowClassName}
-            emptyMessage="No rental agreements found."
-          />
+    <>
+      {/* Print-only rental agreement document - hidden on screen, visible when printing */}
+      {selectedAgreement && (
+        <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white">
+          {renderRentalAgreementDocument(getRentalAgreementInfo(selectedAgreement.id))}
         </div>
-      </main>
+      )}
 
-      {/* Create Rental Agreement Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Create Rental Agreement
-              </h2>
-              <button
-                onClick={handleCloseCreateModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      <div className="min-h-screen bg-gray-100 dark:bg-slate-950 print:hidden">
+        {/* Top navbar */}
+        <Navbar onMenuClick={handleMenuClick} />
+
+        {/* Left sidebar */}
+        <Sidebar
+          onLogout={handleLogout}
+          isMobileOpen={isMobileSidebarOpen}
+          onMobileClose={handleMobileSidebarClose}
+          onExpandedChange={setIsSidebarExpanded}
+        />
+
+        {/* Main content area */}
+        <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+          isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+        }`}>
+          <div className="max-w-7xl mx-auto space-y-4">
+            {/* Page header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Rental List</h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Overview of all rental agreements with their details, customer information, and
+                  outstanding balances.
+                </p>
+              </div>
+              <Tooltip content="Create Rental Agreement">
+                <button
+                  onClick={handleCreateAgreement}
+                  className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                >
+                  Create Rental Agreement
+                </button>
+              </Tooltip>
             </div>
 
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-6">
-                {/* Customer and Dates Section */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Agreement Details
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Customer <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={customerId}
-                        onChange={(e) => setCustomerId(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.customerId
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      >
-                        <option value="">Select Customer</option>
-                        {mockCustomers.map((customer) => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.name}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors.customerId && (
-                        <p className="mt-1 text-sm text-red-500">{formErrors.customerId}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Start Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.startDate
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors.startDate && (
-                        <p className="mt-1 text-sm text-red-500">{formErrors.startDate}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        End Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        min={startDate}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.endDate
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors.endDate && (
-                        <p className="mt-1 text-sm text-red-500">{formErrors.endDate}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
+            {/* Rental Agreement table card */}
+            <Table
+              data={mockRentalAgreements}
+              columns={columns}
+              actions={actions}
+              itemsPerPage={10}
+              searchable
+              filterable
+              getRowClassName={getRowClassName}
+              emptyMessage="No rental agreements found."
+            />
+          </div>
+        </main>
 
-                {/* Machines Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machines</h3>
-                    <button
-                      type="button"
-                      onClick={handleAddMachine}
-                      className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Machine
-                    </button>
-                  </div>
-                  {machines.map((machine, index) => (
-                    <div
-                      key={machine.id}
-                      className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Machine {index + 1}
-                        </span>
-                        {machines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveMachine(machine.id)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+        {/* Create Rental Agreement Modal - UPDATED */}
+        {isCreateModalOpen && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  Create Rental Agreement
+                </h2>
+                <button
+                  onClick={handleCloseCreateModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                  {/* Agreement Details Section */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Agreement Details
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Customer <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={customerId}
+                          onChange={(e) => setCustomerId(e.target.value)}
+                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                            formErrors.customerId
+                              ? 'border-red-500'
+                              : 'border-gray-300 dark:border-slate-600'
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                        >
+                          <option value="">Select Customer</option>
+                          {mockCustomers.map((customer) => (
+                            <option key={customer.id} value={customer.id}>
+                              {customer.name}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors.customerId && (
+                          <p className="mt-1 text-sm text-red-500">{formErrors.customerId}</p>
                         )}
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Brand <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={machine.brand}
-                            onChange={(e) => handleMachineChange(machine.id, 'brand', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`machine_brand_${index}`]
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          >
-                            <option value="">Select Brand</option>
-                            {mockMachineBrands.map((brand) => (
-                              <option key={brand} value={brand}>
-                                {brand}
-                              </option>
-                            ))}
-                          </select>
-                          {formErrors[`machine_brand_${index}`] && (
-                            <p className="mt-1 text-sm text-red-500">
-                              {formErrors[`machine_brand_${index}`]}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Model <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={machine.model}
-                            onChange={(e) => handleMachineChange(machine.id, 'model', e.target.value)}
-                            disabled={!machine.brand}
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`machine_model_${index}`]
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          >
-                            <option value="">Select Model</option>
-                            {getAvailableModels(machine.brand).map((model) => (
-                              <option key={model} value={model}>
-                                {model}
-                              </option>
-                            ))}
-                          </select>
-                          {formErrors[`machine_model_${index}`] && (
-                            <p className="mt-1 text-sm text-red-500">
-                              {formErrors[`machine_model_${index}`]}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Type <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={machine.type}
-                            onChange={(e) => handleMachineChange(machine.id, 'type', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`machine_type_${index}`]
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          >
-                            <option value="">Select Type</option>
-                            {mockMachineTypes.map((type) => (
-                              <option key={type} value={type}>
-                                {type}
-                              </option>
-                            ))}
-                          </select>
-                          {formErrors[`machine_type_${index}`] && (
-                            <p className="mt-1 text-sm text-red-500">
-                              {formErrors[`machine_type_${index}`]}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Number of Machines <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={machine.quantity}
-                            onChange={(e) =>
-                              handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
-                            }
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors[`machine_quantity_${index}`]
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          />
-                          {formErrors[`machine_quantity_${index}`] && (
-                            <p className="mt-1 text-sm text-red-500">
-                              {formErrors[`machine_quantity_${index}`]}
-                            </p>
-                          )}
-                        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Start Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                            formErrors.startDate
+                              ? 'border-red-500'
+                              : 'border-gray-300 dark:border-slate-600'
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                        />
+                        {formErrors.startDate && (
+                          <p className="mt-1 text-sm text-red-500">{formErrors.startDate}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          End Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          min={startDate}
+                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                            formErrors.endDate
+                              ? 'border-red-500'
+                              : 'border-gray-300 dark:border-slate-600'
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                        />
+                        {formErrors.endDate && (
+                          <p className="mt-1 text-sm text-red-500">{formErrors.endDate}</p>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-
-                {/* Add-ons Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons</h3>
-                    <button
-                      type="button"
-                      onClick={handleAddAddOn}
-                      className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Add-on
-                    </button>
                   </div>
-                  {addOns.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                      No add-ons added. Click "Add Add-on" to add one.
-                    </p>
-                  ) : (
-                    addOns.map((addOn, index) => (
+
+                  {/* Machines Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machines</h3>
+                      <button
+                        type="button"
+                        onClick={handleAddMachine}
+                        className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Machine
+                      </button>
+                    </div>
+                    {machines.map((machine, index) => (
                       <div
-                        key={addOn.id}
+                        key={machine.id}
                         className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
                       >
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Add-on {index + 1}
+                            Machine {index + 1}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveAddOn(addOn.id)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {machines.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMachine(machine.id)}
+                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Machine ID <span className="text-red-500">*</span>
+                              Brand <span className="text-red-500">*</span>
                             </label>
                             <select
-                              value={addOn.machineId}
-                              onChange={(e) => handleAddOnChange(addOn.id, 'machineId', e.target.value)}
+                              value={machine.brand}
+                              onChange={(e) => handleMachineChange(machine.id, 'brand', e.target.value)}
                               className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`addon_machine_${index}`]
+                                formErrors[`machine_brand_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
                               } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                             >
-                              <option value="">Select Machine</option>
-                              {getAvailableMachineIds().map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.label}
+                              <option value="">Select Brand</option>
+                              {mockMachineBrands.map((brand) => (
+                                <option key={brand} value={brand}>
+                                  {brand}
                                 </option>
                               ))}
                             </select>
-                            {formErrors[`addon_machine_${index}`] && (
+                            {formErrors[`machine_brand_${index}`] && (
                               <p className="mt-1 text-sm text-red-500">
-                                {formErrors[`addon_machine_${index}`]}
+                                {formErrors[`machine_brand_${index}`]}
                               </p>
                             )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Add-on ID <span className="text-red-500">*</span>
+                              Model <span className="text-red-500">*</span>
                             </label>
                             <select
-                              value={addOn.addOnId}
-                              onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
+                              value={machine.model}
+                              onChange={(e) => handleMachineChange(machine.id, 'model', e.target.value)}
+                              disabled={!machine.brand}
                               className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`addon_id_${index}`]
+                                formErrors[`machine_model_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
-                              <option value="">Select Add-on</option>
-                              {mockAddOns.map((ao) => (
-                                <option key={ao.id} value={ao.id}>
-                                  {ao.name} (Rs. {ao.price.toLocaleString('en-LK')})
+                              <option value="">Select Model</option>
+                              {getAvailableModels(machine.brand).map((model) => (
+                                <option key={model} value={model}>
+                                  {model}
                                 </option>
                               ))}
                             </select>
-                            {formErrors[`addon_id_${index}`] && (
+                            {formErrors[`machine_model_${index}`] && (
                               <p className="mt-1 text-sm text-red-500">
-                                {formErrors[`addon_id_${index}`]}
+                                {formErrors[`machine_model_${index}`]}
                               </p>
                             )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Number of Add-ons <span className="text-red-500">*</span>
+                              Type <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={machine.type}
+                              onChange={(e) => handleMachineChange(machine.id, 'type', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                formErrors[`machine_type_${index}`]
+                                  ? 'border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
+                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            >
+                              <option value="">Select Type</option>
+                              {mockMachineTypes.map((type) => (
+                                <option key={type} value={type}>
+                                  {type}
+                                </option>
+                              ))}
+                            </select>
+                            {formErrors[`machine_type_${index}`] && (
+                              <p className="mt-1 text-sm text-red-500">
+                                {formErrors[`machine_type_${index}`]}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Number of Machines <span className="text-red-500">*</span>
                             </label>
                             <input
                               type="number"
                               min="1"
-                              value={addOn.quantity}
+                              value={machine.quantity}
                               onChange={(e) =>
-                                handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)
+                                handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
                               }
                               className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`addon_quantity_${index}`]
+                                formErrors[`machine_quantity_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
                               } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                             />
-                            {formErrors[`addon_quantity_${index}`] && (
+                            {formErrors[`machine_quantity_${index}`] && (
                               <p className="mt-1 text-sm text-red-500">
-                                {formErrors[`addon_quantity_${index}`]}
+                                {formErrors[`machine_quantity_${index}`]}
                               </p>
                             )}
                           </div>
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
+                    ))}
+                  </div>
 
-                {/* Pricing Section */}
-                <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-3">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Pricing</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Standard Price Per Machine:
-                      </span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        Rs.{' '}
-                        {pricing.standardPricePerMachine.toLocaleString('en-LK', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
+                  {/* Add-ons Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons</h3>
+                      <button
+                        type="button"
+                        onClick={handleAddAddOn}
+                        className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Add-on
+                      </button>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Total Price for Machines:
-                      </span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        Rs.{' '}
-                        {pricing.totalMachinePrice.toLocaleString('en-LK', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                    {addOns.length > 0 && (
+                    {addOns.length === 0 ? (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                        No add-ons added. Click "Add Add-on" to add one.
+                      </p>
+                    ) : (
+                      addOns.map((addOn, index) => (
+                        <div
+                          key={addOn.id}
+                          className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              Add-on {index + 1}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAddOn(addOn.id)}
+                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Machine ID <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={addOn.machineId}
+                                onChange={(e) => handleAddOnChange(addOn.id, 'machineId', e.target.value)}
+                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                  formErrors[`addon_machine_${index}`]
+                                    ? 'border-red-500'
+                                    : 'border-gray-300 dark:border-slate-600'
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                              >
+                                <option value="">Select Machine</option>
+                                {getAvailableMachineIds().map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {formErrors[`addon_machine_${index}`] && (
+                                <p className="mt-1 text-sm text-red-500">
+                                  {formErrors[`addon_machine_${index}`]}
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Add-on ID <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={addOn.addOnId}
+                                onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
+                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                  formErrors[`addon_id_${index}`]
+                                    ? 'border-red-500'
+                                    : 'border-gray-300 dark:border-slate-600'
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                              >
+                                <option value="">Select Add-on</option>
+                                {mockAddOns.map((ao) => (
+                                  <option key={ao.id} value={ao.id}>
+                                    {ao.name} (Rs. {ao.price.toLocaleString('en-LK')})
+                                  </option>
+                                ))}
+                              </select>
+                              {formErrors[`addon_id_${index}`] && (
+                                <p className="mt-1 text-sm text-red-500">
+                                  {formErrors[`addon_id_${index}`]}
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Number of Add-ons <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={addOn.quantity}
+                                onChange={(e) =>
+                                  handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)
+                                }
+                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                  formErrors[`addon_quantity_${index}`]
+                                    ? 'border-red-500'
+                                    : 'border-gray-300 dark:border-slate-600'
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                              />
+                              {formErrors[`addon_quantity_${index}`] && (
+                                <p className="mt-1 text-sm text-red-500">
+                                  {formErrors[`addon_quantity_${index}`]}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Pricing Section */}
+                  <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-3">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Pricing</h3>
+                    <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">
-                          Total Price with Add-ons:
+                          Standard Price Per Machine:
                         </span>
                         <span className="font-medium text-gray-900 dark:text-white">
                           Rs.{' '}
-                          {pricing.totalPrice.toLocaleString('en-LK', {
+                          {pricing.standardPricePerMachine.toLocaleString('en-LK', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
                         </span>
                       </div>
-                    )}
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">
+                          Total Price for Machines:
+                        </span>
+                        <span className="font-medium text-gray-900 dark:text-white">
+                          Rs.{' '}
+                          {pricing.totalMachinePrice.toLocaleString('en-LK', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                      {addOns.length > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            Total Price with Add-ons:
+                          </span>
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            Rs.{' '}
+                            {pricing.totalPrice.toLocaleString('en-LK', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Auto Generated Agreement Text */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Auto Generated Agreement Text
-                  </label>
-                  <textarea
-                    value={agreementText}
-                    readOnly
-                    rows={12}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 resize-none"
-                  />
-                </div>
-
-                {/* T&C Section */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Terms and Conditions
-                  </h3>
-                  <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-                    <p className="text-sm text-gray-700 dark:text-gray-300">
-                      By signing this agreement, both parties agree to the terms and conditions
-                      outlined in the auto-generated agreement text above. Please review all terms
-                      carefully before signing.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Signature and Date */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Terms & Conditions Section - UPDATED */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Signature <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={signature}
-                      onChange={(e) => setSignature(e.target.value)}
-                      placeholder="Enter signature"
-                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                        formErrors.signature
-                          ? 'border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
-                      } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                    />
-                    {formErrors.signature && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.signature}</p>
-                    )}
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      Terms and Conditions
+                    </h3>
+                    <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-3">
+                      <div className="text-sm text-gray-900 dark:text-white space-y-3">
+                        <p>
+                          <span className="font-semibold">(01)</span> You have to be paid in cash double monthly rental fee on the date of rent machine issues. 
+                          The excess payment would be immediately return to you as and when you returned the hired 
+                          machine within the stipulated period.
+                        </p>
+                        <p>
+                          <span className="font-semibold">(02)</span> Above payment has to be paid 05 days prior to next month.
+                        </p>
+                        <p>
+                          <span className="font-semibold">(03)</span> Customer has to take total responsibility with regard to security of the machine.
+                        </p>
+                        <p>
+                          <span className="font-semibold">(04)</span> Both the parties can withdraw or return the machine with one month prior notice.
+                        </p>
+                        <p>
+                          <span className="font-semibold">(05)</span> Company will examine the machine at the point of returning and will release due security deposit.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Date <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={agreementDate}
-                      onChange={(e) => setAgreementDate(e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                        formErrors.agreementDate
-                          ? 'border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
-                      } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                    />
-                    {formErrors.agreementDate && (
-                      <p className="mt-1 text-sm text-red-500">{formErrors.agreementDate}</p>
-                    )}
+
+                  {/* Customer Signature Section - UPDATED */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      Customer Signature
+                    </h3>
+                    <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Customer Signature <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={signature}
+                          onChange={(e) => setSignature(e.target.value)}
+                          placeholder="Enter customer signature"
+                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                            formErrors.signature
+                              ? 'border-red-500'
+                              : 'border-gray-300 dark:border-slate-600'
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                        />
+                        {formErrors.signature && (
+                          <p className="mt-1 text-sm text-red-500">{formErrors.signature}</p>
+                        )}
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 italic">
+                          (Agreed upon the terms & Conditions)
+                        </p>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            ID NO <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={customerIdNo}
+                            onChange={(e) => setCustomerIdNo(e.target.value)}
+                            placeholder="e.g., 72348.961V"
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                              formErrors.customerIdNo
+                                ? 'border-red-500'
+                                : 'border-gray-300 dark:border-slate-600'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          />
+                          {formErrors.customerIdNo && (
+                            <p className="mt-1 text-sm text-red-500">{formErrors.customerIdNo}</p>
+                          )}
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Full Name <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={customerFullName}
+                            onChange={(e) => setCustomerFullName(e.target.value)}
+                            placeholder="Enter full name"
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                              formErrors.customerFullName
+                                ? 'border-red-500'
+                                : 'border-gray-300 dark:border-slate-600'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          />
+                          {formErrors.customerFullName && (
+                            <p className="mt-1 text-sm text-red-500">{formErrors.customerFullName}</p>
+                          )}
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Date <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={customerSignatureDate}
+                            onChange={(e) => setCustomerSignatureDate(e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                              formErrors.customerSignatureDate
+                                ? 'border-red-500'
+                                : 'border-gray-300 dark:border-slate-600'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          />
+                          {formErrors.customerSignatureDate && (
+                            <p className="mt-1 text-sm text-red-500">{formErrors.customerSignatureDate}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={handleCloseCreateModal}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmitCreate}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Creating...' : 'Create Agreement & Download'}
-              </button>
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={handleCloseCreateModal}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitCreate}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Agreement & Download'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* View Rental Agreement Modal */}
-      {isViewModalOpen && selectedAgreement && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <div>
+        {/* View Rental Agreement Modal - Updated with print functionality */}
+        {isViewModalOpen && selectedAgreement && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <div>
+                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                    Rental Agreement Details
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    {selectedAgreement.agreementNo}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handlePrintAgreement}
+                    className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print</span>
+                  </button>
+                  <button
+                    onClick={handleCloseViewModal}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">{renderAgreementDetails()}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Update Rental Agreement Modal */}
+        {isUpdateModalOpen && selectedAgreement && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  Rental Agreement Details
+                  Update Rental Agreement
                 </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  {selectedAgreement.agreementNo}
-                </p>
+                <button
+                  onClick={handleCloseUpdateModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                onClick={handleCloseViewModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">{renderAgreementDetails()}</div>
-          </div>
-        </div>
-      )}
-
-      {/* Update Rental Agreement Modal */}
-      {isUpdateModalOpen && selectedAgreement && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Update Rental Agreement
-              </h2>
-              <button
-                onClick={handleCloseUpdateModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <UpdateForm
-                title="Update Rental Agreement Details"
-                fields={updateFields}
-                onSubmit={handleAgreementUpdate}
-                onClear={handleClear}
-                submitButtonLabel="Update"
-                clearButtonLabel="Reset"
-                loading={isSubmitting}
-                initialData={getUpdateInitialData(selectedAgreement)}
-                className="shadow-none border-0 p-0"
-                customSections={renderMachineManagementSection()}
-              />
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <UpdateForm
+                  title="Update Rental Agreement Details"
+                  fields={updateFields}
+                  onSubmit={handleAgreementUpdate}
+                  onClear={handleClear}
+                  submitButtonLabel="Update"
+                  clearButtonLabel="Reset"
+                  loading={isSubmitting}
+                  initialData={getUpdateInitialData(selectedAgreement)}
+                  className="shadow-none border-0 p-0"
+                  customSections={renderMachineManagementSection()}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* QR Scanner Modal */}
-      {renderQRScannerModal()}
-    </div>
+        {/* QR Scanner Modal */}
+        {renderQRScannerModal()}
+      </div>
+    </>
   );
 };
 

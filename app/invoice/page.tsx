@@ -8,8 +8,6 @@ import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Download, FileText, Trash2, Printer } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 
-// ... existing type definitions and interfaces remain the same ...
-
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
 interface InvoiceItem {
@@ -51,8 +49,6 @@ interface Invoice {
   paymentDetails: PaymentDetails;
   status: 'draft' | 'issued' | 'paid' | 'overdue';
 }
-
-// ... existing companyInfo, mockCustomers, mockBrands, mockModels, mockTypes, mockInvoices, columns remain the same ...
 
 // Company information
 const companyInfo = {
@@ -99,7 +95,7 @@ const mockTypes: { label: string; value: MachineType }[] = [
 ];
 
 // Mock invoice data
-const mockInvoices: Invoice[] = [
+const initialMockInvoices: Invoice[] = [
   {
     id: 1,
     invoiceNumber: '00415',
@@ -262,6 +258,7 @@ const InvoicePage: React.FC = () => {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [invoices, setInvoices] = useState<Invoice[]>(initialMockInvoices);
 
   // Create form state
   const [customerId, setCustomerId] = useState('');
@@ -275,6 +272,9 @@ const InvoicePage: React.FC = () => {
   const [receiptNumber, setReceiptNumber] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Update form state - only status
+  const [invoiceStatus, setInvoiceStatus] = useState<'draft' | 'issued' | 'paid' | 'overdue'>('draft');
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -445,8 +445,9 @@ const InvoicePage: React.FC = () => {
         subtotal: calculateItemSubtotal(item),
       }));
 
-      const payload = {
-        invoiceNumber: String(mockInvoices.length + 1).padStart(5, '0'),
+      const newInvoice: Invoice = {
+        id: invoices.length > 0 ? Math.max(...invoices.map(i => i.id)) + 1 : 1,
+        invoiceNumber: String(invoices.length + 1).padStart(5, '0'),
         invoiceType,
         customerName: customer?.name || '',
         customerAddress: customer?.address || '',
@@ -469,8 +470,9 @@ const InvoicePage: React.FC = () => {
         status: 'issued' as const,
       };
 
-      console.log('Create invoice payload:', payload);
-      alert(`Invoice created successfully (frontend only).`);
+      setInvoices([...invoices, newInvoice]);
+      console.log('Create invoice payload:', newInvoice);
+      alert(`Invoice created successfully.`);
       handleCloseCreateModal();
     } catch (error) {
       console.error('Error creating invoice:', error);
@@ -485,6 +487,12 @@ const InvoicePage: React.FC = () => {
     setIsViewModalOpen(true);
   };
 
+  const handleEditInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setInvoiceStatus(invoice.status);
+    setIsUpdateModalOpen(true);
+  };
+
   const handleCloseViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedInvoice(null);
@@ -493,6 +501,31 @@ const InvoicePage: React.FC = () => {
   const handleCloseUpdateModal = () => {
     setIsUpdateModalOpen(false);
     setSelectedInvoice(null);
+    setInvoiceStatus('draft');
+  };
+
+  const handleSubmitUpdate = async () => {
+    if (!selectedInvoice) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const updatedInvoice: Invoice = {
+        ...selectedInvoice,
+        status: invoiceStatus,
+      };
+
+      setInvoices(invoices.map(inv => inv.id === selectedInvoice.id ? updatedInvoice : inv));
+      console.log('Update invoice payload:', updatedInvoice);
+      alert(`Invoice status updated successfully.`);
+      handleCloseUpdateModal();
+    } catch (error) {
+      console.error('Error updating invoice:', error);
+      alert('Failed to update invoice. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePrint = () => {
@@ -508,6 +541,14 @@ const InvoicePage: React.FC = () => {
       onClick: handleViewInvoice,
       tooltip: 'View Invoice',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+    },
+    {
+      label: '',
+      icon: <Pencil className="w-4 h-4" />,
+      variant: 'primary',
+      onClick: handleEditInvoice,
+      tooltip: 'Edit Invoice',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
     },
   ];
 
@@ -783,8 +824,612 @@ const InvoicePage: React.FC = () => {
     );
   };
 
-  const { subtotal, vatAmount, totalAmount } = calculateTotals();
-  const selectedCustomer = mockCustomers.find((c) => c.id === customerId);
+  // Shared form content for create modal
+  const renderInvoiceForm = () => {
+    const { subtotal, vatAmount, totalAmount } = calculateTotals();
+    const selectedCustomer = mockCustomers.find((c) => c.id === customerId);
+
+    return (
+      <div className="space-y-6">
+        {/* Customer Information */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Company/Individual Name <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={customerId}
+              onChange={(e) => handleCustomerChange(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                formErrors.customerId
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-slate-600'
+              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+            >
+              <option value="">Select Customer</option>
+              {mockCustomers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name} ({customer.type})
+                </option>
+              ))}
+            </select>
+            {formErrors.customerId && (
+              <p className="mt-1 text-sm text-red-500">{formErrors.customerId}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Customer Address
+            </label>
+            <input
+              type="text"
+              value={selectedCustomer?.address || ''}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              VAT/TIN/NIC Number
+            </label>
+            <input
+              type="text"
+              value={selectedCustomer?.vatTinNic || ''}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Invoice Type
+            </label>
+            <input
+              type="text"
+              value={invoiceType}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Invoice Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={invoiceDate}
+              onChange={(e) => setInvoiceDate(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                formErrors.invoiceDate
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-slate-600'
+              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+            />
+            {formErrors.invoiceDate && (
+              <p className="mt-1 text-sm text-red-500">{formErrors.invoiceDate}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Period From <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={periodFrom}
+              onChange={(e) => setPeriodFrom(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                formErrors.periodFrom
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-slate-600'
+              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+            />
+            {formErrors.periodFrom && (
+              <p className="mt-1 text-sm text-red-500">{formErrors.periodFrom}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Period To <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={periodTo}
+              onChange={(e) => setPeriodTo(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                formErrors.periodTo
+                  ? 'border-red-500'
+                  : 'border-gray-300 dark:border-slate-600'
+              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+            />
+            {formErrors.periodTo && (
+              <p className="mt-1 text-sm text-red-500">{formErrors.periodTo}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Items Section */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Items</h3>
+            <button
+              type="button"
+              onClick={addItem}
+              className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Item</span>
+            </button>
+          </div>
+          {formErrors.items && (
+            <p className="mb-2 text-sm text-red-500">{formErrors.items}</p>
+          )}
+
+          {items.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              No items added. Click "Add Item" to add items to the invoice.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {items.map((item, index) => (
+                <div
+                  key={index}
+                  className="border border-gray-200 dark:border-slate-600 rounded-lg p-4 bg-gray-50 dark:bg-slate-700/50"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                      Item {index + 1}
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(index)}
+                      className="p-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Item Code
+                      </label>
+                      <input
+                        type="text"
+                        value={item.itemCode}
+                        disabled
+                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Brand <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={item.brand}
+                        onChange={(e) => updateItem(index, 'brand', e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
+                          formErrors[`item_${index}_brand`]
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      >
+                        <option value="">Select Brand</option>
+                        {mockBrands.map((brand) => (
+                          <option key={brand} value={brand}>
+                            {brand}
+                          </option>
+                        ))}
+                      </select>
+                      {formErrors[`item_${index}_brand`] && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {formErrors[`item_${index}_brand`]}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Model <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={item.model}
+                        onChange={(e) => updateItem(index, 'model', e.target.value)}
+                        disabled={!item.brand}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
+                          !item.brand
+                            ? 'bg-gray-100 dark:bg-slate-600 cursor-not-allowed'
+                            : ''
+                        } ${
+                          formErrors[`item_${index}_model`]
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      >
+                        <option value="">Select Model</option>
+                        {item.brand && getAvailableModels(item.brand).map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                      </select>
+                      {formErrors[`item_${index}_model`] && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {formErrors[`item_${index}_model`]}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Type <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={item.type}
+                        onChange={(e) => updateItem(index, 'type', e.target.value as MachineType)}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
+                          formErrors[`item_${index}_type`]
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      >
+                        {mockTypes.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </select>
+                      {formErrors[`item_${index}_type`] && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {formErrors[`item_${index}_type`]}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Description
+                      </label>
+                      <input
+                        type="text"
+                        value={item.description}
+                        disabled
+                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm"
+                      />
+                    </div>
+
+                    {invoiceType === 'Non-VAT' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Serial Number
+                        </label>
+                        <input
+                          type="text"
+                          value={item.serialNumber || ''}
+                          onChange={(e) => updateItem(index, 'serialNumber', e.target.value)}
+                          placeholder="Enter serial number"
+                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Quantity (No. of Machines) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.numberOfMachines}
+                        onChange={(e) => updateItem(index, 'numberOfMachines', parseInt(e.target.value) || 0)}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
+                          formErrors[`item_${index}_machines`]
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      />
+                      {formErrors[`item_${index}_machines`] && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {formErrors[`item_${index}_machines`]}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Rate (Monthly Rent per Machine) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.monthlyRentPerMachine}
+                        onChange={(e) => updateItem(index, 'monthlyRentPerMachine', parseFloat(e.target.value) || 0)}
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
+                          formErrors[`item_${index}_rent`]
+                            ? 'border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
+                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                      />
+                      {formErrors[`item_${index}_rent`] && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {formErrors[`item_${index}_rent`]}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Amount (Subtotal)
+                      </label>
+                      <input
+                        type="text"
+                        value={`LKR ${calculateItemSubtotal(item).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
+                        disabled
+                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm font-medium"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Payment & Billing Details */}
+        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Payment & Billing Details
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Payment Method <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                  formErrors.paymentMethod
+                    ? 'border-red-500'
+                    : 'border-gray-300 dark:border-slate-600'
+                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+              >
+                <option value="">Select Payment Method</option>
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Cheque">Cheque</option>
+                <option value="Credit Card">Credit Card</option>
+              </select>
+              {formErrors.paymentMethod && (
+                <p className="mt-1 text-sm text-red-500">{formErrors.paymentMethod}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Payment Date <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                  formErrors.paymentDate
+                    ? 'border-red-500'
+                    : 'border-gray-300 dark:border-slate-600'
+                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+              />
+              {formErrors.paymentDate && (
+                <p className="mt-1 text-sm text-red-500">{formErrors.paymentDate}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Receipt Number
+              </label>
+              <input
+                type="text"
+                value={receiptNumber}
+                onChange={(e) => setReceiptNumber(e.target.value)}
+                placeholder="Enter receipt number"
+                className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Payment Receipt (File) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                  formErrors.receipt
+                    ? 'border-red-500'
+                    : 'border-gray-300 dark:border-slate-600'
+                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+              />
+              {receiptFile && (
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Selected: {receiptFile.name}
+                </p>
+              )}
+              {formErrors.receipt && (
+                <p className="mt-1 text-sm text-red-500">{formErrors.receipt}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Payment receipt is required before dispatch (PDF, JPG, or PNG)
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Totals Summary */}
+        <div className="bg-blue-50 dark:bg-indigo-900/20 rounded-lg p-4 border border-blue-200 dark:border-indigo-800">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Invoice Summary
+          </h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-700 dark:text-gray-300">Sub Amount:</span>
+              <span className="text-gray-900 dark:text-white font-medium">
+                LKR {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            {vatAmount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-700 dark:text-gray-300">VAT (18%):</span>
+                <span className="text-gray-900 dark:text-white font-medium">
+                  LKR {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between pt-2 border-t border-blue-200 dark:border-indigo-800">
+              <span className="text-lg font-semibold text-gray-900 dark:text-white">
+                Total Amount:
+              </span>
+              <span className="text-lg font-semibold text-gray-900 dark:text-white">
+                LKR {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Simplified update form - only shows read-only fields and editable status
+  const renderUpdateForm = () => {
+    if (!selectedInvoice) return null;
+
+    const customer = mockCustomers.find((c) => c.name === selectedInvoice.customerName);
+
+    return (
+      <div className="space-y-6">
+        {/* Customer Information - Read Only */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Company/Individual Name
+            </label>
+            <input
+              type="text"
+              value={selectedInvoice.customerName}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Customer Address
+            </label>
+            <input
+              type="text"
+              value={selectedInvoice.customerAddress}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              VAT/TIN/NIC Number
+            </label>
+            <input
+              type="text"
+              value={selectedInvoice.vatTinNic}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Invoice Type
+            </label>
+            <input
+              type="text"
+              value={selectedInvoice.invoiceType}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Invoice Date
+            </label>
+            <input
+              type="text"
+              value={new Date(selectedInvoice.invoiceDate).toLocaleDateString('en-LK', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Period From
+            </label>
+            <input
+              type="text"
+              value={new Date(selectedInvoice.periodFrom).toLocaleDateString('en-LK', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Period To
+            </label>
+            <input
+              type="text"
+              value={new Date(selectedInvoice.periodTo).toLocaleDateString('en-LK', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+              disabled
+              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Status <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={invoiceStatus}
+              onChange={(e) => setInvoiceStatus(e.target.value as 'draft' | 'issued' | 'paid' | 'overdue')}
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+            >
+              <option value="draft">Draft</option>
+              <option value="issued">Issued</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -832,7 +1477,7 @@ const InvoicePage: React.FC = () => {
 
             {/* Invoice table card */}
             <Table
-              data={mockInvoices}
+              data={invoices}
               columns={columns}
               actions={actions}
               itemsPerPage={10}
@@ -860,479 +1505,7 @@ const InvoicePage: React.FC = () => {
 
               {/* Modal Content - Scrollable */}
               <div className="flex-1 overflow-y-auto p-6">
-                {/* ... existing create form content remains the same ... */}
-                <div className="space-y-6">
-                  {/* Customer Information */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Company/Individual Name <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={customerId}
-                        onChange={(e) => handleCustomerChange(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.customerId
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      >
-                        <option value="">Select Customer</option>
-                        {mockCustomers.map((customer) => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.name} ({customer.type})
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors.customerId && (
-                        <p className="mt-1 text-sm text-red-500">{formErrors.customerId}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Customer Address
-                      </label>
-                      <input
-                        type="text"
-                        value={selectedCustomer?.address || ''}
-                        disabled
-                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        VAT/TIN/NIC Number
-                      </label>
-                      <input
-                        type="text"
-                        value={selectedCustomer?.vatTinNic || ''}
-                        disabled
-                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Invoice Type
-                      </label>
-                      <input
-                        type="text"
-                        value={invoiceType}
-                        disabled
-                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Invoice Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={invoiceDate}
-                        onChange={(e) => setInvoiceDate(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.invoiceDate
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors.invoiceDate && (
-                        <p className="mt-1 text-sm text-red-500">{formErrors.invoiceDate}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Period From <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={periodFrom}
-                        onChange={(e) => setPeriodFrom(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.periodFrom
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors.periodFrom && (
-                        <p className="mt-1 text-sm text-red-500">{formErrors.periodFrom}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Period To <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={periodTo}
-                        onChange={(e) => setPeriodTo(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                          formErrors.periodTo
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors.periodTo && (
-                        <p className="mt-1 text-sm text-red-500">{formErrors.periodTo}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Items Section */}
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Items</h3>
-                      <button
-                        type="button"
-                        onClick={addItem}
-                        className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Add Item</span>
-                      </button>
-                    </div>
-                    {formErrors.items && (
-                      <p className="mb-2 text-sm text-red-500">{formErrors.items}</p>
-                    )}
-
-                    {items.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        No items added. Click "Add Item" to add items to the invoice.
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {items.map((item, index) => (
-                          <div
-                            key={index}
-                            className="border border-gray-200 dark:border-slate-600 rounded-lg p-4 bg-gray-50 dark:bg-slate-700/50"
-                          >
-                            <div className="flex items-center justify-between mb-4">
-                              <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-                                Item {index + 1}
-                              </h4>
-                              <button
-                                type="button"
-                                onClick={() => removeItem(index)}
-                                className="p-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Item Code
-                                </label>
-                                <input
-                                  type="text"
-                                  value={item.itemCode}
-                                  disabled
-                                  className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Brand <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                  value={item.brand}
-                                  onChange={(e) => updateItem(index, 'brand', e.target.value)}
-                                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                                    formErrors[`item_${index}_brand`]
-                                      ? 'border-red-500'
-                                      : 'border-gray-300 dark:border-slate-600'
-                                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                                >
-                                  <option value="">Select Brand</option>
-                                  {mockBrands.map((brand) => (
-                                    <option key={brand} value={brand}>
-                                      {brand}
-                                    </option>
-                                  ))}
-                                </select>
-                                {formErrors[`item_${index}_brand`] && (
-                                  <p className="mt-1 text-xs text-red-500">
-                                    {formErrors[`item_${index}_brand`]}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Model <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                  value={item.model}
-                                  onChange={(e) => updateItem(index, 'model', e.target.value)}
-                                  disabled={!item.brand}
-                                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                                    !item.brand
-                                      ? 'bg-gray-100 dark:bg-slate-600 cursor-not-allowed'
-                                      : ''
-                                  } ${
-                                    formErrors[`item_${index}_model`]
-                                      ? 'border-red-500'
-                                      : 'border-gray-300 dark:border-slate-600'
-                                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                                >
-                                  <option value="">Select Model</option>
-                                  {item.brand && getAvailableModels(item.brand).map((model) => (
-                                    <option key={model} value={model}>
-                                      {model}
-                                    </option>
-                                  ))}
-                                </select>
-                                {formErrors[`item_${index}_model`] && (
-                                  <p className="mt-1 text-xs text-red-500">
-                                    {formErrors[`item_${index}_model`]}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Type <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                  value={item.type}
-                                  onChange={(e) => updateItem(index, 'type', e.target.value as MachineType)}
-                                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                                    formErrors[`item_${index}_type`]
-                                      ? 'border-red-500'
-                                      : 'border-gray-300 dark:border-slate-600'
-                                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                                >
-                                  {mockTypes.map((type) => (
-                                    <option key={type.value} value={type.value}>
-                                      {type.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                {formErrors[`item_${index}_type`] && (
-                                  <p className="mt-1 text-xs text-red-500">
-                                    {formErrors[`item_${index}_type`]}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Description
-                                </label>
-                                <input
-                                  type="text"
-                                  value={item.description}
-                                  disabled
-                                  className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm"
-                                />
-                              </div>
-
-                              {invoiceType === 'Non-VAT' && (
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Serial Number
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={item.serialNumber || ''}
-                                    onChange={(e) => updateItem(index, 'serialNumber', e.target.value)}
-                                    placeholder="Enter serial number"
-                                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                                  />
-                                </div>
-                              )}
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Quantity (No. of Machines) <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={item.numberOfMachines}
-                                  onChange={(e) => updateItem(index, 'numberOfMachines', parseInt(e.target.value) || 0)}
-                                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                                    formErrors[`item_${index}_machines`]
-                                      ? 'border-red-500'
-                                      : 'border-gray-300 dark:border-slate-600'
-                                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                                />
-                                {formErrors[`item_${index}_machines`] && (
-                                  <p className="mt-1 text-xs text-red-500">
-                                    {formErrors[`item_${index}_machines`]}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Rate (Monthly Rent per Machine) <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={item.monthlyRentPerMachine}
-                                  onChange={(e) => updateItem(index, 'monthlyRentPerMachine', parseFloat(e.target.value) || 0)}
-                                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                                    formErrors[`item_${index}_rent`]
-                                      ? 'border-red-500'
-                                      : 'border-gray-300 dark:border-slate-600'
-                                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                                />
-                                {formErrors[`item_${index}_rent`] && (
-                                  <p className="mt-1 text-xs text-red-500">
-                                    {formErrors[`item_${index}_rent`]}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Amount (Subtotal)
-                                </label>
-                                <input
-                                  type="text"
-                                  value={`LKR ${calculateItemSubtotal(item).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
-                                  disabled
-                                  className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm font-medium"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Payment & Billing Details */}
-                  <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Payment & Billing Details
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Payment Method <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={paymentMethod}
-                          onChange={(e) => setPaymentMethod(e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                            formErrors.paymentMethod
-                              ? 'border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                        >
-                          <option value="">Select Payment Method</option>
-                          <option value="Cash">Cash</option>
-                          <option value="Bank Transfer">Bank Transfer</option>
-                          <option value="Cheque">Cheque</option>
-                          <option value="Credit Card">Credit Card</option>
-                        </select>
-                        {formErrors.paymentMethod && (
-                          <p className="mt-1 text-sm text-red-500">{formErrors.paymentMethod}</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Payment Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={paymentDate}
-                          onChange={(e) => setPaymentDate(e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                            formErrors.paymentDate
-                              ? 'border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                        />
-                        {formErrors.paymentDate && (
-                          <p className="mt-1 text-sm text-red-500">{formErrors.paymentDate}</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Receipt Number
-                        </label>
-                        <input
-                          type="text"
-                          value={receiptNumber}
-                          onChange={(e) => setReceiptNumber(e.target.value)}
-                          placeholder="Enter receipt number"
-                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Payment Receipt (File) <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                            formErrors.receipt
-                              ? 'border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                        />
-                        {receiptFile && (
-                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                            Selected: {receiptFile.name}
-                          </p>
-                        )}
-                        {formErrors.receipt && (
-                          <p className="mt-1 text-sm text-red-500">{formErrors.receipt}</p>
-                        )}
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          Payment receipt is required before dispatch (PDF, JPG, or PNG)
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Totals Summary */}
-                  <div className="bg-blue-50 dark:bg-indigo-900/20 rounded-lg p-4 border border-blue-200 dark:border-indigo-800">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Invoice Summary
-                    </h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-700 dark:text-gray-300">Sub Amount:</span>
-                        <span className="text-gray-900 dark:text-white font-medium">
-                          LKR {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      {vatAmount > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-700 dark:text-gray-300">VAT (18%):</span>
-                          <span className="text-gray-900 dark:text-white font-medium">
-                            LKR {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex justify-between pt-2 border-t border-blue-200 dark:border-indigo-800">
-                        <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                          Total Amount:
-                        </span>
-                        <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                          LKR {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {renderInvoiceForm()}
               </div>
 
               {/* Modal Footer */}
@@ -1352,6 +1525,54 @@ const InvoicePage: React.FC = () => {
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? 'Creating...' : 'Create Invoice'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Update Invoice Modal - Simplified */}
+        {isUpdateModalOpen && selectedInvoice && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <div>
+                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Update Invoice</h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    Invoice Number: {selectedInvoice.invoiceNumber}
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseUpdateModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {renderUpdateForm()}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={handleCloseUpdateModal}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitUpdate}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Updating...' : 'Update Invoice'}
                 </button>
               </div>
             </div>

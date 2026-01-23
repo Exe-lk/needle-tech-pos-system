@@ -9,6 +9,7 @@ import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, Plus } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
+import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 
 type CustomerType = 'Company' | 'Individual';
 type CustomerStatus = 'Active' | 'Inactive' | 'Blocked';
@@ -670,6 +671,7 @@ const CustomerListPage: React.FC = () => {
       type: 'text',
       placeholder: 'Enter VAT or TIN number',
       required: true,
+      validation: validateVATTIN,
     },
     {
       name: 'businessAddress',
@@ -692,6 +694,7 @@ const CustomerListPage: React.FC = () => {
       type: 'phone',
       placeholder: 'Enter contact number',
       required: true,
+      validation: validatePhoneNumber,
     },
     {
       name: 'email',
@@ -699,6 +702,19 @@ const CustomerListPage: React.FC = () => {
       type: 'email',
       placeholder: 'Enter contact email',
       required: true,
+      validation: validateEmail,
+    },
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      placeholder: 'Select status',
+      required: true,
+      options: [
+        { label: 'Active', value: 'Active' },
+        { label: 'Inactive', value: 'Inactive' },
+        { label: 'Blocked', value: 'Blocked' },
+      ],
     },
   ];
 
@@ -717,6 +733,7 @@ const CustomerListPage: React.FC = () => {
       type: 'text',
       placeholder: 'Enter NIC number',
       required: true,
+      validation: validateNICNumber,
     },
     {
       name: 'address',
@@ -732,6 +749,7 @@ const CustomerListPage: React.FC = () => {
       type: 'phone',
       placeholder: 'Enter contact number',
       required: true,
+      validation: validatePhoneNumber,
     },
     {
       name: 'email',
@@ -739,6 +757,19 @@ const CustomerListPage: React.FC = () => {
       type: 'email',
       placeholder: 'Enter email address',
       required: true,
+      validation: validateEmail,
+    },
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      placeholder: 'Select status',
+      required: true,
+      options: [
+        { label: 'Active', value: 'Active' },
+        { label: 'Inactive', value: 'Inactive' },
+        { label: 'Blocked', value: 'Blocked' },
+      ],
     },
   ];
 
@@ -756,6 +787,7 @@ const CustomerListPage: React.FC = () => {
         contactPerson: 'Contact Person Name', // This should come from API
         phone: customerInfo.phone,
         email: customerInfo.email,
+        status: customer.status,
       };
     } else {
       return {
@@ -764,6 +796,7 @@ const CustomerListPage: React.FC = () => {
         address: customerInfo.address,
         phone: customerInfo.phone,
         email: customerInfo.email,
+        status: customer.status,
       };
     }
   };
@@ -1828,7 +1861,7 @@ const CustomerListPage: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Machine ID <span className="text-red-500">*</span>
+                              Machine ID <span className="text-red-500">*</span>///////////////
                             </label>
                             <select
                               value={addOn.machineId}
