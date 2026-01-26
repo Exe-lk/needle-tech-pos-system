@@ -284,6 +284,7 @@ const MachineListPage: React.FC = () => {
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [activeCreateTab, setActiveCreateTab] = useState<'machine' | 'tool'>('machine');
   const qrCodeRef = React.useRef<HTMLDivElement>(null);
 
   const handleMenuClick = () => {
@@ -300,10 +301,12 @@ const MachineListPage: React.FC = () => {
 
   const handleCreateMachine = () => {
     setIsCreateModalOpen(true);
+    setActiveCreateTab('machine');
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
+    setActiveCreateTab('machine');
   };
 
   const handleViewMachine = (machine: Machine) => {
@@ -612,6 +615,133 @@ const MachineListPage: React.FC = () => {
     },
   ];
 
+  // Form fields for Tool Registration
+  const toolFields: FormField[] = [
+    {
+      name: 'toolName',
+      label: 'Tool Name',
+      type: 'text',
+      placeholder: 'Enter tool name',
+      required: true,
+    },
+    {
+      name: 'toolType',
+      label: 'Tool Type',
+      type: 'select',
+      placeholder: 'Select tool type',
+      required: true,
+      options: [
+        { label: 'Thread Stand', value: 'Thread Stand' },
+        { label: 'Extension Table', value: 'Extension Table' },
+        { label: 'Presser Foot Set', value: 'Presser Foot Set' },
+        { label: 'Bobbin Case', value: 'Bobbin Case' },
+        { label: 'Needle Set', value: 'Needle Set' },
+        { label: 'Thread Spool', value: 'Thread Spool' },
+        { label: 'Seam Ripper', value: 'Seam Ripper' },
+        { label: 'Measuring Tape', value: 'Measuring Tape' },
+        { label: 'Scissors', value: 'Scissors' },
+        { label: 'Other', value: 'Other' },
+      ],
+    },
+    {
+      name: 'brand',
+      label: 'Brand',
+      type: 'text',
+      placeholder: 'Enter brand name',
+      required: false,
+    },
+    {
+      name: 'model',
+      label: 'Model',
+      type: 'text',
+      placeholder: 'Enter model number',
+      required: false,
+    },
+    {
+      name: 'serialNumber',
+      label: 'Serial Number',
+      type: 'text',
+      placeholder: 'Enter serial number (if applicable)',
+      required: false,
+    },
+    {
+      name: 'quantity',
+      label: 'Quantity',
+      type: 'number',
+      placeholder: 'Enter quantity',
+      required: true,
+    },
+    {
+      name: 'unitPrice',
+      label: 'Unit Price',
+      type: 'number',
+      placeholder: 'Enter unit price',
+      required: false,
+    },
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      placeholder: 'Select status',
+      required: true,
+      options: [
+        { label: 'Available', value: 'Available' },
+        { label: 'In Use', value: 'In Use' },
+        { label: 'Maintenance', value: 'Maintenance' },
+        { label: 'Retired', value: 'Retired' },
+      ],
+    },
+    {
+      name: 'location',
+      label: 'Location',
+      type: 'select',
+      placeholder: 'Select location',
+      required: true,
+      options: [
+        { label: 'Main Warehouse', value: 'Main Warehouse' },
+        { label: 'Branch Office 1', value: 'Branch Office 1' },
+        { label: 'Branch Office 2', value: 'Branch Office 2' },
+        { label: 'Storage Facility', value: 'Storage Facility' },
+      ],
+    },
+    {
+      name: 'purchaseDate',
+      label: 'Purchase Date',
+      type: 'date',
+      placeholder: 'Select date',
+      required: false,
+    },
+    {
+      name: 'condition',
+      label: 'Condition',
+      type: 'select',
+      placeholder: 'Select condition',
+      required: true,
+      options: [
+        { label: 'New', value: 'New' },
+        { label: 'Good', value: 'Good' },
+        { label: 'Fair', value: 'Fair' },
+        { label: 'Poor', value: 'Poor' },
+      ],
+    },
+    {
+      name: 'notes',
+      label: 'Notes',
+      type: 'textarea',
+      placeholder: 'Enter any additional notes',
+      required: false,
+      rows: 3,
+    },
+    {
+      name: 'toolPhoto',
+      label: 'Tool Photo',
+      type: 'file-multiple',
+      accept: 'image/*',
+      required: false,
+      multiple: true,
+    },
+  ];
+
   // Auto-generate QR/Barcode from Brand + Model + Serial Number
   const generateBarcode = (brand: string, model: string, serialNumber: string): string => {
     if (!brand || !model || !serialNumber) return '';
@@ -659,6 +789,17 @@ const MachineListPage: React.FC = () => {
       
       console.log('Create machine payload:', submissionData);
       alert(`Machine "${data.brand} ${data.model}" registered successfully (frontend only).`);
+      handleCloseCreateModal();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToolSubmit = async (data: Record<string, any>) => {
+    setIsSubmitting(true);
+    try {
+      console.log('Create tool payload:', data);
+      alert(`Tool "${data.toolName}" registered successfully (frontend only).`);
       handleCloseCreateModal();
     } finally {
       setIsSubmitting(false);
@@ -1038,7 +1179,7 @@ const MachineListPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Machine Inventory List
+                Machine Management
               </h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Overview of all sewing machines with their details, brand, model, and type.
@@ -1055,42 +1196,86 @@ const MachineListPage: React.FC = () => {
             searchable
             filterable
             onCreateClick={handleCreateMachine}
-            createButtonLabel="Register Machine"
+            createButtonLabel="Register"
             emptyMessage="No machines found."
           />
         </div>
       </main>
 
-      {/* Create Machine Modal */}
+      {/* Create Machine/Tool Modal */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Register Machine
+                Register
               </h2>
-              <button
-                onClick={handleCloseCreateModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <Tooltip content="Close">
+                <button
+                  onClick={handleCloseCreateModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </Tooltip>
+            </div>
+
+            {/* Tabs */}
+            <div className="border-b border-gray-200 dark:border-slate-700 px-6">
+              <div className="flex space-x-4">
+                <Tooltip content="Machine">
+                  <button
+                    onClick={() => setActiveCreateTab('machine')}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'machine'
+                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                  >
+                    Machine
+                  </button>
+                </Tooltip>
+                <Tooltip content="Tool">
+                  <button
+                    onClick={() => setActiveCreateTab('tool')}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'tool'
+                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                  >
+                    Tool
+                  </button>
+                </Tooltip>
+              </div>
             </div>
 
             {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
-              <CreateForm
-                title="Machine Registration"
-                fields={machineFields}
-                onSubmit={handleMachineSubmit}
-                onClear={handleClear}
-                submitButtonLabel="Register"
-                clearButtonLabel="Clear"
-                loading={isSubmitting}
-                enableDynamicSpecs={false}
-                className="shadow-none border-0 p-0"
-              />
+              {activeCreateTab === 'machine' ? (
+                <CreateForm
+                  title="Machine Registration"
+                  fields={machineFields}
+                  onSubmit={handleMachineSubmit}
+                  onClear={handleClear}
+                  submitButtonLabel="Register"
+                  clearButtonLabel="Clear"
+                  loading={isSubmitting}
+                  enableDynamicSpecs={false}
+                  className="shadow-none border-0 p-0"
+                />
+              ) : (
+                <CreateForm
+                  title="Tool Registration"
+                  fields={toolFields}
+                  onSubmit={handleToolSubmit}
+                  onClear={handleClear}
+                  submitButtonLabel="Register"
+                  clearButtonLabel="Clear"
+                  loading={isSubmitting}
+                  enableDynamicSpecs={false}
+                  className="shadow-none border-0 p-0"
+                />
+              )}
             </div>
           </div>
         </div>

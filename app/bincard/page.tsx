@@ -570,44 +570,46 @@ const BincardPage: React.FC = () => {
       </main>
 
       {/* View Details Modal */}
-      {isViewModalOpen && selectedItem && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <div>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  Bincard Details
-                </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  {selectedItem.brand} {selectedItem.model}
-                </p>
-              </div>
-              <button
-                onClick={handleCloseViewModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">
-              
-
-              {/* Detailed Entries Table */}
-              <Table
-                data={getItemEntries(selectedItem)}
-                columns={entryColumns}
-                itemsPerPage={20}
-                searchable
-                filterable
-                emptyMessage="No transaction entries found for this item."
-              />
-            </div>
-          </div>
+{isViewModalOpen && selectedItem && (
+  <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6">
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-[95vw] sm:max-w-2xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+      {/* Modal Header */}
+      <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-slate-700 flex-shrink-0">
+        <div className="min-w-0 flex-1 pr-4">
+          <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white truncate">
+            Bincard Details
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">
+            {selectedItem.brand} {selectedItem.model}
+          </p>
         </div>
-      )}
+        <button
+          onClick={handleCloseViewModal}
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors flex-shrink-0"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Modal Content - Scrollable */}
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+          {/* Detailed Entries Table */}
+          <Table
+            data={getItemEntries(selectedItem)}
+            columns={entryColumns}
+            itemsPerPage={20}
+            searchable
+            filterable
+            emptyMessage="No transaction entries found for this item."
+            maxHeight="none"
+            className="h-full"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

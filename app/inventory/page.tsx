@@ -788,7 +788,7 @@ const InventoryManagementPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Machine Inventory Management
+                Inventory Management
               </h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Track and manage machine stock levels, view inventory history, and perform stock operations.

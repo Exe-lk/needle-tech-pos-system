@@ -1226,7 +1226,7 @@ const RentalAgreementPage: React.FC = () => {
             {/* Page header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Rental List</h2>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Rental Agreement</h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                   Overview of all rental agreements with their details, customer information, and
                   outstanding balances.

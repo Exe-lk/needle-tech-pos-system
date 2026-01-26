@@ -34,7 +34,7 @@ export interface TableProps {
   onCreateClick?: () => void;
   createButtonLabel?: string;
   getRowClassName?: (row: any) => string;
-  maxHeight?: string; // Optional: custom max height for table container
+  maxHeight?: string | 'none'; // Optional: custom max height for table container
 }
 
 const Table: React.FC<TableProps> = ({
@@ -260,103 +260,112 @@ const Table: React.FC<TableProps> = ({
 
 
   return (
-    <div className={`bg-white dark:bg-slate-800 rounded-lg overflow-hidden flex flex-col ${className}`} style={{ maxHeight: tableMaxHeight }}>
+    <div
+      className={`bg-white dark:bg-slate-800 rounded-lg overflow-hidden flex flex-col ${className}`}
+      style={{
+        maxHeight: maxHeight || calculatedHeight,
+        ...(maxHeight === 'none' ? { height: '100%' } : {})
+      }}
+    >
       {/* Header with search, filter and create button */}
       {showHeader && (
-      <div className="p-6 bg-gray-50 dark:bg-slate-700/50 flex-shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3 flex-1">
-            {/* Search Bar */}
-            {searchable && (
-              <div className="relative flex-1 max-w-md">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+        <div className="p-6 bg-gray-50 dark:bg-slate-700/50 flex-shrink-0">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3 flex-1">
+              {/* Search Bar */}
+              {searchable && (
+                <div className="relative flex-1 max-w-md">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search here..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 text-sm"
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Search here..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 text-sm"
-                />
-              </div>
-            )}
+              )}
 
-            {/* Filter Icon */}
-            {filterable && (
-              <button
-                onClick={() => setShowFilters((prev) => !prev)}
-                className="p-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-              >
-                <Filter className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-              </button>
-            )}
+              {/* Filter Icon */}
+              {filterable && (
+                <button
+                  onClick={() => setShowFilters((prev) => !prev)}
+                  className="p-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                >
+                  <Filter className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                </button>
+              )}
 
-            {/* Clear Filters */}
-            {(searchTerm || Object.values(filters).some((f) => f)) && (
-              <button
-                onClick={clearFilters}
-                className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-              >
-                Clear filters
-              </button>
+              {/* Clear Filters */}
+              {(searchTerm || Object.values(filters).some((f) => f)) && (
+                <button
+                  onClick={clearFilters}
+                  className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+
+            {/* Create Button */}
+            {onCreateClick && (
+              <Tooltip content={`Add a new ${createButtonLabel.toLowerCase()}`} position="bottom">
+                <button
+                  onClick={onCreateClick}
+                  className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                >
+                  {createButtonLabel}
+                </button>
+              </Tooltip>
             )}
           </div>
 
-          {/* Create Button */}
-          {onCreateClick && (
-            <Tooltip content={`Add a new ${createButtonLabel.toLowerCase()}`} position="bottom">
-              <button
-                onClick={onCreateClick}
-                className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-              >
-                {createButtonLabel}
-              </button>
-            </Tooltip>
-          )}
-        </div>
-
-        {/* Filter Pills Row */}
-        {filterable && showFilters && (
-          <div className="flex flex-wrap gap-3">
-            {columns
-              .filter((col) => col.filterable)
-              .map((column) => (
-                <div key={column.key} className="flex items-center">
-                  <div className="relative">
-                    <select
-                      value={filters[column.key] || ''}
-                      onChange={(e) => handleFilterChange(column.key, e.target.value)}
-                      className="appearance-none bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-full px-4 py-2 pr-8 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
-                    >
-                      <option value="">{column.label}</option>
-                      {getFilterOptions(column.key).map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                      <svg
-                        className="w-4 h-4 text-gray-400 dark:text-gray-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+          {/* Filter Pills Row */}
+          {filterable && showFilters && (
+            <div className="flex flex-wrap gap-3">
+              {columns
+                .filter((col) => col.filterable)
+                .map((column) => (
+                  <div key={column.key} className="flex items-center">
+                    <div className="relative">
+                      <select
+                        value={filters[column.key] || ''}
+                        onChange={(e) => handleFilterChange(column.key, e.target.value)}
+                        className="appearance-none bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-full px-4 py-2 pr-8 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                        <option value="">{column.label}</option>
+                        {getFilterOptions(column.key).map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                        <svg
+                          className="w-4 h-4 text-gray-400 dark:text-gray-500"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-          </div>
-        )}
-      </div>
+                ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Table Container with flexible height - grows to content but respects maxHeight */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-        <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
+        <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0" style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(156, 163, 175, 0.5) transparent'
+        }}>
           <table className="min-w-full">
             <thead className="bg-gray-50 dark:bg-slate-700 border-y border-gray-200 dark:border-slate-700 sticky top-0 z-10">
               <tr>
@@ -373,8 +382,8 @@ const Table: React.FC<TableProps> = ({
                         <div className="flex flex-col ml-1">
                           <svg
                             className={`w-3 h-3 ${sortColumn === column.key && sortDirection === 'asc'
-                                ? 'text-gray-900 dark:text-gray-200'
-                                : 'text-gray-400 dark:text-gray-500'
+                              ? 'text-gray-900 dark:text-gray-200'
+                              : 'text-gray-400 dark:text-gray-500'
                               }`}
                             fill="currentColor"
                             viewBox="0 0 20 20"
@@ -472,8 +481,8 @@ const Table: React.FC<TableProps> = ({
             onClick={handlePreviousPage}
             disabled={effectiveCurrentPage === 1}
             className={`p-2 rounded-md text-sm font-medium transition-colors duration-200 ${effectiveCurrentPage === 1
-                ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
+              ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+              : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
               }`}
           >
             <ChevronLeft className="w-4 h-4" />
@@ -493,8 +502,8 @@ const Table: React.FC<TableProps> = ({
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
                   className={`w-8 h-8 rounded-md text-sm font-medium ${pageNum === effectiveCurrentPage
-                      ? 'bg-gray-900 dark:bg-indigo-600 text-white'
-                      : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
+                    ? 'bg-gray-900 dark:bg-indigo-600 text-white'
+                    : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
                     }`}
                 >
                   {pageNum}
@@ -512,8 +521,8 @@ const Table: React.FC<TableProps> = ({
             onClick={handleNextPage}
             disabled={effectiveCurrentPage === totalPages}
             className={`p-2 rounded-md text-sm font-medium transition-colors duration-200 ${effectiveCurrentPage === totalPages
-                ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
+              ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+              : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
               }`}
           >
             <ChevronRight className="w-4 h-4" />

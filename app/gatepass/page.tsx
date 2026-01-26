@@ -663,7 +663,7 @@ const GatePassPage: React.FC = () => {
             {/* Page header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Gate Pass List</h2>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Gate Pass</h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                   Overview of all gate passes with agreement references, driver information, and dispatch
                   details.
