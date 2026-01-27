@@ -271,10 +271,6 @@ const mockTransactionLogs: TransactionLog[] = [
 const TransactionLogPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
-  const [dateRange, setDateRange] = useState({ from: '', to: '' });
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedType, setSelectedType] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -294,57 +290,14 @@ const TransactionLogPage: React.FC = () => {
     alert('Export functionality will be implemented with backend integration.');
   };
 
-  // Get unique values for filters
-  const uniqueCategories = useMemo(() => {
-    return [...new Set(mockTransactionLogs.map((t) => t.category))].sort();
-  }, []);
-
-  const uniqueTypes = useMemo(() => {
-    return [...new Set(mockTransactionLogs.map((t) => t.transactionType))].sort();
-  }, []);
-
-  const uniqueStatuses = useMemo(() => {
-    return [...new Set(mockTransactionLogs.map((t) => t.status))].sort();
-  }, []);
-
-  // Filter transactions
-  const filteredTransactions = useMemo(() => {
-    let filtered = [...mockTransactionLogs];
-
-    if (dateRange.from) {
-      filtered = filtered.filter((t) => t.transactionDate >= dateRange.from);
-    }
-
-    if (dateRange.to) {
-      filtered = filtered.filter((t) => t.transactionDate <= dateRange.to);
-    }
-
-    if (selectedCategory) {
-      filtered = filtered.filter((t) => t.category === selectedCategory);
-    }
-
-    if (selectedType) {
-      filtered = filtered.filter((t) => t.transactionType === selectedType);
-    }
-
-    if (selectedStatus) {
-      filtered = filtered.filter((t) => t.status === selectedStatus);
-    }
-
-    return filtered.sort(
-      (a, b) =>
-        new Date(`${b.transactionDate} ${b.transactionTime}`).getTime() -
-        new Date(`${a.transactionDate} ${a.transactionTime}`).getTime()
-    );
-  }, [dateRange, selectedCategory, selectedType, selectedStatus]);
-
-  // Table columns
+  // Table columns with date range filter enabled for transactionDate
   const columns: TableColumn[] = [
     {
       key: 'transactionDate',
       label: 'Date',
       sortable: true,
-      filterable: false,
+      filterable: true,
+      filterType: 'dateRange', // Enable date range filtering
       render: (value: string, row: TransactionLog) => (
         <div>
           <div className="text-gray-900 dark:text-white font-medium">
@@ -497,19 +450,6 @@ const TransactionLogPage: React.FC = () => {
     },
   ];
 
-  // Calculate summary statistics
-  const summaryStats = useMemo(() => {
-    const total = filteredTransactions.length;
-    const byCategory = filteredTransactions.reduce((acc, t) => {
-      acc[t.category] = (acc[t.category] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    const totalAmount = filteredTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-    const successCount = filteredTransactions.filter((t) => t.status === 'Success').length;
-
-    return { total, byCategory, totalAmount, successCount };
-  }, [filteredTransactions]);
-
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
       {/* Top navbar */}
@@ -548,12 +488,9 @@ const TransactionLogPage: React.FC = () => {
             </Tooltip>
           </div>
 
-
-
-
           {/* Transaction Log Table */}
           <Table
-            data={filteredTransactions}
+            data={mockTransactionLogs}
             columns={columns}
             itemsPerPage={10}
             searchable

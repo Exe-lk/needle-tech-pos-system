@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
-import QRScannerComponent from '@/src/components/qr-scanner';
-import { Eye, Pencil, X, Plus, Trash2, Printer } from 'lucide-react';
+import { Eye, Pencil, X, Plus, Trash2, Printer, FileText, ExternalLink, QrCode, Truck } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
+import { useRouter } from 'next/navigation';
 
 type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
 
@@ -22,6 +22,21 @@ interface RentalAgreement {
   monthlyRent: number;
   outstanding: number;
   status: RentalStatus;
+  purchaseRequestId?: number;
+  purchaseRequestNumber?: string;
+  expectedMachines?: number;
+  addedMachines?: number;
+}
+
+// Machine detail interface for agreement
+interface MachineDetail {
+  serialNo: string;
+  machineBrand: string;
+  machineModel: string;
+  machineType: string;
+  machineDescription: string;
+  motorBoxNo?: string;
+  monthlyRent: number;
 }
 
 // Rental Agreement Detail Data Types
@@ -31,12 +46,7 @@ interface RentalAgreementInfo {
   customerNo: string;
   customerName: string;
   customerAddress?: string;
-  serialNo: string;
-  machineBrand: string;
-  machineModel: string;
-  machineType: string;
-  machineDescription: string;
-  motorBoxNo?: string;
+  machines: MachineDetail[];
   startDate: string;
   endDate: string | null;
   monthlyRent: number;
@@ -51,6 +61,36 @@ interface RentalAgreementInfo {
   customerFullName?: string;
   customerSignatureDate?: string;
   customerSignature?: string;
+  purchaseRequestId?: number;
+  purchaseRequestNumber?: string;
+  expectedMachines?: number;
+  addedMachines?: number;
+}
+
+// GatePass interfaces (from gatepass page)
+interface GatePassItem {
+  id: string;
+  description: string;
+  status: string;
+  serialNo: string;
+  motorBoxNo: string;
+}
+
+interface GatePass {
+  id: number;
+  gatepassNo: string;
+  agreementReference: string;
+  dateOfIssue: string;
+  returnable: boolean;
+  entry: 'IN' | 'OUT';
+  from: string;
+  to: string;
+  toAddress: string;
+  vehicleNumber: string;
+  driverName: string;
+  items: GatePassItem[];
+  issuedBy?: string;
+  receivedBy?: string;
 }
 
 // Machine interface for create form
@@ -75,12 +115,13 @@ interface AddOnItem {
 // Machine interface for update form (adding machines to agreement)
 interface MachineForAgreement {
   id: string;
-  description: string; // brandName + modelName + typeName
+  description: string;
   serialNumber: string;
   boxNumber: string;
   brandName?: string;
   modelName?: string;
   typeName?: string;
+  scannedAt?: string;
 }
 
 // Mock customer data
@@ -126,7 +167,7 @@ const standardPrices: Record<string, number> = {
 const mockRentalAgreements: RentalAgreement[] = [
   {
     id: 1,
-    agreementNo: 'RA-2024-001',
+    agreementNo: 'RA24010001',
     customerNo: 'CUST-001',
     customerName: 'ABC Holdings (Pvt) Ltd',
     serialNo: 'SN-2024-002',
@@ -135,10 +176,14 @@ const mockRentalAgreements: RentalAgreement[] = [
     monthlyRent: 50000,
     outstanding: 120000,
     status: 'Active',
+    purchaseRequestId: 1,
+    purchaseRequestNumber: 'PO24010001',
+    expectedMachines: 2,
+    addedMachines: 2,
   },
   {
     id: 2,
-    agreementNo: 'RA-2024-002',
+    agreementNo: 'RA24010002',
     customerNo: 'CUST-002',
     customerName: 'John Perera',
     serialNo: 'SN-2024-004',
@@ -146,11 +191,13 @@ const mockRentalAgreements: RentalAgreement[] = [
     endDate: '2024-06-01',
     monthlyRent: 35000,
     outstanding: 70000,
-    status: 'Active',
+    status: 'Pending',
+    expectedMachines: 1,
+    addedMachines: 0,
   },
   {
     id: 3,
-    agreementNo: 'RA-2024-003',
+    agreementNo: 'RA24010001',
     customerNo: 'CUST-003',
     customerName: 'XYZ Engineering',
     serialNo: 'SN-2024-001',
@@ -162,7 +209,7 @@ const mockRentalAgreements: RentalAgreement[] = [
   },
   {
     id: 4,
-    agreementNo: 'RA-2024-004',
+    agreementNo: 'RA24010004',
     customerNo: 'CUST-004',
     customerName: 'Kamal Silva',
     serialNo: 'SN-2024-003',
@@ -174,7 +221,7 @@ const mockRentalAgreements: RentalAgreement[] = [
   },
   {
     id: 5,
-    agreementNo: 'RA-2024-005',
+    agreementNo: 'RA24010005',
     customerNo: 'CUST-005',
     customerName: 'Mega Constructions',
     serialNo: 'SN-2024-005',
@@ -182,11 +229,15 @@ const mockRentalAgreements: RentalAgreement[] = [
     endDate: '2024-07-01',
     monthlyRent: 60000,
     outstanding: 180000,
-    status: 'Active',
+    status: 'Pending',
+    purchaseRequestId: 3,
+    purchaseRequestNumber: 'PO24010003',
+    expectedMachines: 15,
+    addedMachines: 10,
   },
   {
     id: 6,
-    agreementNo: 'RA-2024-006',
+    agreementNo: 'RA24010006',
     customerNo: 'CUST-006',
     customerName: 'VIHANGA SHADE STRUCTURES',
     serialNo: '2LIDH01733',
@@ -198,25 +249,58 @@ const mockRentalAgreements: RentalAgreement[] = [
   },
 ];
 
-// Mock function to get rental agreement detail data (replace with API call later)
+// Mock function to get rental agreement detail data with multiple machines
 const getRentalAgreementInfo = (agreementId: number): RentalAgreementInfo => {
   const agreement = mockRentalAgreements.find((r) => r.id === agreementId);
   const customer = mockCustomers.find((c) => c.id === agreement?.customerNo);
   
-  // Special handling for the example agreement from image
   if (agreementId === 6) {
+    const machines: MachineDetail[] = [
+      {
+        serialNo: '2LIDH01733',
+        machineBrand: 'Juki',
+        machineModel: 'LK-1903A-SS',
+        machineType: 'Electronic Bar Tack Machine',
+        machineDescription: 'JUKI LK-1903A-SS - ELECTRONIC BAR TACK MACHINE',
+        motorBoxNo: 'NMBDH01171',
+        monthlyRent: 4250,
+      },
+      {
+        serialNo: '2LIDH01734',
+        machineBrand: 'Juki',
+        machineModel: 'LK-1903A-SS',
+        machineType: 'Electronic Bar Tack Machine',
+        machineDescription: 'JUKI LK-1903A-SS - ELECTRONIC BAR TACK MACHINE',
+        motorBoxNo: 'NMBDH01172',
+        monthlyRent: 4250,
+      },
+      {
+        serialNo: '2LIDH01735',
+        machineBrand: 'Juki',
+        machineModel: 'LK-1903A-SS',
+        machineType: 'Electronic Bar Tack Machine',
+        machineDescription: 'JUKI LK-1903A-SS - ELECTRONIC BAR TACK MACHINE',
+        motorBoxNo: 'NMBDH01173',
+        monthlyRent: 4250,
+      },
+      {
+        serialNo: '2LIDH01736',
+        machineBrand: 'Juki',
+        machineModel: 'LK-1903A-SS',
+        machineType: 'Electronic Bar Tack Machine',
+        machineDescription: 'JUKI LK-1903A-SS - ELECTRONIC BAR TACK MACHINE',
+        motorBoxNo: 'NMBDH01174',
+        monthlyRent: 4250,
+      },
+    ];
+    
     return {
       id: agreement?.id || 0,
       agreementNo: agreement?.agreementNo || '',
       customerNo: agreement?.customerNo || '',
       customerName: agreement?.customerName || '',
       customerAddress: customer?.address || '',
-      serialNo: agreement?.serialNo || '',
-      machineBrand: 'Juki',
-      machineModel: 'LK-1903A-SS',
-      machineType: 'Electronic Bar Tack Machine',
-      machineDescription: 'JUKI LK-1903A-SS - ELECTRONIC BAR TACK MACHINE',
-      motorBoxNo: 'NMBDH01171',
+      machines,
       startDate: agreement?.startDate || '',
       endDate: agreement?.endDate || null,
       monthlyRent: agreement?.monthlyRent || 0,
@@ -231,8 +315,51 @@ const getRentalAgreementInfo = (agreementId: number): RentalAgreementInfo => {
       customerFullName: 'SURAJ PRANAWEERA',
       customerSignatureDate: '2026-01-02',
       customerSignature: 'SURAJ PRANAWEERA',
+      purchaseRequestId: agreement?.purchaseRequestId,
+      purchaseRequestNumber: agreement?.purchaseRequestNumber,
+      expectedMachines: agreement?.expectedMachines,
+      addedMachines: agreement?.addedMachines,
     };
   }
+  
+  const machines: MachineDetail[] = [
+    {
+      serialNo: 'SN-2024-001',
+      machineBrand: 'Brother',
+      machineModel: 'XL2600i',
+      machineType: 'Domestic',
+      machineDescription: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE',
+      motorBoxNo: 'BOX-2024-001',
+      monthlyRent: (agreement?.monthlyRent || 0) / 4,
+    },
+    {
+      serialNo: 'SN-2024-002',
+      machineBrand: 'Brother',
+      machineModel: 'XL2600i',
+      machineType: 'Domestic',
+      machineDescription: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE',
+      motorBoxNo: 'BOX-2024-002',
+      monthlyRent: (agreement?.monthlyRent || 0) / 4,
+    },
+    {
+      serialNo: 'SN-2024-003',
+      machineBrand: 'Brother',
+      machineModel: 'XL2600i',
+      machineType: 'Domestic',
+      machineDescription: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE',
+      motorBoxNo: 'BOX-2024-003',
+      monthlyRent: (agreement?.monthlyRent || 0) / 4,
+    },
+    {
+      serialNo: 'SN-2024-004',
+      machineBrand: 'Brother',
+      machineModel: 'XL2600i',
+      machineType: 'Domestic',
+      machineDescription: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE',
+      motorBoxNo: 'BOX-2024-004',
+      monthlyRent: (agreement?.monthlyRent || 0) / 4,
+    },
+  ];
   
   return {
     id: agreement?.id || 0,
@@ -240,12 +367,7 @@ const getRentalAgreementInfo = (agreementId: number): RentalAgreementInfo => {
     customerNo: agreement?.customerNo || '',
     customerName: agreement?.customerName || '',
     customerAddress: customer?.address || '',
-    serialNo: agreement?.serialNo || '',
-    machineBrand: 'Brother',
-    machineModel: 'XL2600i',
-    machineType: 'Domestic',
-    machineDescription: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE',
-    motorBoxNo: 'BOX-2024-001',
+    machines,
     startDate: agreement?.startDate || '',
     endDate: agreement?.endDate || null,
     monthlyRent: agreement?.monthlyRent || 0,
@@ -259,10 +381,14 @@ const getRentalAgreementInfo = (agreementId: number): RentalAgreementInfo => {
     customerFullName: customer?.name || '',
     customerSignatureDate: agreement?.startDate || '',
     customerSignature: customer?.name || '',
+    purchaseRequestId: agreement?.purchaseRequestId,
+    purchaseRequestNumber: agreement?.purchaseRequestNumber,
+    expectedMachines: agreement?.expectedMachines,
+    addedMachines: agreement?.addedMachines,
   };
 };
 
-// Table column configuration
+// Table column configuration - REMOVED SERIAL NO COLUMN
 const columns: TableColumn[] = [
   {
     key: 'agreementNo',
@@ -277,10 +403,31 @@ const columns: TableColumn[] = [
     filterable: true,
   },
   {
-    key: 'serialNo',
-    label: 'Serial No',
+    key: 'purchaseRequestNumber',
+    label: 'Purchase Request',
     sortable: true,
     filterable: true,
+    render: (value: string | undefined, row: RentalAgreement) => {
+      if (!value) {
+        return <span className="text-gray-400 dark:text-gray-500 italic text-sm">N/A</span>;
+      }
+      return (
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-700 dark:text-gray-300">{value}</span>
+          <Tooltip content="View Purchase Request">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                window.location.href = `/purchase-order?highlight=${row.purchaseRequestId}`;
+              }}
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          </Tooltip>
+        </div>
+      );
+    },
   },
   {
     key: 'startDate',
@@ -330,9 +477,25 @@ const columns: TableColumn[] = [
     label: 'Status',
     sortable: true,
     filterable: true,
-    render: (value: RentalStatus) => {
+    render: (value: RentalStatus, row: RentalAgreement) => {
       const base =
         'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
+      
+      if (value === 'Pending' && row.expectedMachines !== undefined) {
+        const progress = row.addedMachines || 0;
+        const total = row.expectedMachines;
+        return (
+          <div className="flex flex-col items-start space-y-1">
+            <span className={`${base} bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300`}>
+              Pending
+            </span>
+            <span className="text-xs text-gray-600 dark:text-gray-400">
+              {progress}/{total} machines added
+            </span>
+          </div>
+        );
+      }
+      
       if (value === 'Active') {
         return (
           <span className={`${base} bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}>
@@ -364,13 +527,23 @@ const columns: TableColumn[] = [
 ];
 
 const RentalAgreementPage: React.FC = () => {
+  const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [isGatePassModalOpen, setIsGatePassModalOpen] = useState(false);
   const [selectedAgreement, setSelectedAgreement] = useState<RentalAgreement | null>(null);
+  const [generatedGatePass, setGeneratedGatePass] = useState<GatePass | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Gatepass form state
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [driverName, setDriverName] = useState('');
+  const [returnable, setReturnable] = useState(true);
+  const [entry, setEntry] = useState<'IN' | 'OUT'>('OUT');
+  const [issuedBy, setIssuedBy] = useState('');
 
   // Create form state
   const [customerId, setCustomerId] = useState('');
@@ -382,7 +555,6 @@ const RentalAgreementPage: React.FC = () => {
   const [addOns, setAddOns] = useState<AddOnItem[]>([]);
   const [signature, setSignature] = useState('');
   const [agreementDate, setAgreementDate] = useState('');
-  // New fields for customer signature section
   const [customerIdNo, setCustomerIdNo] = useState('');
   const [customerFullName, setCustomerFullName] = useState('');
   const [customerSignatureDate, setCustomerSignatureDate] = useState('');
@@ -390,13 +562,27 @@ const RentalAgreementPage: React.FC = () => {
 
   // Machine management state for update form
   const [machinesForAgreement, setMachinesForAgreement] = useState<MachineForAgreement[]>([]);
-  const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+  const [qrScannerWindow, setQrScannerWindow] = useState<Window | null>(null);
   const [manualMachineInput, setManualMachineInput] = useState({
     description: '',
     serialNumber: '',
     boxNumber: '',
   });
   const [machineErrors, setMachineErrors] = useState<Record<string, string>>({});
+
+  // Listen for messages from QR scanner popup window
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'QR_SCAN_RESULT') {
+        handleQRScanSuccess(event.data.qrData);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, []);
 
   // Calculate pricing
   const pricing = useMemo(() => {
@@ -439,7 +625,7 @@ const RentalAgreementPage: React.FC = () => {
         id: m.id,
         label: `Machine ${index + 1}: ${m.brand} ${m.model} (${m.type})`,
       }))
-      .filter((m) => m.label.includes(':')); // Only show if machine is selected
+      .filter((m) => m.label.includes(':'));
   };
 
   const handleMenuClick = () => {
@@ -456,7 +642,6 @@ const RentalAgreementPage: React.FC = () => {
 
   const handleCreateAgreement = () => {
     setIsCreateModalOpen(true);
-    // Reset form
     setCustomerId('');
     setStartDate('');
     setEndDate('');
@@ -495,7 +680,6 @@ const RentalAgreementPage: React.FC = () => {
   const handleRemoveMachine = (id: string) => {
     if (machines.length > 1) {
       setMachines(machines.filter((m) => m.id !== id));
-      // Remove add-ons associated with this machine
       setAddOns(addOns.filter((a) => a.machineId !== id));
     }
   };
@@ -505,11 +689,9 @@ const RentalAgreementPage: React.FC = () => {
       machines.map((m) => {
         if (m.id === id) {
           const updated = { ...m, [field]: value };
-          // Reset model when brand changes
           if (field === 'brand') {
             updated.model = '';
           }
-          // Update standard price when type changes
           if (field === 'type') {
             updated.standardPrice = standardPrices[value] || 0;
           }
@@ -536,7 +718,6 @@ const RentalAgreementPage: React.FC = () => {
       addOns.map((a) => {
         if (a.id === id) {
           const updated = { ...a, [field]: value };
-          // Update price when add-on ID changes
           if (field === 'addOnId') {
             const addOnData = mockAddOns.find((ao) => ao.id === value);
             updated.price = addOnData?.price || 0;
@@ -629,11 +810,15 @@ const RentalAgreementPage: React.FC = () => {
     window.print();
   };
 
+  const handleViewPurchaseRequest = (purchaseRequestId?: number) => {
+    if (purchaseRequestId) {
+      router.push(`/purchase-order?highlight=${purchaseRequestId}`);
+    }
+  };
+
   const handleUpdateAgreement = (agreement: RentalAgreement) => {
     setSelectedAgreement(agreement);
     setIsUpdateModalOpen(true);
-    // Initialize machines from agreement (if any exist)
-    // For now, we'll start with empty array
     setMachinesForAgreement([]);
     setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
     setMachineErrors({});
@@ -645,46 +830,40 @@ const RentalAgreementPage: React.FC = () => {
     setMachinesForAgreement([]);
     setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
     setMachineErrors({});
-  };
-
-  // Machine management handlers for update form
-  const handleAddMachineManually = () => {
-    const errors: Record<string, string> = {};
-    
-    if (!manualMachineInput.description.trim()) {
-      errors.description = 'Description is required';
-    }
-    if (!manualMachineInput.serialNumber.trim()) {
-      errors.serialNumber = 'Serial number is required';
-    }
-    if (!manualMachineInput.boxNumber.trim()) {
-      errors.boxNumber = 'Box number is required';
-    }
-
-    setMachineErrors(errors);
-
-    if (Object.keys(errors).length === 0) {
-      const newMachine: MachineForAgreement = {
-        id: Date.now().toString(),
-        description: manualMachineInput.description.trim(),
-        serialNumber: manualMachineInput.serialNumber.trim(),
-        boxNumber: manualMachineInput.boxNumber.trim(),
-      };
-
-      setMachinesForAgreement([...machinesForAgreement, newMachine]);
-      setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
-      setMachineErrors({});
+    if (qrScannerWindow && !qrScannerWindow.closed) {
+      qrScannerWindow.close();
+      setQrScannerWindow(null);
     }
   };
 
   const handleRemoveMachineFromAgreement = (machineId: string) => {
-    setMachinesForAgreement(machinesForAgreement.filter((m) => m.id !== machineId));
+    const updated = machinesForAgreement.filter((m) => m.id !== machineId);
+    setMachinesForAgreement(updated);
+    checkAndUpdateStatus(updated);
+  };
+
+  const checkAndUpdateStatus = (currentMachines: MachineForAgreement[]) => {
+    if (!selectedAgreement || selectedAgreement.status !== 'Pending') return;
+    
+    const expected = selectedAgreement.expectedMachines || 0;
+    const added = currentMachines.length;
+    
+    if (expected > 0 && added >= expected) {
+      setSelectedAgreement({
+        ...selectedAgreement,
+        status: 'Active',
+        addedMachines: added,
+      });
+    } else {
+      setSelectedAgreement({
+        ...selectedAgreement,
+        addedMachines: added,
+      });
+    }
   };
 
   const handleQRScanSuccess = (qrData: string) => {
     try {
-      // Parse QR code data - assuming it's JSON format
-      // Format: {"serialNumber": "SN-001", "boxNumber": "BOX-001", "brandName": "Brother", "modelName": "XL2600i", "typeName": "Domestic"}
       const machineData = JSON.parse(qrData);
       
       const newMachine: MachineForAgreement = {
@@ -695,10 +874,17 @@ const RentalAgreementPage: React.FC = () => {
         brandName: machineData.brandName,
         modelName: machineData.modelName,
         typeName: machineData.typeName,
+        scannedAt: new Date().toISOString(),
       };
 
       setMachinesForAgreement([...machinesForAgreement, newMachine]);
-      setIsQRScannerOpen(false);
+      
+      if (qrScannerWindow && !qrScannerWindow.closed) {
+        qrScannerWindow.close();
+        setQrScannerWindow(null);
+      }
+      
+      checkAndUpdateStatus([...machinesForAgreement, newMachine]);
     } catch (error) {
       console.error('Error parsing QR code:', error);
       alert('Invalid QR code format. Please try again.');
@@ -706,11 +892,105 @@ const RentalAgreementPage: React.FC = () => {
   };
 
   const handleOpenQRScanner = () => {
-    setIsQRScannerOpen(true);
+    const flutterAppUrl = process.env.NEXT_PUBLIC_QR_SCANNER_URL || 'http://localhost:8080';
+    
+    const width = 600;
+    const height = 800;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    
+    const popup = window.open(
+      flutterAppUrl,
+      'QRScanner',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+    );
+    
+    if (popup) {
+      setQrScannerWindow(popup);
+      
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          setQrScannerWindow(null);
+        }
+      }, 500);
+    } else {
+      alert('Please allow popups for this site to use the QR scanner.');
+    }
   };
 
-  const handleCloseQRScanner = () => {
-    setIsQRScannerOpen(false);
+  // Generate Gatepass Number
+  const generateGatepassNo = (): string => {
+    const num = Math.floor(Math.random() * 1000000);
+    return num.toString().padStart(6, '0');
+  };
+
+  // Handle Generate Gatepass
+  const handleGenerateGatePass = (agreement: RentalAgreement) => {
+    setSelectedAgreement(agreement);
+    // Reset gatepass form
+    setVehicleNumber('');
+    setDriverName('');
+    setReturnable(true);
+    setEntry('OUT');
+    setIssuedBy('');
+    setIsGatePassModalOpen(true);
+  };
+
+  const handleCloseGatePassModal = () => {
+    setIsGatePassModalOpen(false);
+    setGeneratedGatePass(null);
+    setVehicleNumber('');
+    setDriverName('');
+    setReturnable(true);
+    setEntry('OUT');
+    setIssuedBy('');
+  };
+
+  const handleCreateGatePass = () => {
+    if (!selectedAgreement) return;
+
+    // Validate required fields
+    if (!vehicleNumber.trim() || !driverName.trim()) {
+      alert('Please fill in Vehicle Number and Driver Name');
+      return;
+    }
+
+    const agreementInfo = getRentalAgreementInfo(selectedAgreement.id);
+    const customer = mockCustomers.find((c) => c.id === selectedAgreement.customerNo);
+    const gatepassNo = generateGatepassNo();
+
+    // Convert machines to gatepass items
+    const gatePassItems: GatePassItem[] = agreementInfo.machines.map((machine, index) => ({
+      id: (index + 1).toString(),
+      description: machine.machineDescription,
+      status: 'GOOD',
+      serialNo: machine.serialNo,
+      motorBoxNo: machine.motorBoxNo || 'N/A',
+    }));
+
+    const gatePass: GatePass = {
+      id: Date.now(),
+      gatepassNo,
+      agreementReference: selectedAgreement.agreementNo,
+      dateOfIssue: new Date().toISOString().split('T')[0],
+      returnable,
+      entry,
+      from: 'Needle Technologies',
+      to: selectedAgreement.customerName,
+      toAddress: customer?.address || agreementInfo.customerAddress || '',
+      vehicleNumber,
+      driverName,
+      items: gatePassItems,
+      issuedBy: issuedBy || 'System',
+      receivedBy: '',
+    };
+
+    setGeneratedGatePass(gatePass);
+  };
+
+  const handlePrintGatePass = () => {
+    window.print();
   };
 
   // Form fields for Update
@@ -728,14 +1008,6 @@ const RentalAgreementPage: React.FC = () => {
       label: 'Customer Name',
       type: 'text' as const,
       placeholder: 'Enter customer name',
-      required: true,
-      disabled: true,
-    },
-    {
-      name: 'serialNo',
-      label: 'Serial Number',
-      type: 'text' as const,
-      placeholder: 'Enter serial number',
       required: true,
       disabled: true,
     },
@@ -770,18 +1042,17 @@ const RentalAgreementPage: React.FC = () => {
         { label: 'Active', value: 'Active' },
         { label: 'Completed', value: 'Completed' },
         { label: 'Cancelled', value: 'Cancelled' },
+        { label: 'Pending', value: 'Pending' },
       ],
     },
   ];
 
-  // Get initial data for update form
   const getUpdateInitialData = (agreement: RentalAgreement | null) => {
     if (!agreement) return {};
 
     return {
       agreementNo: agreement.agreementNo,
       customerName: agreement.customerName,
-      serialNo: agreement.serialNo,
       startDate: agreement.startDate,
       endDate: agreement.endDate || '',
       monthlyRent: agreement.monthlyRent,
@@ -795,6 +1066,7 @@ const RentalAgreementPage: React.FC = () => {
       const payload = {
         ...data,
         machines: machinesForAgreement,
+        addedMachines: machinesForAgreement.length,
       };
       console.log('Update rental agreement payload:', payload);
       alert(`Rental Agreement "${data.agreementNo}" updated with ${machinesForAgreement.length} machine(s) (frontend only).`);
@@ -811,11 +1083,157 @@ const RentalAgreementPage: React.FC = () => {
   const getRowClassName = (agreement: RentalAgreement) => {
     if (agreement.status === 'Cancelled') return 'bg-red-50/60 dark:bg-red-950/40';
     if (agreement.status === 'Completed') return 'bg-gray-50 dark:bg-slate-900/40';
+    if (agreement.status === 'Pending') return 'bg-yellow-50/60 dark:bg-yellow-950/20';
     if (agreement.outstanding > 0) return 'bg-yellow-50/60 dark:bg-yellow-950/20';
     return '';
   };
 
-  // Action buttons
+  // Render Gate Pass Document (same as gatepass page)
+  const renderGatePassDocument = (gatePass: GatePass) => {
+    return (
+      <div className="bg-white p-8 max-w-4xl mx-auto" style={{ fontFamily: 'Arial, sans-serif' }}>
+        {/* Header */}
+        <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
+          <div className="flex items-center justify-center mb-2">
+            <div className="text-3xl font-bold text-gray-900">NEEDLE TECHNOLOGIES</div>
+          </div>
+          <div className="text-4xl font-bold text-gray-900 mt-2">GATEPASS</div>
+          <div className="text-sm text-gray-700 mt-1">
+            Supplier of Industrial Sewing Machines and Accessories
+          </div>
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-2 gap-8 mb-6">
+          {/* Left Side - Sender/Receiver Info */}
+          <div className="space-y-4">
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">FROM:</div>
+              <div className="text-sm text-gray-900 font-medium">{gatePass.from}</div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">TO:</div>
+              <div className="text-sm text-gray-900 font-medium">{gatePass.to}</div>
+              <div className="text-xs text-gray-700 mt-1">{gatePass.toAddress}</div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">Vehicle:</div>
+              <div className="text-sm text-gray-900 font-medium">{gatePass.vehicleNumber}</div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">Driver:</div>
+              <div className="text-sm text-gray-900 font-medium">{gatePass.driverName}</div>
+            </div>
+          </div>
+
+          {/* Right Side - Gatepass Details */}
+          <div className="space-y-4 text-right">
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">Gatepass:</div>
+              <div className="text-lg text-gray-900 font-bold">{gatePass.gatepassNo}</div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">Date of Issue:</div>
+              <div className="text-sm text-gray-900 font-medium">
+                {new Date(gatePass.dateOfIssue).toLocaleDateString('en-LK', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                })}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">Returnable:</div>
+              <div className="text-sm text-gray-900 font-medium">
+                {gatePass.returnable ? 'YES' : 'NO'}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-700 mb-1">Entry:</div>
+              <div className="text-sm text-gray-900 font-medium">{gatePass.entry}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Items Table */}
+        <div className="mb-6">
+          <table className="w-full border-collapse border border-gray-800">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900">
+                  Description
+                </th>
+                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                  Status
+                </th>
+                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                  Serial No
+                </th>
+                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                  Motor / Box No
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {gatePass.items.map((item, index) => (
+                <tr key={item.id}>
+                  <td className="border border-gray-800 px-4 py-2 text-sm text-gray-900">
+                    {item.description}
+                  </td>
+                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                    {item.status}
+                  </td>
+                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                    {item.serialNo}
+                  </td>
+                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                    {item.motorBoxNo}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Signatures */}
+        <div className="grid grid-cols-2 gap-8 mb-6">
+          <div>
+            <div className="text-sm font-semibold text-gray-700 mb-2">Issued By:</div>
+            <div className="border-b border-gray-800 pb-1 mb-2 min-h-[40px]">
+              {gatePass.issuedBy && (
+                <div className="text-sm text-gray-900">{gatePass.issuedBy}</div>
+              )}
+            </div>
+            <div className="text-xs text-gray-600">Signature & Stamp</div>
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-gray-700 mb-2">Received By:</div>
+            <div className="border-b border-gray-800 pb-1 mb-2 min-h-[40px]">
+              {gatePass.receivedBy && (
+                <div className="text-sm text-gray-900">{gatePass.receivedBy}</div>
+              )}
+            </div>
+            <div className="text-xs text-gray-600">Signature</div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-300 pt-4 mt-6">
+          <div className="text-xs text-gray-700 text-center mb-2">
+            IMPORTERS & DISTRIBUTORS OF SPARE PARTS & ATTACHMENTS FOR: JUKI, SINGER, KANSAI,
+            BROTHER, SUNSTAR, EASTMAN, CUTTING PEGASUS & RECECINNUSTRIAL SEWING MACHINES, NAQMO
+            IRONS, ORGAN & ORANGE NEEDLES.
+          </div>
+          <div className="text-xs text-gray-700 text-center">
+            No. 137M, Colombo Road, Biyagama, Tel: 0112488735, 011-5737711, 011-5737712 Fax:
+            2487623, Email: needistec@sltnet.lk
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Action buttons - Changed icon to Truck
   const actions: ActionButton[] = [
     {
       label: '',
@@ -833,10 +1251,20 @@ const RentalAgreementPage: React.FC = () => {
       tooltip: 'Update Agreement',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
     },
+    {
+      label: '',
+      icon: <Truck className="w-4 h-4" />,
+      variant: 'secondary',
+      onClick: handleGenerateGatePass,
+      tooltip: 'Generate Gatepass',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-green-600 dark:bg-green-700 text-white hover:bg-green-700 dark:hover:bg-green-800 focus:ring-green-500 dark:focus:ring-green-500',
+    },
   ];
 
-  // Render Rental Agreement Document for Printing (matches the image format exactly)
+  // Render Rental Agreement Document for Printing
   const renderRentalAgreementDocument = (agreementInfo: RentalAgreementInfo) => {
+    const totalMonthlyRent = agreementInfo.machines.reduce((sum, machine) => sum + machine.monthlyRent, 0);
+    
     return (
       <div className="bg-white p-8 max-w-4xl mx-auto" style={{ fontFamily: 'Arial, sans-serif' }}>
         {/* Header */}
@@ -875,6 +1303,12 @@ const RentalAgreementPage: React.FC = () => {
                 }) : 'TBD'}
               </span>
             </div>
+            {agreementInfo.purchaseRequestNumber && (
+              <div>
+                <span className="text-sm font-semibold text-gray-700">Purchase Request:</span>
+                <span className="ml-2 text-sm text-gray-900">{agreementInfo.purchaseRequestNumber}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -893,7 +1327,7 @@ const RentalAgreementPage: React.FC = () => {
                   Motor / Box No
                 </th>
                 <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
-                  Monthly Res
+                  Monthly Rent
                 </th>
                 <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
                   Total
@@ -901,21 +1335,35 @@ const RentalAgreementPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="border border-gray-800 px-4 py-2 text-sm text-gray-900">
-                  {agreementInfo.machineDescription}
+              {agreementInfo.machines.map((machine, index) => (
+                <tr key={index}>
+                  <td className="border border-gray-800 px-4 py-2 text-sm text-gray-900">
+                    {machine.machineDescription}
+                  </td>
+                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                    {machine.serialNo}
+                  </td>
+                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                    {machine.motorBoxNo || 'N/A'}
+                  </td>
+                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                    Rs. {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                    Rs. {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              ))}
+              {/* Total Row */}
+              <tr className="bg-gray-50 font-semibold">
+                <td colSpan={3} className="border border-gray-800 px-4 py-2 text-right text-sm text-gray-900">
+                  Total Monthly Rent:
                 </td>
                 <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
-                  {agreementInfo.serialNo}
+                  Rs. {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
                 <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
-                  {agreementInfo.motorBoxNo || 'N/A'}
-                </td>
-                <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
-                  Rs. {agreementInfo.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-                <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
-                  Rs. {agreementInfo.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  Rs. {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
               </tr>
             </tbody>
@@ -1001,117 +1449,83 @@ const RentalAgreementPage: React.FC = () => {
 
   // Machine Management Section Component
   const renderMachineManagementSection = () => {
+    if (!selectedAgreement) return null;
+
+    const expectedMachines = selectedAgreement.expectedMachines || 0;
+    const addedMachines = machinesForAgreement.length;
+    const remainingMachines = expectedMachines - addedMachines;
+    const isComplete = expectedMachines > 0 && addedMachines >= expectedMachines;
+
     return (
       <div className="space-y-4">
         <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Machines for this Agreement
-          </h3>
-
-          {/* Manual Input Method */}
-          <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 mb-4">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-              Add Machine Manually
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Description <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={manualMachineInput.description}
-                  onChange={(e) =>
-                    setManualMachineInput({ ...manualMachineInput, description: e.target.value })
-                  }
-                  placeholder="e.g., Brother XL2600i Domestic"
-                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                    machineErrors.description
-                      ? 'border-red-500'
-                      : 'border-gray-300 dark:border-slate-600'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                />
-                {machineErrors.description && (
-                  <p className="mt-1 text-sm text-red-500">{machineErrors.description}</p>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Machines for this Agreement
+            </h3>
+            {expectedMachines > 0 && (
+              <div className="flex items-center space-x-4">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Progress: <span className="font-semibold text-gray-900 dark:text-white">{addedMachines}/{expectedMachines}</span>
+                </div>
+                {isComplete && (
+                  <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs font-semibold">
+                    All Machines Added
+                  </span>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Serial Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={manualMachineInput.serialNumber}
-                  onChange={(e) =>
-                    setManualMachineInput({ ...manualMachineInput, serialNumber: e.target.value })
-                  }
-                  placeholder="Enter serial number"
-                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                    machineErrors.serialNumber
-                      ? 'border-red-500'
-                      : 'border-gray-300 dark:border-slate-600'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                />
-                {machineErrors.serialNumber && (
-                  <p className="mt-1 text-sm text-red-500">{machineErrors.serialNumber}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Box Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={manualMachineInput.boxNumber}
-                  onChange={(e) =>
-                    setManualMachineInput({ ...manualMachineInput, boxNumber: e.target.value })
-                  }
-                  placeholder="Enter box number"
-                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                    machineErrors.boxNumber
-                      ? 'border-red-500'
-                      : 'border-gray-300 dark:border-slate-600'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                />
-                {machineErrors.boxNumber && (
-                  <p className="mt-1 text-sm text-red-500">{machineErrors.boxNumber}</p>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleAddMachineManually}
-              className="mt-4 px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-            >
-              Add Machine
-            </button>
+            )}
           </div>
 
-          {/* QR Scanner Method */}
+          {expectedMachines > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Machine Addition Progress
+                </span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {Math.round((addedMachines / expectedMachines) * 100)}%
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3">
+                <div
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    isComplete
+                      ? 'bg-green-600 dark:bg-green-500'
+                      : 'bg-blue-600 dark:bg-blue-500'
+                  }`}
+                  style={{ width: `${Math.min((addedMachines / expectedMachines) * 100, 100)}%` }}
+                />
+              </div>
+              {remainingMachines > 0 && (
+                <p className="mt-2 text-sm text-yellow-600 dark:text-yellow-400">
+                  {remainingMachines} machine(s) remaining to be added
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="mb-4">
             <button
               type="button"
               onClick={handleOpenQRScanner}
-              className="w-full px-4 py-3 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-800 transition-colors flex items-center justify-center space-x-2"
+              disabled={isComplete || qrScannerWindow !== null}
+              className="w-full px-4 py-3 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-800 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-                />
-              </svg>
-              <span>Scan QR Code to Add Machine</span>
+              <QrCode className="w-5 h-5" />
+              <span>
+                {qrScannerWindow && !qrScannerWindow.closed
+                  ? 'QR Scanner Window Open'
+                  : 'Open QR Scanner (Flutter App)'}
+              </span>
             </button>
+            {qrScannerWindow && !qrScannerWindow.closed && (
+              <p className="mt-2 text-sm text-blue-600 dark:text-blue-400 text-center">
+                QR Scanner window is open. Scan a QR code to add a machine.
+              </p>
+            )}
           </div>
 
-          {/* Added Machines List */}
           {machinesForAgreement.length > 0 && (
             <div className="space-y-2">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -1130,6 +1544,11 @@ const RentalAgreementPage: React.FC = () => {
                       <div className="flex space-x-4 mt-1 text-xs text-gray-600 dark:text-gray-400">
                         <span>Serial: {machine.serialNumber}</span>
                         <span>Box: {machine.boxNumber}</span>
+                        {machine.scannedAt && (
+                          <span>
+                            Scanned: {new Date(machine.scannedAt).toLocaleString('en-LK')}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <button
@@ -1144,41 +1563,20 @@ const RentalAgreementPage: React.FC = () => {
               </div>
             </div>
           )}
+
+          {isComplete && selectedAgreement.status === 'Pending' && (
+            <div className="mt-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+              <p className="text-sm text-green-800 dark:text-green-200">
+                <strong>✓ All machines have been added!</strong> The agreement status will be automatically updated to "Active" when you save.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
   };
 
-  // QR Scanner Modal Component
-  const renderQRScannerModal = () => {
-    if (!isQRScannerOpen) return null;
-
-    return (
-      <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-[60] flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Scan QR Code
-            </h2>
-            <button
-              onClick={handleCloseQRScanner}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-6">
-            <QRScannerComponent 
-              onScanSuccess={handleQRScanSuccess} 
-              onClose={handleCloseQRScanner}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // View Rental Agreement Content - Updated to match image format
+  // View Rental Agreement Content
   const renderAgreementDetails = () => {
     if (!selectedAgreement) return null;
 
@@ -1186,10 +1584,12 @@ const RentalAgreementPage: React.FC = () => {
 
     return (
       <div>
-        {/* Screen View */}
-        <div className="print:hidden">{renderRentalAgreementDocument(agreementInfo)}</div>
+        <div className="print:hidden">
+          <div className="space-y-6">
+            {renderRentalAgreementDocument(agreementInfo)}
+          </div>
+        </div>
         
-        {/* Print View - Only visible when printing */}
         <div className="hidden print:block print:fixed print:inset-0 print:z-50 print:bg-white print:p-0 print:m-0">
           {renderRentalAgreementDocument(agreementInfo)}
         </div>
@@ -1199,10 +1599,17 @@ const RentalAgreementPage: React.FC = () => {
 
   return (
     <>
-      {/* Print-only rental agreement document - hidden on screen, visible when printing */}
+      {/* Print-only rental agreement document */}
       {selectedAgreement && (
         <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white">
           {renderRentalAgreementDocument(getRentalAgreementInfo(selectedAgreement.id))}
+        </div>
+      )}
+
+      {/* Print-only gatepass document */}
+      {generatedGatePass && (
+        <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white">
+          {renderGatePassDocument(generatedGatePass)}
         </div>
       )}
 
@@ -1229,7 +1636,7 @@ const RentalAgreementPage: React.FC = () => {
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Rental Agreement</h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                   Overview of all rental agreements with their details, customer information, and
-                  outstanding balances.
+                  outstanding balances. Rental agreements can be created from purchase requests.
                 </p>
               </div>
               <Tooltip content="Create Rental Agreement">
@@ -1256,548 +1663,10 @@ const RentalAgreementPage: React.FC = () => {
           </div>
         </main>
 
-        {/* Create Rental Agreement Modal - UPDATED */}
-        {isCreateModalOpen && (
-          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  Create Rental Agreement
-                </h2>
-                <button
-                  onClick={handleCloseCreateModal}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Modal Content - Scrollable */}
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="space-y-6">
-                  {/* Agreement Details Section */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      Agreement Details
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Customer <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={customerId}
-                          onChange={(e) => setCustomerId(e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                            formErrors.customerId
-                              ? 'border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                        >
-                          <option value="">Select Customer</option>
-                          {mockCustomers.map((customer) => (
-                            <option key={customer.id} value={customer.id}>
-                              {customer.name}
-                            </option>
-                          ))}
-                        </select>
-                        {formErrors.customerId && (
-                          <p className="mt-1 text-sm text-red-500">{formErrors.customerId}</p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Start Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                            formErrors.startDate
-                              ? 'border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                        />
-                        {formErrors.startDate && (
-                          <p className="mt-1 text-sm text-red-500">{formErrors.startDate}</p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          End Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          min={startDate}
-                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                            formErrors.endDate
-                              ? 'border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                        />
-                        {formErrors.endDate && (
-                          <p className="mt-1 text-sm text-red-500">{formErrors.endDate}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Machines Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machines</h3>
-                      <button
-                        type="button"
-                        onClick={handleAddMachine}
-                        className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Add Machine
-                      </button>
-                    </div>
-                    {machines.map((machine, index) => (
-                      <div
-                        key={machine.id}
-                        className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Machine {index + 1}
-                          </span>
-                          {machines.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveMachine(machine.id)}
-                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Brand <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={machine.brand}
-                              onChange={(e) => handleMachineChange(machine.id, 'brand', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`machine_brand_${index}`]
-                                  ? 'border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                            >
-                              <option value="">Select Brand</option>
-                              {mockMachineBrands.map((brand) => (
-                                <option key={brand} value={brand}>
-                                  {brand}
-                                </option>
-                              ))}
-                            </select>
-                            {formErrors[`machine_brand_${index}`] && (
-                              <p className="mt-1 text-sm text-red-500">
-                                {formErrors[`machine_brand_${index}`]}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Model <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={machine.model}
-                              onChange={(e) => handleMachineChange(machine.id, 'model', e.target.value)}
-                              disabled={!machine.brand}
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`machine_model_${index}`]
-                                  ? 'border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
-                            >
-                              <option value="">Select Model</option>
-                              {getAvailableModels(machine.brand).map((model) => (
-                                <option key={model} value={model}>
-                                  {model}
-                                </option>
-                              ))}
-                            </select>
-                            {formErrors[`machine_model_${index}`] && (
-                              <p className="mt-1 text-sm text-red-500">
-                                {formErrors[`machine_model_${index}`]}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Type <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={machine.type}
-                              onChange={(e) => handleMachineChange(machine.id, 'type', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`machine_type_${index}`]
-                                  ? 'border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                            >
-                              <option value="">Select Type</option>
-                              {mockMachineTypes.map((type) => (
-                                <option key={type} value={type}>
-                                  {type}
-                                </option>
-                              ))}
-                            </select>
-                            {formErrors[`machine_type_${index}`] && (
-                              <p className="mt-1 text-sm text-red-500">
-                                {formErrors[`machine_type_${index}`]}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Number of Machines <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={machine.quantity}
-                              onChange={(e) =>
-                                handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
-                              }
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                formErrors[`machine_quantity_${index}`]
-                                  ? 'border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                            />
-                            {formErrors[`machine_quantity_${index}`] && (
-                              <p className="mt-1 text-sm text-red-500">
-                                {formErrors[`machine_quantity_${index}`]}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Add-ons Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons</h3>
-                      <button
-                        type="button"
-                        onClick={handleAddAddOn}
-                        className="inline-flex items-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Add Add-on
-                      </button>
-                    </div>
-                    {addOns.length === 0 ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                        No add-ons added. Click "Add Add-on" to add one.
-                      </p>
-                    ) : (
-                      addOns.map((addOn, index) => (
-                        <div
-                          key={addOn.id}
-                          className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                              Add-on {index + 1}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveAddOn(addOn.id)}
-                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Machine ID <span className="text-red-500">*</span>
-                              </label>
-                              <select
-                                value={addOn.machineId}
-                                onChange={(e) => handleAddOnChange(addOn.id, 'machineId', e.target.value)}
-                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                  formErrors[`addon_machine_${index}`]
-                                    ? 'border-red-500'
-                                    : 'border-gray-300 dark:border-slate-600'
-                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                              >
-                                <option value="">Select Machine</option>
-                                {getAvailableMachineIds().map((m) => (
-                                  <option key={m.id} value={m.id}>
-                                    {m.label}
-                                  </option>
-                                ))}
-                              </select>
-                              {formErrors[`addon_machine_${index}`] && (
-                                <p className="mt-1 text-sm text-red-500">
-                                  {formErrors[`addon_machine_${index}`]}
-                                </p>
-                              )}
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Add-on ID <span className="text-red-500">*</span>
-                              </label>
-                              <select
-                                value={addOn.addOnId}
-                                onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
-                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                  formErrors[`addon_id_${index}`]
-                                    ? 'border-red-500'
-                                    : 'border-gray-300 dark:border-slate-600'
-                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                              >
-                                <option value="">Select Add-on</option>
-                                {mockAddOns.map((ao) => (
-                                  <option key={ao.id} value={ao.id}>
-                                    {ao.name} (Rs. {ao.price.toLocaleString('en-LK')})
-                                  </option>
-                                ))}
-                              </select>
-                              {formErrors[`addon_id_${index}`] && (
-                                <p className="mt-1 text-sm text-red-500">
-                                  {formErrors[`addon_id_${index}`]}
-                                </p>
-                              )}
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Number of Add-ons <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                value={addOn.quantity}
-                                onChange={(e) =>
-                                  handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)
-                                }
-                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                                  formErrors[`addon_quantity_${index}`]
-                                    ? 'border-red-500'
-                                    : 'border-gray-300 dark:border-slate-600'
-                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                              />
-                              {formErrors[`addon_quantity_${index}`] && (
-                                <p className="mt-1 text-sm text-red-500">
-                                  {formErrors[`addon_quantity_${index}`]}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Pricing Section */}
-                  <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-3">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Pricing</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Standard Price Per Machine:
-                        </span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          Rs.{' '}
-                          {pricing.standardPricePerMachine.toLocaleString('en-LK', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Total Price for Machines:
-                        </span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          Rs.{' '}
-                          {pricing.totalMachinePrice.toLocaleString('en-LK', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                      </div>
-                      {addOns.length > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600 dark:text-gray-400">
-                            Total Price with Add-ons:
-                          </span>
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            Rs.{' '}
-                            {pricing.totalPrice.toLocaleString('en-LK', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Terms & Conditions Section - UPDATED */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Terms and Conditions
-                    </h3>
-                    <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-3">
-                      <div className="text-sm text-gray-900 dark:text-white space-y-3">
-                        <p>
-                          <span className="font-semibold">(01)</span> You have to be paid in cash double monthly rental fee on the date of rent machine issues. 
-                          The excess payment would be immediately return to you as and when you returned the hired 
-                          machine within the stipulated period.
-                        </p>
-                        <p>
-                          <span className="font-semibold">(02)</span> Above payment has to be paid 05 days prior to next month.
-                        </p>
-                        <p>
-                          <span className="font-semibold">(03)</span> Customer has to take total responsibility with regard to security of the machine.
-                        </p>
-                        <p>
-                          <span className="font-semibold">(04)</span> Both the parties can withdraw or return the machine with one month prior notice.
-                        </p>
-                        <p>
-                          <span className="font-semibold">(05)</span> Company will examine the machine at the point of returning and will release due security deposit.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Customer Signature Section - UPDATED */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Customer Signature
-                    </h3>
-                    <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Customer Signature <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={signature}
-                          onChange={(e) => setSignature(e.target.value)}
-                          placeholder="Enter customer signature"
-                          className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                            formErrors.signature
-                              ? 'border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                        />
-                        {formErrors.signature && (
-                          <p className="mt-1 text-sm text-red-500">{formErrors.signature}</p>
-                        )}
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 italic">
-                          (Agreed upon the terms & Conditions)
-                        </p>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            ID NO <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={customerIdNo}
-                            onChange={(e) => setCustomerIdNo(e.target.value)}
-                            placeholder="e.g., 72348.961V"
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors.customerIdNo
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          />
-                          {formErrors.customerIdNo && (
-                            <p className="mt-1 text-sm text-red-500">{formErrors.customerIdNo}</p>
-                          )}
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Full Name <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={customerFullName}
-                            onChange={(e) => setCustomerFullName(e.target.value)}
-                            placeholder="Enter full name"
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors.customerFullName
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          />
-                          {formErrors.customerFullName && (
-                            <p className="mt-1 text-sm text-red-500">{formErrors.customerFullName}</p>
-                          )}
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Date <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="date"
-                            value={customerSignatureDate}
-                            onChange={(e) => setCustomerSignatureDate(e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                              formErrors.customerSignatureDate
-                                ? 'border-red-500'
-                                : 'border-gray-300 dark:border-slate-600'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                          />
-                          {formErrors.customerSignatureDate && (
-                            <p className="mt-1 text-sm text-red-500">{formErrors.customerSignatureDate}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={handleCloseCreateModal}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmitCreate}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? 'Creating...' : 'Create Agreement & Download'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* View Rental Agreement Modal - Updated with print functionality */}
+        {/* View Rental Agreement Modal */}
         {isViewModalOpen && selectedAgreement && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Modal Header */}
               <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                 <div>
                   <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
@@ -1824,7 +1693,6 @@ const RentalAgreementPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Modal Content - Scrollable */}
               <div className="flex-1 overflow-y-auto p-6">{renderAgreementDetails()}</div>
             </div>
           </div>
@@ -1834,7 +1702,6 @@ const RentalAgreementPage: React.FC = () => {
         {isUpdateModalOpen && selectedAgreement && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Modal Header */}
               <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                   Update Rental Agreement
@@ -1847,7 +1714,6 @@ const RentalAgreementPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Modal Content - Scrollable */}
               <div className="flex-1 overflow-y-auto p-6">
                 <UpdateForm
                   title="Update Rental Agreement Details"
@@ -1866,8 +1732,162 @@ const RentalAgreementPage: React.FC = () => {
           </div>
         )}
 
-        {/* QR Scanner Modal */}
-        {renderQRScannerModal()}
+        {/* Generate Gatepass Modal */}
+        {isGatePassModalOpen && selectedAgreement && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <div>
+                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                    Generate Gatepass
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    Agreement: {selectedAgreement.agreementNo}
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseGatePassModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 relative">
+                {!generatedGatePass ? (
+                  // Gatepass Form
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Vehicle Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={vehicleNumber}
+                          onChange={(e) => setVehicleNumber(e.target.value)}
+                          placeholder="Enter vehicle number"
+                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Driver Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={driverName}
+                          onChange={(e) => setDriverName(e.target.value)}
+                          placeholder="Enter driver name"
+                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Returnable
+                        </label>
+                        <select
+                          value={returnable ? 'true' : 'false'}
+                          onChange={(e) => setReturnable(e.target.value === 'true')}
+                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                        >
+                          <option value="true">YES</option>
+                          <option value="false">NO</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Entry
+                        </label>
+                        <select
+                          value={entry}
+                          onChange={(e) => setEntry(e.target.value as 'IN' | 'OUT')}
+                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                        >
+                          <option value="OUT">OUT</option>
+                          <option value="IN">IN</option>
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Issued By
+                        </label>
+                        <input
+                          type="text"
+                          value={issuedBy}
+                          onChange={(e) => setIssuedBy(e.target.value)}
+                          placeholder="Enter issuer name (optional)"
+                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={handleCloseGatePassModal}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCreateGatePass}
+                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 dark:bg-green-700 rounded-lg hover:bg-green-700 dark:hover:bg-green-800 transition-colors"
+                      >
+                        Generate Gatepass
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Generated Gatepass View with sticky buttons
+                  <div className="relative">
+                    {/* Sticky Header with Buttons */}
+                    <div className="sticky top-0 z-10 bg-white dark:bg-slate-800 pb-4 mb-4 border-b border-gray-200 dark:border-slate-700 -mx-6 px-6 pt-2 -mt-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            Gatepass Generated
+                          </h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            Gatepass No: {generatedGatePass.gatepassNo}
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={handlePrintGatePass}
+                            className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
+                          >
+                            <Printer className="w-4 h-4" />
+                            <span>Print</span>
+                          </button>
+                          <button
+                            onClick={() => setGeneratedGatePass(null)}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
+                          >
+                            Edit Details
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Scrollable Gatepass Content */}
+                    <div className="print:hidden">
+                      {renderGatePassDocument(generatedGatePass)}
+                    </div>
+                    <div className="hidden print:block">
+                      {renderGatePassDocument(generatedGatePass)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

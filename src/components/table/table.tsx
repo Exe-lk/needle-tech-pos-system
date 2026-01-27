@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 
 export interface TableColumn {
@@ -9,6 +9,7 @@ export interface TableColumn {
   label: string;
   sortable?: boolean;
   filterable?: boolean;
+  filterType?: 'select' | 'dateRange'; // New: support date range filtering
   render?: (value: any, row: any) => React.ReactNode;
 }
 
@@ -19,6 +20,7 @@ export interface ActionButton {
   icon?: React.ReactNode;
   variant?: 'primary' | 'secondary' | 'danger' | 'warning';
   tooltip?: string;
+  shouldShow?: (row: any) => boolean; // Add conditional visibility support
 }
 
 export interface TableProps {
@@ -34,7 +36,7 @@ export interface TableProps {
   onCreateClick?: () => void;
   createButtonLabel?: string;
   getRowClassName?: (row: any) => string;
-  maxHeight?: string | 'none'; // Optional: custom max height for table container
+  maxHeight?: string | 'none';
 }
 
 const Table: React.FC<TableProps> = ({
@@ -50,13 +52,14 @@ const Table: React.FC<TableProps> = ({
   onCreateClick,
   createButtonLabel = 'Create',
   getRowClassName,
-  maxHeight, // Allow override, but we'll calculate a better default
+  maxHeight,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [dateRangeFilters, setDateRangeFilters] = useState<Record<string, { from: string; to: string }>>({});
   const [showFilters, setShowFilters] = useState(false);
   const [pageSize, setPageSize] = useState(itemsPerPage);
   const [calculatedHeight, setCalculatedHeight] = useState<string>('calc(100vh - 280px)');
@@ -64,20 +67,13 @@ const Table: React.FC<TableProps> = ({
   // Calculate responsive height based on viewport
   useEffect(() => {
     const calculateHeight = () => {
-      // Get viewport height
       const vh = window.innerHeight;
 
-      // Calculate based on screen size
-      // For larger screens (desktop), use more space
-      // For smaller screens (tablet/mobile), use less space
       if (vh >= 1024) {
-        // Desktop: Subtract navbar (~80px), page header (~120px), padding (~80px)
         setCalculatedHeight('calc(100vh - 280px)');
       } else if (vh >= 768) {
-        // Tablet: Adjust for medium screens
         setCalculatedHeight('calc(100vh - 240px)');
       } else {
-        // Mobile: More conservative
         setCalculatedHeight('calc(100vh - 200px)');
       }
     };
@@ -92,7 +88,7 @@ const Table: React.FC<TableProps> = ({
     setPageSize(itemsPerPage);
   }, [itemsPerPage]);
 
-  // Get display value for filtering and searching (purely generic)
+  // Get display value for filtering and searching
   const getDisplayValue = (value: any): string => {
     if (value === null || value === undefined) return '';
 
@@ -100,7 +96,6 @@ const Table: React.FC<TableProps> = ({
       return String(value);
     }
 
-    // Basic handling for objects (you can customize per column via render in the caller)
     if (typeof value === 'object') {
       if ('name' in value && typeof (value as any).name === 'string') {
         return (value as any).name;
@@ -136,7 +131,7 @@ const Table: React.FC<TableProps> = ({
       );
     }
 
-    // Column filters
+    // Column filters (select type)
     Object.entries(filters).forEach(([key, filterValue]) => {
       if (!filterValue) return;
 
@@ -146,6 +141,43 @@ const Table: React.FC<TableProps> = ({
         const displayValue = getDisplayValue(value);
         return displayValue.toLowerCase().includes(lower);
       });
+    });
+
+    // Date range filters
+    Object.entries(dateRangeFilters).forEach(([key, dateRange]) => {
+      if (dateRange.from || dateRange.to) {
+        filtered = filtered.filter((row) => {
+          const rowValue = row[key];
+          
+          // Handle date strings (YYYY-MM-DD format)
+          if (typeof rowValue === 'string') {
+            const rowDate = rowValue.split(' ')[0]; // Extract date part if time is included
+            
+            if (dateRange.from && rowDate < dateRange.from) {
+              return false;
+            }
+            if (dateRange.to && rowDate > dateRange.to) {
+              return false;
+            }
+            return true;
+          }
+          
+          // Handle Date objects
+          if (rowValue instanceof Date) {
+            const rowDateStr = rowValue.toISOString().split('T')[0];
+            
+            if (dateRange.from && rowDateStr < dateRange.from) {
+              return false;
+            }
+            if (dateRange.to && rowDateStr > dateRange.to) {
+              return false;
+            }
+            return true;
+          }
+          
+          return true;
+        });
+      }
     });
 
     // Sorting
@@ -160,6 +192,12 @@ const Table: React.FC<TableProps> = ({
           bValue = Number(bValue);
         }
 
+        // Date sort if possible
+        if (aValue && bValue && !isNaN(Date.parse(aValue)) && !isNaN(Date.parse(bValue))) {
+          aValue = new Date(aValue).getTime();
+          bValue = new Date(bValue).getTime();
+        }
+
         if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
         return 0;
@@ -167,7 +205,7 @@ const Table: React.FC<TableProps> = ({
     }
 
     return filtered;
-  }, [data, searchTerm, filters, sortColumn, sortDirection, columns]);
+  }, [data, searchTerm, filters, dateRangeFilters, sortColumn, sortDirection, columns]);
 
   // Calculate pagination values
   const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
@@ -177,7 +215,7 @@ const Table: React.FC<TableProps> = ({
   // Reset to page 1 when search term or filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filters]);
+  }, [searchTerm, filters, dateRangeFilters]);
 
   // Ensure current page is valid when filtered data or page size changes
   useEffect(() => {
@@ -200,7 +238,7 @@ const Table: React.FC<TableProps> = ({
     }
   };
 
-  // Filter change
+  // Filter change (for select type filters)
   const handleFilterChange = (columnKey: string, value: string) => {
     setFilters((prev) => ({
       ...prev,
@@ -209,9 +247,22 @@ const Table: React.FC<TableProps> = ({
     setCurrentPage(1);
   };
 
+  // Date range filter change
+  const handleDateRangeChange = (columnKey: string, type: 'from' | 'to', value: string) => {
+    setDateRangeFilters((prev) => ({
+      ...prev,
+      [columnKey]: {
+        ...(prev[columnKey] || { from: '', to: '' }),
+        [type]: value,
+      },
+    }));
+    setCurrentPage(1);
+  };
+
   // Clear filters
   const clearFilters = () => {
     setFilters({});
+    setDateRangeFilters({});
     setSearchTerm('');
     setCurrentPage(1);
   };
@@ -228,7 +279,7 @@ const Table: React.FC<TableProps> = ({
   };
 
   const handleNextPage = () => {
-    setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+    setCurrentPage((prev) => Math.min(totalPages, prev - 1));
   };
 
   // Action button styles
@@ -258,6 +309,10 @@ const Table: React.FC<TableProps> = ({
 
   const showHeader = searchable || filterable || !!onCreateClick;
 
+  // Check if any filters are active
+  const hasActiveFilters = searchTerm || 
+    Object.values(filters).some((f) => f) || 
+    Object.values(dateRangeFilters).some((dr) => dr.from || dr.to);
 
   return (
     <div
@@ -299,7 +354,7 @@ const Table: React.FC<TableProps> = ({
               )}
 
               {/* Clear Filters */}
-              {(searchTerm || Object.values(filters).some((f) => f)) && (
+              {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
                   className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
@@ -327,40 +382,75 @@ const Table: React.FC<TableProps> = ({
             <div className="flex flex-wrap gap-3">
               {columns
                 .filter((col) => col.filterable)
-                .map((column) => (
-                  <div key={column.key} className="flex items-center">
-                    <div className="relative">
-                      <select
-                        value={filters[column.key] || ''}
-                        onChange={(e) => handleFilterChange(column.key, e.target.value)}
-                        className="appearance-none bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-full px-4 py-2 pr-8 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
-                      >
-                        <option value="">{column.label}</option>
-                        {getFilterOptions(column.key).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                        <svg
-                          className="w-4 h-4 text-gray-400 dark:text-gray-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                .map((column) => {
+                  const filterType = column.filterType || 'select';
+                  
+                  if (filterType === 'dateRange') {
+                    const dateRange = dateRangeFilters[column.key] || { from: '', to: '' };
+                    
+                    return (
+                      <div key={column.key} className="flex items-center space-x-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2">
+                        <Calendar className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                        <div className="flex items-center space-x-2">
+                          <div className="flex flex-col">
+                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">From</label>
+                            <input
+                              type="date"
+                              value={dateRange.from}
+                              onChange={(e) => handleDateRangeChange(column.key, 'from', e.target.value)}
+                              className="border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">To</label>
+                            <input
+                              type="date"
+                              value={dateRange.to}
+                              onChange={(e) => handleDateRangeChange(column.key, 'to', e.target.value)}
+                              className="border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Default select filter
+                  return (
+                    <div key={column.key} className="flex items-center">
+                      <div className="relative">
+                        <select
+                          value={filters[column.key] || ''}
+                          onChange={(e) => handleFilterChange(column.key, e.target.value)}
+                          className="appearance-none bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-full px-4 py-2 pr-8 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                          <option value="">{column.label}</option>
+                          {getFilterOptions(column.key).map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                          <svg
+                            className="w-4 h-4 text-gray-400 dark:text-gray-500"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           )}
         </div>
       )}
 
-      {/* Table Container with flexible height - grows to content but respects maxHeight */}
+      {/* Table Container with flexible height */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0" style={{
           scrollbarWidth: 'thin',
@@ -425,41 +515,53 @@ const Table: React.FC<TableProps> = ({
                   </td>
                 </tr>
               ) : (
-                paginatedData.map((row, index) => (
-                  <tr
-                    key={index}
-                    className={`hover:bg-gray-50 dark:hover:bg-slate-700/50 ${getRowClassName ? getRowClassName(row) : ''
-                      }`}
-                  >
-                    {columns.map((column) => (
-                      <td key={column.key} className="px-6 py-4 text-sm text-gray-900 dark:text-white whitespace-nowrap">
-                        {column.render ? column.render(row[column.key], row) : row[column.key]}
-                      </td>
-                    ))}
-                    {actions.length > 0 && (
-                      <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
-                        <div className="flex space-x-2">
-                          {actions.map((action, actionIndex) => (
-                            <Tooltip
-                              key={actionIndex}
-                              content={action.tooltip || action.label?.toString() || 'Action'}
-                              position="top"
-                            >
-                              <button
+                paginatedData.map((row, index) => {
+                  // Filter actions based on shouldShow for each row
+                  const visibleActions = actions.filter(action => 
+                    !action.shouldShow || action.shouldShow(row)
+                  );
+
+                  return (
+                    <tr
+                      key={index}
+                      className={`hover:bg-gray-50 dark:hover:bg-slate-700/50 ${getRowClassName ? getRowClassName(row) : ''
+                        }`}
+                    >
+                      {columns.map((column) => (
+                        <td key={column.key} className="px-6 py-4 text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                          {column.render ? column.render(row[column.key], row) : row[column.key]}
+                        </td>
+                      ))}
+                      {visibleActions.length > 0 && (
+                        <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                          <div className="flex space-x-2">
+                            {visibleActions.map((action, actionIndex) => (
+                              <Tooltip
                                 key={actionIndex}
-                                onClick={() => action.onClick(row)}
-                                className={action.className || getActionButtonStyles(action.variant)}
+                                content={action.tooltip || action.label?.toString() || 'Action'}
+                                position="top"
                               >
-                                {action.icon && <span className="mr-1">{action.icon}</span>}
-                                {action.label}
-                              </button>
-                            </Tooltip>
-                          ))}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
+                                <button
+                                  key={actionIndex}
+                                  onClick={() => action.onClick(row)}
+                                  className={action.className || getActionButtonStyles(action.variant)}
+                                >
+                                  {action.icon && <span className="mr-1">{action.icon}</span>}
+                                  {action.label}
+                                </button>
+                              </Tooltip>
+                            ))}
+                          </div>
+                        </td>
+                      )}
+                      {visibleActions.length === 0 && actions.length > 0 && (
+                        <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                          {/* Empty cell to maintain table structure */}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

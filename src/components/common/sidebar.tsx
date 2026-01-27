@@ -16,7 +16,11 @@ import {
     BarChart3,
     Boxes,
     History,
-    Clipboard
+    Clipboard,
+    ChevronDown,
+    ChevronUp,
+    ShoppingCart,
+    Wrench,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -62,12 +66,17 @@ const Sidebar: React.FC<SidebarProps> = ({
             href: '/dashboard',
         },
         {
+            icon: ShoppingCart,
+            label: 'Purchase Order',
+            href: '/purchase-order',
+        },
+        {
             icon: Users,
             label: 'Customer Management',
             href: '/customers',
         },
         {
-            icon: Truck,
+            icon: Wrench,
             label: 'Machine Management',
             href: '/machines',
         },
@@ -103,22 +112,22 @@ const Sidebar: React.FC<SidebarProps> = ({
         },
         {
             icon: History,
-            label: 'Transaction Log ',
+            label: 'Transaction Log',
             href: '/transaction-log',
         },
         {
             icon: Clipboard,
-            label: ' Bincard',
+            label: 'Bincard',
             href: '/bincard',
         },
         {
             icon: BarChart3,
-            label: 'Analytics ',
+            label: 'Analytics',
             href: '/analytics'
         },
         {
             icon: Shield,
-            label: 'User Management ',
+            label: 'User Management',
             href: '/users'
         },
     ];
@@ -164,56 +173,99 @@ const Sidebar: React.FC<SidebarProps> = ({
         }
     };
 
+    // Handle navigation without expanding sidebar
+    const handleNavigation = (href: string) => {
+        if (href) {
+            window.location.href = href;
+            if (onMobileClose) onMobileClose();
+            // Explicitly prevent sidebar expansion - navigation happens without changing isExpanded state
+        }
+    };
+
     // Calculate sidebar position and height based on navbar presence
     const sidebarTop = hasNavbar ? `${navbarHeight}px` : '0';
     const sidebarHeight = hasNavbar ? `calc(100vh - ${navbarHeight}px)` : '100vh';
 
-    // Tooltip component for consistent styling
+    // Enhanced Tooltip component with better styling
     const Tooltip = ({ label, className: tooltipClassName = '' }: { label: string; className?: string }) => (
-        <div className={`absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-slate-800 dark:bg-slate-700 text-white px-2 py-1.5 rounded-md text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-[9999] whitespace-nowrap shadow-lg ${tooltipClassName}`}>
+        <div className={`absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900 dark:bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-medium opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-[9999] whitespace-nowrap shadow-xl ${tooltipClassName}`}>
             {label.trim()}
-            {/* Tooltip arrow */}
-            <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-800 dark:border-r-slate-700"></div>
+            {/* Enhanced tooltip arrow */}
+            <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900 dark:border-r-slate-700"></div>
         </div>
     );
 
     return (
         <>
             <div
-                className={`bg-[#F6F9FF] dark:bg-slate-900 fixed left-0 z-50 transition-[width,transform] duration-300 ease-in-out ${isExpanded ? 'w-[300px]' : 'w-16'
+                className={`bg-gradient-to-b from-[#F6F9FF] to-white dark:from-slate-900 dark:to-slate-950 fixed left-0 z-50 transition-all duration-300 ease-in-out ${isExpanded ? 'w-[280px]' : 'w-[72px]'
                     } flex flex-col ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-                    } border-r border-gray-200 dark:border-slate-800 ${className}`}
+                    } border-r border-gray-200/80 dark:border-slate-800/80 backdrop-blur-sm ${className}`}
                 style={{
                     top: sidebarTop,
                     height: sidebarHeight,
-                    overflow: 'visible', // Allow tooltips to escape
+                    overflow: 'visible',
                 }}
             >
-                {/* Top Section - Collapse/Expand Toggle Button */}
-                <div className={`border-b border-gray-200 dark:border-slate-800 ${isExpanded ? 'p-4' : 'p-2'}`} style={{ overflow: 'visible' }}>
-                    <button
-                        onClick={toggleSidebar}
-                        className={`flex items-center rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-indigo-400 group relative w-full ${isExpanded ? 'p-3' : 'p-2 justify-center'}`}
-                        aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-                        style={{ overflow: 'visible' }}
-                    >
-                        {isExpanded ? (
-                            <>
-                                <ChevronLeft className="w-5 h-5 flex-shrink-0" />
-                                
-                            </>
-                        ) : (
-                            <>
-                                <ChevronRight className="w-5 h-5 flex-shrink-0" />
-                                <Tooltip label="Expand" />
-                            </>
-                        )}
-                    </button>
-                </div>
+                {/* Floating Collapse/Expand Toggle Button - Positioned on Right Edge, Vertically Centered */}
+                <button
+                    onClick={toggleSidebar}
+                    className={`
+                        absolute top-1/2 -translate-y-1/2 z-[60] 
+                        ${isExpanded ? 'left-full -ml-5' : 'left-full -ml-5'}
+                        w-11 h-11 
+                        rounded-full 
+                        bg-white dark:bg-slate-800 
+                        border-2 border-blue-300 dark:border-indigo-600
+                        shadow-lg hover:shadow-2xl
+                        flex items-center justify-center
+                        transition-all duration-300 ease-in-out
+                        group
+                        hover:bg-blue-50 dark:hover:bg-indigo-900/40
+                        hover:border-blue-500 dark:hover:border-indigo-400
+                        hover:scale-110
+                        active:scale-95
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-indigo-400
+                        backdrop-blur-sm
+                    `}
+                    aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                >
+                    {isExpanded ? (
+                        <ChevronLeft 
+                            className="w-5 h-5 text-blue-600 dark:text-indigo-400 transition-transform duration-300 group-hover:text-blue-700 dark:group-hover:text-indigo-300" 
+                        />
+                    ) : (
+                        <>
+                            <ChevronRight 
+                                className="w-5 h-5 text-blue-600 dark:text-indigo-400 transition-transform duration-300 group-hover:text-blue-700 dark:group-hover:text-indigo-300" 
+                            />
+                            <Tooltip label="Expand Sidebar" />
+                        </>
+                    )}
+                </button>
 
-                {/* Menu Sections - Start from top with padding */}
-                <nav className={`flex-1 ${isExpanded ? 'p-4 overflow-y-auto' : 'p-2 overflow-visible'}`} style={{ overflow: isExpanded ? 'auto' : 'visible' }}>
-                    <ul className="space-y-2" style={{ overflow: 'visible' }}>
+                {/* Top Section - Logo/Brand Area */}
+                {isExpanded && (
+                    <div className="px-6 py-5 border-b border-gray-200/60 dark:border-slate-800/60">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700 flex items-center justify-center shadow-lg">
+                                <Monitor className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="flex flex-col">
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">
+                                    NeedleTech
+                                </h2>
+                                <span className="text-[10px] text-gray-500 dark:text-slate-400 font-medium">
+                                    POS System
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Menu Sections - Enhanced with better spacing and styling */}
+                <nav className={`flex-1 ${isExpanded ? 'px-3 py-4 overflow-y-auto' : 'px-2 py-4 overflow-visible'}`} style={{ overflow: isExpanded ? 'auto' : 'visible' }}>
+                    <ul className="space-y-1" style={{ overflow: 'visible' }}>
                         {menuSections.map((section, index) => {
                             const sectionActive = isSectionActive(section);
                             const hasChildren = !!section.children && section.children.length > 0;
@@ -223,18 +275,18 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                             return (
                                 <li key={index} style={{ overflow: 'visible', position: 'relative' }}>
-                                    {/* Parent item */}
+                                    {/* Parent item with enhanced styling */}
                                     <div
-                                        className={`flex items-center rounded-lg transition-[background-color,box-shadow] duration-150 group relative cursor-pointer ${isExpanded ? 'p-3' : 'p-2 justify-center'} ${sectionActive
-                                            ? 'bg-white dark:bg-slate-800 shadow-sm text-blue-600 dark:text-indigo-400 font-semibold border border-blue-100 dark:border-indigo-500/30'
-                                            : 'text-gray-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm hover:text-blue-600 dark:hover:text-indigo-400'
+                                        className={`group relative flex items-center rounded-xl transition-all duration-200 cursor-pointer ${isExpanded ? 'px-3 py-2.5' : 'px-2 py-2.5 justify-center'} ${sectionActive
+                                            ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-indigo-950/50 dark:to-blue-950/50 text-blue-700 dark:text-indigo-300 font-semibold shadow-sm border-l-4 border-blue-600 dark:border-indigo-400'
+                                            : 'text-gray-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800/50 hover:text-blue-600 dark:hover:text-indigo-400 hover:shadow-sm'
                                             }`}
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                            e.preventDefault();
                                             if (hasChildren) {
                                                 toggleGroup(section.label);
                                             } else if (section.href) {
-                                                window.location.href = section.href;
-                                                if (onMobileClose) onMobileClose();
+                                                handleNavigation(section.href);
                                             }
                                         }}
                                         role="button"
@@ -246,42 +298,57 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 if (hasChildren) {
                                                     toggleGroup(section.label);
                                                 } else if (section.href) {
-                                                    window.location.href = section.href;
-                                                    if (onMobileClose) onMobileClose();
+                                                    handleNavigation(section.href);
                                                 }
                                             }
                                         }}
                                         style={{ overflow: 'visible' }}
                                     >
+                                        {/* Active indicator bar */}
+                                        {sectionActive && !isExpanded && (
+                                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-600 dark:bg-indigo-400 rounded-r-full" />
+                                        )}
+                                        
                                         <section.icon
-                                            className={`w-5 h-5 flex-shrink-0 ${sectionActive ? 'text-blue-600 dark:text-indigo-400' : ''
+                                            className={`w-5 h-5 flex-shrink-0 transition-colors duration-200 ${sectionActive 
+                                                ? 'text-blue-600 dark:text-indigo-400' 
+                                                : 'text-gray-600 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-indigo-400'
                                                 }`}
                                         />
+                                        
                                         {isExpanded && (
-                                            <span className="ml-3 text-sm font-medium whitespace-nowrap flex-1">
-                                                {section.label}
-                                            </span>
+                                            <>
+                                                <span className="ml-3 text-sm font-medium whitespace-nowrap flex-1 transition-colors duration-200">
+                                                    {section.label}
+                                                </span>
+                                                
+                                                {hasChildren && (
+                                                    <div className="ml-2 flex-shrink-0">
+                                                        {groupOpen ? (
+                                                            <ChevronUp className="w-4 h-4 text-gray-500 dark:text-slate-400" />
+                                                        ) : (
+                                                            <ChevronDown className="w-4 h-4 text-gray-500 dark:text-slate-400" />
+                                                        )}
+                                                    </div>
+                                                )}
+                                                
+                                                {section.adminOnly && (
+                                                    <span className="ml-2 text-[10px] px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 font-semibold">
+                                                        Admin
+                                                    </span>
+                                                )}
+                                            </>
                                         )}
+                                        
                                         {!isExpanded && (
                                             <Tooltip label={section.label} />
                                         )}
-                                        {hasChildren && isExpanded && (
-                                            <span className="ml-2 text-xs text-gray-500 dark:text-slate-400">
-                                                {groupOpen ? '−' : '+'}
-                                            </span>
-                                        )}
-                                        {section.adminOnly && isExpanded && (
-                                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800">
-                                                Admin
-                                            </span>
-                                        )}
                                     </div>
 
-                                    {/* Children */}
-                                    {hasChildren && groupOpen && (
+                                    {/* Children with enhanced styling */}
+                                    {hasChildren && groupOpen && isExpanded && (
                                         <ul
-                                            className={`mt-1 ml-4 border-l border-gray-200 dark:border-slate-700 pl-3 space-y-1 ${isExpanded ? '' : 'hidden'
-                                                }`}
+                                            className="mt-1.5 ml-4 pl-4 border-l-2 border-gray-200 dark:border-slate-700 space-y-1"
                                             style={{ overflow: 'visible' }}
                                         >
                                             {section.children!.map((child, childIndex) => {
@@ -290,19 +357,22 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                     <li key={childIndex} style={{ overflow: 'visible', position: 'relative' }}>
                                                         <a
                                                             href={child.href}
-                                                            className={`flex items-center p-2 rounded-lg text-xs transition-[background-color,color] duration-150 group relative ${childActive
-                                                                ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-indigo-400 font-semibold shadow-sm border border-blue-100 dark:border-indigo-500/30'
-                                                                : 'text-gray-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-indigo-400'
+                                                            className={`group/child relative flex items-center px-3 py-2 rounded-lg text-xs transition-all duration-200 ${childActive
+                                                                ? 'bg-blue-50 dark:bg-indigo-950/30 text-blue-700 dark:text-indigo-300 font-semibold shadow-sm border-l-2 border-blue-600 dark:border-indigo-400'
+                                                                : 'text-gray-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/40 hover:text-blue-600 dark:hover:text-indigo-400'
                                                                 }`}
-                                                            onClick={onMobileClose}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                handleNavigation(child.href);
+                                                            }}
                                                             aria-label={child.label}
                                                             style={{ overflow: 'visible' }}
                                                         >
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-slate-500 mr-2" />
+                                                            <span className={`w-1.5 h-1.5 rounded-full mr-2.5 transition-colors duration-200 ${childActive 
+                                                                ? 'bg-blue-600 dark:bg-indigo-400' 
+                                                                : 'bg-gray-400 dark:bg-slate-500 group-hover/child:bg-blue-500 dark:group-hover/child:bg-indigo-400'
+                                                                }`} />
                                                             <span className="whitespace-nowrap">{child.label}</span>
-                                                            {!isExpanded && (
-                                                                <Tooltip label={child.label} />
-                                                            )}
                                                         </a>
                                                     </li>
                                                 );
@@ -315,15 +385,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                     </ul>
                 </nav>
 
-                {/* Bottom Section - Logout Button */}
-                <div className={`border-t border-gray-200 dark:border-slate-800 ${isExpanded ? 'p-4' : 'p-2'}`} style={{ overflow: 'visible' }}>
+                {/* Bottom Section - Logout Button with enhanced styling */}
+                <div className={`border-t border-gray-200/60 dark:border-slate-800/60 ${isExpanded ? 'px-3 py-4' : 'px-2 py-4'}`} style={{ overflow: 'visible' }}>
                     <button
                         onClick={handleLogout}
-                        className={`flex items-center rounded-lg hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition-[background-color,box-shadow,color] duration-150 text-gray-700 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 group relative w-full ${isExpanded ? 'p-3' : 'p-2 justify-center'}`}
+                        className={`group relative flex items-center rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 hover:shadow-sm transition-all duration-200 text-gray-700 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 w-full ${isExpanded ? 'px-3 py-2.5' : 'px-2 py-2.5 justify-center'}`}
                         aria-label="Logout"
                         style={{ overflow: 'visible' }}
                     >
-                        <LogOut className="w-5 h-5 flex-shrink-0" />
+                        <LogOut className="w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:rotate-12" />
                         {isExpanded && (
                             <span className="ml-3 text-sm font-medium">Logout</span>
                         )}
@@ -334,10 +404,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
             </div>
 
-            {/* Mobile Overlay */}
+            {/* Mobile Overlay with enhanced backdrop */}
             {isMobileOpen && (
                 <div
-                    className="fixed inset-0 backdrop-blur-md bg-black/10 dark:bg-black/40 z-40 lg:hidden"
+                    className="fixed inset-0 backdrop-blur-sm bg-black/20 dark:bg-black/50 z-40 lg:hidden transition-opacity duration-300"
                     onClick={onMobileClose}
                 />
             )}
