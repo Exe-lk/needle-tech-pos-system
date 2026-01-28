@@ -11,7 +11,7 @@ import { Eye, Pencil, Trash2, X } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 
-type CustomerType = 'Company' | 'Individual';
+type CustomerType = 'Business' | 'Customer';
 type CustomerStatus = 'Active' | 'Inactive' | 'Blocked';
 
 interface Customer {
@@ -26,7 +26,7 @@ interface Customer {
 interface CustomerInfo {
   id: number;
   name: string;
-  type: 'Company' | 'Individual';
+  type: 'Business' | 'Customer';
   nicNumber?: string;
   vatTin?: string;
   address: string;
@@ -90,35 +90,35 @@ const mockCustomers: Customer[] = [
   {
     id: 1,
     name: 'ABC Holdings (Pvt) Ltd',
-    type: 'Company',
+    type: 'Business',
     outstandingBalance: 120000.5,
     status: 'Active',
   },
   {
     id: 2,
     name: 'John Perera',
-    type: 'Individual',
+    type: 'Customer',
     outstandingBalance: 3500,
     status: 'Active',
   },
   {
     id: 3,
     name: 'XYZ Engineering',
-    type: 'Company',
+    type: 'Business',
     outstandingBalance: 0,
     status: 'Inactive',
   },
   {
     id: 4,
     name: 'Kamal Silva',
-    type: 'Individual',
+    type: 'Customer',
     outstandingBalance: 78000,
     status: 'Blocked',
   },
   {
     id: 5,
     name: 'Mega Constructions',
-    type: 'Company',
+    type: 'Business',
     outstandingBalance: 245000.75,
     status: 'Active',
   },
@@ -130,9 +130,9 @@ const getCustomerProfileData = (customerId: number): CustomerInfo => {
   return {
     id: customer?.id || 0,
     name: customer?.name || '',
-    type: customer?.type || 'Company',
-    vatTin: customer?.type === 'Company' ? 'VAT-123456789' : undefined,
-    nicNumber: customer?.type === 'Individual' ? '123456789V' : undefined,
+    type: customer?.type || 'Business',
+    vatTin: customer?.type === 'Business' ? 'VAT-123456789' : undefined,
+    nicNumber: customer?.type === 'Customer' ? '123456789V' : undefined,
     address: '123 Business Street, Colombo 05',
     phone: '+94 11 2345678',
     email: 'contact@example.lk',
@@ -375,7 +375,7 @@ const CustomerListPage: React.FC = () => {
 
   const handleUpdateCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
-    setActiveUpdateTab(customer.type === 'Company' ? 'company' : 'individual');
+    setActiveUpdateTab(customer.type === 'Business' ? 'company' : 'individual');
     setIsUpdateModalOpen(true);
   };
 
@@ -413,13 +413,13 @@ const CustomerListPage: React.FC = () => {
     }
   };
 
-  // Form fields for Company
+  // Form fields for Business
   const companyFields: FormField[] = [
     {
       name: 'companyName',
-      label: 'Company Name',
+      label: 'Business Name',
       type: 'text',
-      placeholder: 'Enter company name',
+      placeholder: 'Enter business name',
       required: true,
     },
     {
@@ -475,7 +475,7 @@ const CustomerListPage: React.FC = () => {
     },
   ];
 
-  // Form fields for Individual
+  // Form fields for Customer
   const individualFields: FormField[] = [
     {
       name: 'fullName',
@@ -536,7 +536,7 @@ const CustomerListPage: React.FC = () => {
 
     const customerInfo = getCustomerProfileData(customer.id);
 
-    if (customer.type === 'Company') {
+    if (customer.type === 'Business') {
       return {
         companyName: customerInfo.name,
         vatTin: customerInfo.vatTin || '',
@@ -578,8 +578,8 @@ const CustomerListPage: React.FC = () => {
   const handleCompanySubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      console.log('Create company payload:', data);
-      alert(`Company "${data.companyName}" created (frontend only).`);
+      console.log('Create business payload:', data);
+      alert(`Business "${data.companyName}" created (frontend only).`);
       handleCloseCreateModal();
     } finally {
       setIsSubmitting(false);
@@ -589,8 +589,8 @@ const CustomerListPage: React.FC = () => {
   const handleIndividualSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      console.log('Create individual payload:', data);
-      alert(`Individual customer "${data.fullName}" created (frontend only).`);
+      console.log('Create customer payload:', data);
+      alert(`Customer "${data.fullName}" created (frontend only).`);
       handleCloseCreateModal();
     } finally {
       setIsSubmitting(false);
@@ -600,8 +600,8 @@ const CustomerListPage: React.FC = () => {
   const handleCompanyUpdate = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      console.log('Update company payload:', data);
-      alert(`Company "${data.companyName}" updated (frontend only).`);
+      console.log('Update business payload:', data);
+      alert(`Business "${data.companyName}" updated (frontend only).`);
       handleCloseUpdateModal();
     } finally {
       setIsSubmitting(false);
@@ -611,8 +611,8 @@ const CustomerListPage: React.FC = () => {
   const handleIndividualUpdate = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      console.log('Update individual payload:', data);
-      alert(`Individual customer "${data.fullName}" updated (frontend only).`);
+      console.log('Update customer payload:', data);
+      alert(`Customer "${data.fullName}" updated (frontend only).`);
       handleCloseUpdateModal();
     } finally {
       setIsSubmitting(false);
@@ -1067,7 +1067,7 @@ const CustomerListPage: React.FC = () => {
             {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-slate-700 px-6">
               <div className="flex space-x-4">
-                <Tooltip content="Company">
+                <Tooltip content="Business">
                   <button
                     onClick={() => setActiveCreateTab('company')}
                     className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'company'
@@ -1075,10 +1075,10 @@ const CustomerListPage: React.FC = () => {
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                       }`}
                   >
-                    Company
+                    Business
                   </button>
                 </Tooltip>
-                <Tooltip content="Individual">
+                <Tooltip content="Customer">
                   <button
                     onClick={() => setActiveCreateTab('individual')}
                     className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'individual'
@@ -1086,7 +1086,7 @@ const CustomerListPage: React.FC = () => {
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                       }`}
                   >
-                    Individual
+                    Customer
                   </button>
                 </Tooltip>
               </div>
@@ -1096,7 +1096,7 @@ const CustomerListPage: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-6">
               {activeCreateTab === 'company' ? (
                 <CreateForm
-                  title="Company Details"
+                  title="Business Details"
                   fields={companyFields}
                   onSubmit={handleCompanySubmit}
                   onClear={handleClear}
@@ -1108,7 +1108,7 @@ const CustomerListPage: React.FC = () => {
                 />
               ) : (
                 <CreateForm
-                  title="Individual Details"
+                  title="Customer Details"
                   fields={individualFields}
                   onSubmit={handleIndividualSubmit}
                   onClear={handleClear}
@@ -1146,28 +1146,28 @@ const CustomerListPage: React.FC = () => {
             {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-slate-700 px-6">
               <div className="flex space-x-4">
-                <Tooltip content="Company">
+                <Tooltip content="Business">
                   <button
                     onClick={() => setActiveUpdateTab('company')}
-                    disabled={selectedCustomer.type === 'Individual'}
+                    disabled={selectedCustomer.type === 'Customer'}
                     className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeUpdateTab === 'company'
                         ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      } ${selectedCustomer.type === 'Individual' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      } ${selectedCustomer.type === 'Customer' ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    Company
+                    Business
                   </button>
                 </Tooltip>
-                <Tooltip content="Individual">
+                <Tooltip content="Customer">
                   <button
                     onClick={() => setActiveUpdateTab('individual')}
-                    disabled={selectedCustomer.type === 'Company'}
+                    disabled={selectedCustomer.type === 'Business'}
                     className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeUpdateTab === 'individual'
                         ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      } ${selectedCustomer.type === 'Company' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      } ${selectedCustomer.type === 'Business' ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    Individual
+                    Customer
                   </button>
                 </Tooltip>
               </div>
@@ -1175,9 +1175,9 @@ const CustomerListPage: React.FC = () => {
 
             {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
-              {selectedCustomer.type === 'Company' ? (
+              {selectedCustomer.type === 'Business' ? (
                 <UpdateForm
-                  title="Update Company Details"
+                  title="Update Business Details"
                   fields={companyFields}
                   onSubmit={handleCompanyUpdate}
                   onClear={handleClear}
@@ -1189,7 +1189,7 @@ const CustomerListPage: React.FC = () => {
                 />
               ) : (
                 <UpdateForm
-                  title="Update Individual Details"
+                  title="Update Customer Details"
                   fields={individualFields}
                   onSubmit={handleIndividualUpdate}
                   onClear={handleClear}

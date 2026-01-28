@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, X, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { Eye, X, FileText, CheckCircle2, Clock, Calendar } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 
 type PurchaseRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Completed' | 'Cancelled' | 'Partially Fulfilled';
-type CustomerType = 'Company' | 'Individual';
+type CustomerType = 'Business' | 'Customer';
 
 interface PurchaseRequest {
     id: number;
@@ -36,6 +36,7 @@ interface MachineRequestItem {
     totalPrice: number;
     rentedQuantity?: number;
     pendingQuantity?: number;
+    expectedAvailabilityDate?: string; // New field for expected availability date
 }
 
 // Mock customer data (from customers page)
@@ -43,48 +44,48 @@ const mockCustomers = [
     {
         id: 1,
         name: 'ABC Holdings (Pvt) Ltd',
-        type: 'Company' as CustomerType,
+        type: 'Business' as CustomerType,
         outstandingBalance: 120000.5,
         status: 'Active',
     },
     {
         id: 2,
         name: 'John Perera',
-        type: 'Individual' as CustomerType,
+        type: 'Customer' as CustomerType,
         outstandingBalance: 3500,
         status: 'Active',
     },
     {
         id: 3,
         name: 'XYZ Engineering',
-        type: 'Company' as CustomerType,
+        type: 'Business' as CustomerType,
         outstandingBalance: 0,
         status: 'Inactive',
     },
     {
         id: 4,
         name: 'Kamal Silva',
-        type: 'Individual' as CustomerType,
+        type: 'Customer' as CustomerType,
         outstandingBalance: 78000,
         status: 'Blocked',
     },
     {
         id: 5,
         name: 'Mega Constructions',
-        type: 'Company' as CustomerType,
+        type: 'Business' as CustomerType,
         outstandingBalance: 245000.75,
         status: 'Active',
     },
 ];
 
-// Mock purchase requests data - Updated to include machine details
+// Mock purchase requests data - Updated to include machine details and expected availability dates
 const mockPurchaseRequests: PurchaseRequest[] = [
     {
         id: 1,
         requestNumber: 'PO24010001',
         customerId: 1,
         customerName: 'ABC Holdings (Pvt) Ltd',
-        customerType: 'Company',
+        customerType: 'Business',
         requestDate: '2024-04-15',
         totalAmount: 100000,
         status: 'Approved',
@@ -110,7 +111,7 @@ const mockPurchaseRequests: PurchaseRequest[] = [
         requestNumber: 'PO24010002',
         customerId: 2,
         customerName: 'John Perera',
-        customerType: 'Individual',
+        customerType: 'Customer',
         requestDate: '2024-04-16',
         totalAmount: 35000,
         status: 'Approved',
@@ -135,7 +136,7 @@ const mockPurchaseRequests: PurchaseRequest[] = [
         requestNumber: 'PO24010003',
         customerId: 5,
         customerName: 'Mega Constructions',
-        customerType: 'Company',
+        customerType: 'Business',
         requestDate: '2024-04-17',
         totalAmount: 525000,
         status: 'Partially Fulfilled',
@@ -164,6 +165,7 @@ const mockPurchaseRequests: PurchaseRequest[] = [
                 totalPrice: 250000,
                 rentedQuantity: 0,
                 pendingQuantity: 5,
+                expectedAvailabilityDate: '2024-05-15', // Example: machines will be available on this date
             },
         ],
         rentalAgreementIds: [2],
@@ -173,7 +175,7 @@ const mockPurchaseRequests: PurchaseRequest[] = [
         requestNumber: 'PO24010004',
         customerId: 3,
         customerName: 'XYZ Engineering',
-        customerType: 'Company',
+        customerType: 'Business',
         requestDate: '2024-04-17',
         totalAmount: 725000,
         status: 'Pending',
@@ -214,11 +216,33 @@ const mockPurchaseRequests: PurchaseRequest[] = [
                 totalPrice: 250000,
                 rentedQuantity: 0,
                 pendingQuantity: 5,
+                expectedAvailabilityDate: '2024-06-01', // This machine is not available, expected date added
             },
         ],
         rentalAgreementIds: [2],
     },
 ];
+
+// Helper function to get the earliest expected availability date for unavailable machines
+const getEarliestExpectedAvailabilityDate = (request: PurchaseRequest): string | null => {
+    if (!request.machines || request.machines.length === 0) return null;
+
+    const unavailableMachines = request.machines.filter(machine => {
+        const available = Math.min(machine.availableStock, machine.quantity - (machine.rentedQuantity || 0));
+        const needed = machine.quantity - (machine.rentedQuantity || 0);
+        return needed > available && machine.expectedAvailabilityDate;
+    });
+
+    if (unavailableMachines.length === 0) return null;
+
+    // Get all expected dates and find the earliest one
+    const dates = unavailableMachines
+        .map(m => m.expectedAvailabilityDate)
+        .filter((date): date is string => !!date)
+        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+    return dates.length > 0 ? dates[0] : null;
+};
 
 // Table column configuration
 const columns: TableColumn[] = [
@@ -287,6 +311,60 @@ const columns: TableColumn[] = [
         ),
     },
     {
+        key: 'expectedAvailabilityDate',
+        label: 'Expected Availability',
+        sortable: true,
+        filterable: false,
+        render: (value: any, row: PurchaseRequest) => {
+            const earliestDate = getEarliestExpectedAvailabilityDate(row);
+            
+            if (!earliestDate) {
+                return (
+                    <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+                        N/A
+                    </span>
+                );
+            }
+
+            const date = new Date(earliestDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const dateOnly = new Date(date);
+            dateOnly.setHours(0, 0, 0, 0);
+            const daysUntil = Math.ceil((dateOnly.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+            return (
+                <div className="flex flex-col items-start">
+                    <div className="flex items-center space-x-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                        <span className="text-sm font-medium text-orange-600 dark:text-orange-400">
+                            {date.toLocaleDateString('en-LK', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                            })}
+                        </span>
+                    </div>
+                    {daysUntil > 0 && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {daysUntil} day{daysUntil !== 1 ? 's' : ''} away
+                        </span>
+                    )}
+                    {daysUntil === 0 && (
+                        <span className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+                            Available today
+                        </span>
+                    )}
+                    {daysUntil < 0 && (
+                        <span className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                            Overdue
+                        </span>
+                    )}
+                </div>
+            );
+        },
+    },
+    {
         key: 'status',
         label: 'Status',
         sortable: true,
@@ -347,6 +425,9 @@ const PurchaseOrderPage: React.FC = () => {
     const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedMachinesForRental, setSelectedMachinesForRental] = useState<Record<string, number>>({});
+    
+    // State to track modified unit prices for each machine
+    const [modifiedUnitPrices, setModifiedUnitPrices] = useState<Record<string, number>>({});
 
     // Rental agreement form state
     const [rentalStartDate, setRentalStartDate] = useState('');
@@ -370,14 +451,18 @@ const PurchaseOrderPage: React.FC = () => {
         return selectedRequest.machines?.map((machine) => {
             const available = Math.min(machine.availableStock, machine.quantity - (machine.rentedQuantity || 0));
             const pending = machine.quantity - (machine.rentedQuantity || 0) - available;
+            
+            // Use modified price if available, otherwise use original unit price
+            const currentUnitPrice = modifiedUnitPrices[machine.id] ?? machine.unitPrice;
 
             return {
                 ...machine,
                 canRent: available,
                 stillPending: pending,
+                unitPrice: currentUnitPrice, // Use current price (modified or original)
             };
         }).filter(m => m.canRent > 0) || [];
-    }, [selectedRequest]);
+    }, [selectedRequest, modifiedUnitPrices]);
 
     const handleMenuClick = () => {
         setIsMobileSidebarOpen((prev) => !prev);
@@ -408,6 +493,7 @@ const PurchaseOrderPage: React.FC = () => {
     const handleCreateRentalAgreement = (request: PurchaseRequest) => {
         setSelectedRequest(request);
         setSelectedMachinesForRental({});
+        setModifiedUnitPrices({}); // Reset modified prices
         setRentalStartDate('');
         setRentalEndDate('');
         setRentalFormErrors({});
@@ -435,9 +521,20 @@ const PurchaseOrderPage: React.FC = () => {
         setIsRentalModalOpen(false);
         setSelectedRequest(null);
         setSelectedMachinesForRental({});
+        setModifiedUnitPrices({}); // Reset modified prices
         setRentalStartDate('');
         setRentalEndDate('');
         setRentalFormErrors({});
+    };
+
+    // Handler to update unit price for a machine
+    const handleUnitPriceChange = (machineId: string, newPrice: number) => {
+        // Ensure price is not negative
+        const validPrice = Math.max(0, newPrice);
+        setModifiedUnitPrices(prev => ({
+            ...prev,
+            [machineId]: validPrice,
+        }));
     };
 
     const validateRentalForm = (): boolean => {
@@ -467,10 +564,15 @@ const PurchaseOrderPage: React.FC = () => {
         try {
             const machinesToRent = availableMachinesForRental
                 .filter(m => selectedMachinesForRental[m.id] > 0)
-                .map(m => ({
-                    ...m,
-                    quantity: selectedMachinesForRental[m.id],
-                }));
+                .map(m => {
+                    // Use modified price if available, otherwise use original
+                    const finalUnitPrice = modifiedUnitPrices[m.id] ?? m.unitPrice;
+                    return {
+                        ...m,
+                        quantity: selectedMachinesForRental[m.id],
+                        unitPrice: finalUnitPrice, // Include the final price (modified or original)
+                    };
+                });
 
             const payload = {
                 purchaseRequestId: selectedRequest.id,
@@ -588,6 +690,8 @@ const PurchaseOrderPage: React.FC = () => {
                                 const available = Math.min(machine.availableStock, machine.quantity - (machine.rentedQuantity || 0));
                                 const rented = machine.rentedQuantity || 0;
                                 const pending = machine.pendingQuantity || 0;
+                                const needed = machine.quantity - rented;
+                                const isUnavailable = needed > available;
 
                                 return (
                                     <div key={machine.id} className="border border-gray-200 dark:border-slate-600 rounded-lg p-3">
@@ -621,7 +725,19 @@ const PurchaseOrderPage: React.FC = () => {
                                                 </div>
                                             )}
                                         </div>
-                                        {available > 0 && rented < machine.quantity && (
+                                        {isUnavailable && machine.expectedAvailabilityDate && (
+                                            <div className="mt-2 flex items-center space-x-1.5 text-xs text-orange-600 dark:text-orange-400">
+                                                <Calendar className="w-3.5 h-3.5" />
+                                                <span>
+                                                    Expected availability: {new Date(machine.expectedAvailabilityDate).toLocaleDateString('en-LK', {
+                                                        year: 'numeric',
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                    })}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {available > 0 && rented < machine.quantity && !isUnavailable && (
                                             <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
                                                 {available} machine(s) available for rental
                                             </div>
@@ -727,7 +843,7 @@ const PurchaseOrderPage: React.FC = () => {
                         searchable
                         filterable
                         onCreateClick={handleCreatePurchaseRequest}
-                        createButtonLabel="Create Purchase Request"
+                        createButtonLabel="Create Purchase Order"
                         emptyMessage="No purchase requests found."
                     />
                 </div>
@@ -864,7 +980,7 @@ const PurchaseOrderPage: React.FC = () => {
                                         Select Machines to Rent
                                     </h3>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                                        Select the quantity of each available machine type to include in this rental agreement.
+                                        Select the quantity of each available machine type to include in this rental agreement. You can modify the unit price if needed.
                                     </p>
 
                                     {availableMachinesForRental.length === 0 ? (
@@ -875,60 +991,117 @@ const PurchaseOrderPage: React.FC = () => {
                                         </div>
                                     ) : (
                                         <div className="space-y-3">
-                                            {availableMachinesForRental.map((machine) => (
-                                                <div
-                                                    key={machine.id}
-                                                    className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 border border-gray-200 dark:border-slate-600"
-                                                >
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <div>
-                                                            <h4 className="font-medium text-gray-900 dark:text-white">
-                                                                {machine.brand} {machine.model} ({machine.type})
-                                                            </h4>
-                                                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                                Unit Price: Rs. {machine.unitPrice.toLocaleString('en-LK')}
-                                                            </p>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                                Available: <span className="font-medium text-green-600 dark:text-green-400">{machine.canRent}</span>
-                                                            </p>
-                                                            {machine.stillPending > 0 && (
-                                                                <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                                                                    {machine.stillPending} pending
+                                            {availableMachinesForRental.map((machine) => {
+                                                // Get the current price (modified or original)
+                                                const currentPrice = modifiedUnitPrices[machine.id] ?? machine.unitPrice;
+                                                // Get original price from the machine data
+                                                const originalPrice = selectedRequest.machines?.find(m => m.id === machine.id)?.unitPrice ?? machine.unitPrice;
+                                                const isPriceModified = modifiedUnitPrices[machine.id] !== undefined && modifiedUnitPrices[machine.id] !== originalPrice;
+                                                
+                                                return (
+                                                    <div
+                                                        key={machine.id}
+                                                        className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 border border-gray-200 dark:border-slate-600"
+                                                    >
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <div>
+                                                                <h4 className="font-medium text-gray-900 dark:text-white">
+                                                                    {machine.brand} {machine.model} ({machine.type})
+                                                                </h4>
+                                                                {isPriceModified && (
+                                                                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                                                        Original: Rs. {originalPrice.toLocaleString('en-LK', {
+                                                                            minimumFractionDigits: 2,
+                                                                            maximumFractionDigits: 2,
+                                                                        })}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                                    Available: <span className="font-medium text-green-600 dark:text-green-400">{machine.canRent}</span>
                                                                 </p>
-                                                            )}
+                                                                {machine.stillPending > 0 && (
+                                                                    <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                                                                        {machine.stillPending} pending
+                                                                    </p>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="flex items-center space-x-4">
-                                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                            Quantity to Rent:
-                                                        </label>
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            max={machine.canRent}
-                                                            value={selectedMachinesForRental[machine.id] || 0}
-                                                            onChange={(e) => {
-                                                                const qty = Math.max(0, Math.min(parseInt(e.target.value) || 0, machine.canRent));
-                                                                setSelectedMachinesForRental({
-                                                                    ...selectedMachinesForRental,
-                                                                    [machine.id]: qty,
-                                                                });
-                                                            }}
-                                                            className="w-24 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                                                        />
-                                                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                            of {machine.canRent} available
-                                                        </span>
-                                                    </div>
-                                                    {selectedMachinesForRental[machine.id] > 0 && (
-                                                        <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                                                            Subtotal: Rs. {(machine.unitPrice * (selectedMachinesForRental[machine.id] || 0)).toLocaleString('en-LK')}
+                                                        
+                                                        {/* Unit Price Input - NEW */}
+                                                        <div className="mb-3">
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                                Unit Price (Rs.) <span className="text-gray-500 text-xs">(editable)</span>
+                                                            </label>
+                                                            <div className="flex items-center space-x-2">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    step="0.01"
+                                                                    value={currentPrice}
+                                                                    onChange={(e) => {
+                                                                        const newPrice = parseFloat(e.target.value) || 0;
+                                                                        handleUnitPriceChange(machine.id, newPrice);
+                                                                    }}
+                                                                    className="w-32 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                                                />
+                                                                {isPriceModified && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            // Reset to original price
+                                                                            setModifiedUnitPrices(prev => {
+                                                                                const updated = { ...prev };
+                                                                                delete updated[machine.id];
+                                                                                return updated;
+                                                                            });
+                                                                        }}
+                                                                        className="px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline"
+                                                                        title="Reset to original price"
+                                                                    >
+                                                                        Reset
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    )}
-                                                </div>
-                                            ))}
+                                                        
+                                                        {/* Quantity Input */}
+                                                        <div className="flex items-center space-x-4">
+                                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                                Quantity to Rent:
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max={machine.canRent}
+                                                                value={selectedMachinesForRental[machine.id] || 0}
+                                                                onChange={(e) => {
+                                                                    const qty = Math.max(0, Math.min(parseInt(e.target.value) || 0, machine.canRent));
+                                                                    setSelectedMachinesForRental({
+                                                                        ...selectedMachinesForRental,
+                                                                        [machine.id]: qty,
+                                                                    });
+                                                                }}
+                                                                className="w-24 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                                            />
+                                                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                                                                of {machine.canRent} available
+                                                            </span>
+                                                        </div>
+                                                        
+                                                        {/* Subtotal - Updated to use current price */}
+                                                        {selectedMachinesForRental[machine.id] > 0 && (
+                                                            <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                                                Subtotal: Rs. {(currentPrice * (selectedMachinesForRental[machine.id] || 0)).toLocaleString('en-LK', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     )}
 
@@ -937,7 +1110,7 @@ const PurchaseOrderPage: React.FC = () => {
                                     )}
                                 </div>
 
-                                {/* Rental Summary */}
+                                {/* Rental Summary - Updated to use modified prices */}
                                 {Object.values(selectedMachinesForRental).some(qty => qty > 0) && (
                                     <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
@@ -946,21 +1119,33 @@ const PurchaseOrderPage: React.FC = () => {
                                         <div className="space-y-2 text-sm">
                                             {availableMachinesForRental
                                                 .filter(m => selectedMachinesForRental[m.id] > 0)
-                                                .map((machine) => (
-                                                    <div key={machine.id} className="flex justify-between">
-                                                        <span className="text-gray-600 dark:text-gray-400">
-                                                            {machine.brand} {machine.model} × {selectedMachinesForRental[machine.id]}
-                                                        </span>
-                                                        <span className="font-medium text-gray-900 dark:text-white">
-                                                            Rs. {(machine.unitPrice * selectedMachinesForRental[machine.id]).toLocaleString('en-LK')}
-                                                        </span>
-                                                    </div>
-                                                ))}
+                                                .map((machine) => {
+                                                    const finalPrice = modifiedUnitPrices[machine.id] ?? machine.unitPrice;
+                                                    const quantity = selectedMachinesForRental[machine.id];
+                                                    const subtotal = finalPrice * quantity;
+                                                    
+                                                    return (
+                                                        <div key={machine.id} className="flex justify-between">
+                                                            <span className="text-gray-600 dark:text-gray-400">
+                                                                {machine.brand} {machine.model} × {quantity}
+                                                            </span>
+                                                            <span className="font-medium text-gray-900 dark:text-white">
+                                                                Rs. {subtotal.toLocaleString('en-LK', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
                                             <div className="border-t border-blue-200 dark:border-blue-800 pt-2 mt-2 flex justify-between">
                                                 <span className="font-semibold text-gray-900 dark:text-white">Total Monthly Rent:</span>
                                                 <span className="font-bold text-lg text-blue-600 dark:text-blue-400">
                                                     Rs. {availableMachinesForRental
-                                                        .reduce((sum, m) => sum + (m.unitPrice * (selectedMachinesForRental[m.id] || 0)), 0)
+                                                        .reduce((sum, m) => {
+                                                            const finalPrice = modifiedUnitPrices[m.id] ?? m.unitPrice;
+                                                            return sum + (finalPrice * (selectedMachinesForRental[m.id] || 0));
+                                                        }, 0)
                                                         .toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </span>
                                             </div>

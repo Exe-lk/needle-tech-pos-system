@@ -1,12 +1,11 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import CreateForm, { FormField } from '@/src/components/form-popup/create';
-import { Eye, X, Package, TrendingUp, AlertCircle, CheckCircle, Clock } from 'lucide-react';
-import Tooltip from '@/src/components/common/tooltip';
+import { Eye, Clock, X } from 'lucide-react';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type StockType = 'New' | 'Used';
@@ -42,18 +41,6 @@ interface StockTransaction {
   transactionDate: string;
   performedBy?: string;
 }
-
-// Mock registered machines (should be fetched from machines API)
-const mockRegisteredMachines = [
-  { brand: 'Brother', model: 'XL2600i', type: 'Domestic' as MachineType },
-  { brand: 'Singer', model: 'Heavy Duty 4423', type: 'Industrial' as MachineType },
-  { brand: 'Janome', model: 'HD3000', type: 'Domestic' as MachineType },
-  { brand: 'Brother', model: 'SE600', type: 'Embroidery' as MachineType },
-  { brand: 'Juki', model: 'MO-654DE', type: 'Overlock' as MachineType },
-  { brand: 'Singer', model: 'Buttonhole 160', type: 'Buttonhole' as MachineType },
-  { brand: 'Brother', model: 'CS6000i', type: 'Domestic' as MachineType },
-  { brand: 'Janome', model: 'MB-4S', type: 'Industrial' as MachineType },
-];
 
 // Mock inventory data
 const mockInventory: InventoryItem[] = [
@@ -165,13 +152,12 @@ const mockTransactions: StockTransaction[] = [
 ];
 
 const InventoryManagementPage: React.FC = () => {
+  const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
-  const [isStockInModalOpen, setIsStockInModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
   const [transactions, setTransactions] = useState<StockTransaction[]>(mockTransactions);
 
@@ -188,11 +174,7 @@ const InventoryManagementPage: React.FC = () => {
   };
 
   const handleStockIn = () => {
-    setIsStockInModalOpen(true);
-  };
-
-  const handleCloseStockInModal = () => {
-    setIsStockInModalOpen(false);
+    router.push('/inventory/stock-in');
   };
 
   const handleViewDetails = (item: InventoryItem) => {
@@ -213,187 +195,6 @@ const InventoryManagementPage: React.FC = () => {
   const handleCloseHistoryModal = () => {
     setIsHistoryModalOpen(false);
     setSelectedItem(null);
-  };
-
-  // Get unique brands for dropdown
-  const uniqueBrands = useMemo(() => {
-    return [...new Set(mockRegisteredMachines.map((m) => m.brand))].sort();
-  }, []);
-
-  // Get models for selected brand
-  const getModelsForBrand = (brand: string) => {
-    return mockRegisteredMachines
-      .filter((m) => m.brand === brand)
-      .map((m) => ({ label: m.model, value: m.model }));
-  };
-
-  // Stock In form fields
-  const stockInFields: FormField[] = [
-    {
-      name: 'brand',
-      label: 'Brand',
-      type: 'select',
-      placeholder: 'Select brand',
-      required: true,
-      options: uniqueBrands.map((brand) => ({ label: brand, value: brand })),
-    },
-    {
-      name: 'model',
-      label: 'Model',
-      type: 'select',
-      placeholder: 'Select model',
-      required: true,
-      options: [], // Will be populated dynamically based on brand
-    },
-    {
-      name: 'stockType',
-      label: 'Stock Type',
-      type: 'select',
-      placeholder: 'Select stock type',
-      required: true,
-      options: [
-        { label: 'New (with warranty)', value: 'New' },
-        { label: 'Used', value: 'Used' },
-      ],
-    },
-    {
-      name: 'quantity',
-      label: 'Quantity',
-      type: 'number',
-      placeholder: 'Enter quantity',
-      required: true,
-    },
-    {
-      name: 'warrantyExpiry',
-      label: 'Warranty Expiry Date',
-      type: 'date',
-      placeholder: 'Select warranty expiry date',
-      required: false, // Required only for new machines
-    },
-    {
-      name: 'condition',
-      label: 'Condition',
-      type: 'select',
-      placeholder: 'Select condition',
-      required: false, // Required only for used machines
-      options: [
-        { label: 'Excellent', value: 'Excellent' },
-        { label: 'Good', value: 'Good' },
-        { label: 'Fair', value: 'Fair' },
-        { label: 'Poor', value: 'Poor' },
-      ],
-    },
-    {
-      name: 'location',
-      label: 'Storage Location',
-      type: 'select',
-      placeholder: 'Select location',
-      required: true,
-      options: [
-        { label: 'Main Warehouse', value: 'Main Warehouse' },
-        { label: 'Branch Office 1', value: 'Branch Office 1' },
-        { label: 'Branch Office 2', value: 'Branch Office 2' },
-        { label: 'Storage Facility', value: 'Storage Facility' },
-      ],
-    },
-    {
-      name: 'notes',
-      label: 'Notes',
-      type: 'textarea',
-      placeholder: 'Enter any additional notes',
-      required: false,
-      rows: 3,
-    },
-  ];
-
-  const handleStockInSubmit = async (data: Record<string, any>) => {
-    setIsSubmitting(true);
-    try {
-      // Validate warranty expiry for new machines
-      if (data.stockType === 'New' && !data.warrantyExpiry) {
-        alert('Warranty expiry date is required for new machines.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Validate condition for used machines
-      if (data.stockType === 'Used' && !data.condition) {
-        alert('Condition is required for used machines.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Create transaction record
-      const newTransaction: StockTransaction = {
-        id: transactions.length + 1,
-        brand: data.brand,
-        model: data.model,
-        type: mockRegisteredMachines.find(
-          (m) => m.brand === data.brand && m.model === data.model
-        )?.type || 'Domestic',
-        transactionType: 'Stock In',
-        stockType: data.stockType,
-        quantity: parseInt(data.quantity),
-        warrantyExpiry: data.warrantyExpiry,
-        condition: data.condition,
-        location: data.location,
-        notes: data.notes,
-        transactionDate: new Date().toISOString().split('T')[0],
-        performedBy: 'Current User', // Replace with actual user from auth
-      };
-
-      // Update or create inventory item
-      const existingItemIndex = inventory.findIndex(
-        (item) => item.brand === data.brand && item.model === data.model
-      );
-
-      if (existingItemIndex >= 0) {
-        // Update existing inventory
-        const updatedInventory = [...inventory];
-        updatedInventory[existingItemIndex] = {
-          ...updatedInventory[existingItemIndex],
-          totalStock: updatedInventory[existingItemIndex].totalStock + parseInt(data.quantity),
-          availableStock: updatedInventory[existingItemIndex].availableStock + parseInt(data.quantity),
-          lastUpdated: new Date().toISOString().split('T')[0],
-        };
-        setInventory(updatedInventory);
-      } else {
-        // Create new inventory item
-        const newItem: InventoryItem = {
-          id: inventory.length + 1,
-          brand: data.brand,
-          model: data.model,
-          type: mockRegisteredMachines.find(
-            (m) => m.brand === data.brand && m.model === data.model
-          )?.type || 'Domestic',
-          totalStock: parseInt(data.quantity),
-          availableStock: parseInt(data.quantity),
-          rentedStock: 0,
-          maintenanceStock: 0,
-          retiredStock: 0,
-          lastUpdated: new Date().toISOString().split('T')[0],
-        };
-        setInventory([...inventory, newItem]);
-      }
-
-      // Add transaction
-      setTransactions([newTransaction, ...transactions]);
-
-      console.log('Stock In transaction:', newTransaction);
-      alert(
-        `Successfully added ${data.quantity} ${data.stockType === 'New' ? 'new' : 'used'} ${data.brand} ${data.model} machine(s) to inventory.`
-      );
-      handleCloseStockInModal();
-    } catch (error) {
-      console.error('Error processing stock in:', error);
-      alert('Failed to process stock in. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleClear = () => {
-    console.log('Form cleared');
   };
 
   // Get filtered transactions for selected item
@@ -506,25 +307,25 @@ const InventoryManagementPage: React.FC = () => {
     },
   ];
 
-    // Action buttons for inventory table
-    const actions: ActionButton[] = [
-      {
-        label: '',
-        icon: <Eye className="w-4 h-4" />,
-        variant: 'secondary',
-        onClick: handleViewDetails,
-        tooltip: 'View Details',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
-      },
-      {
-        label: '',
-        icon: <Clock className="w-4 h-4" />,
-        variant: 'primary',
-        onClick: handleViewHistory, 
-        tooltip: 'View History',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
-      },
-    ];
+  // Action buttons for inventory table
+  const actions: ActionButton[] = [
+    {
+      label: '',
+      icon: <Eye className="w-4 h-4" />,
+      variant: 'secondary',
+      onClick: handleViewDetails,
+      tooltip: 'View Details',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+    },
+    {
+      label: '',
+      icon: <Clock className="w-4 h-4" />,
+      variant: 'primary',
+      onClick: handleViewHistory,
+      tooltip: 'View History',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+    },
+  ];
 
   // Transaction history columns
   const transactionColumns: TableColumn[] = [
@@ -554,11 +355,6 @@ const InventoryManagementPage: React.FC = () => {
                 : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
             }`}
           >
-            {isStockIn ? (
-              <TrendingUp className="w-3 h-3 mr-1" />
-            ) : (
-              <TrendingUp className="w-3 h-3 mr-1 rotate-180" />
-            )}
             {value}
           </span>
         );
@@ -743,28 +539,11 @@ const InventoryManagementPage: React.FC = () => {
                 style={{ width: `${availablePercentage}%` }}
               />
             </div>
-            {availablePercentage < 25 && (
-              <div className="mt-2 flex items-center text-sm text-red-600 dark:text-red-400">
-                <AlertCircle className="w-4 h-4 mr-1" />
-                Low stock alert - Consider restocking
-              </div>
-            )}
           </div>
         </div>
       </div>
     );
   };
-
-  // Calculate summary statistics
-  const summaryStats = useMemo(() => {
-    const total = inventory.reduce((sum, item) => sum + item.totalStock, 0);
-    const available = inventory.reduce((sum, item) => sum + item.availableStock, 0);
-    const rented = inventory.reduce((sum, item) => sum + item.rentedStock, 0);
-    const maintenance = inventory.reduce((sum, item) => sum + item.maintenanceStock, 0);
-    const retired = inventory.reduce((sum, item) => sum + item.retiredStock, 0);
-
-    return { total, available, rented, maintenance, retired };
-  }, [inventory]);
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
@@ -796,8 +575,6 @@ const InventoryManagementPage: React.FC = () => {
             </div>
           </div>
 
-          
-
           {/* Inventory table card */}
           <Table
             data={inventory}
@@ -812,41 +589,6 @@ const InventoryManagementPage: React.FC = () => {
           />
         </div>
       </main>
-
-      {/* Stock In Modal */}
-      {isStockInModalOpen && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Stock In - Add New Stock
-              </h2>
-              <button
-                onClick={handleCloseStockInModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <CreateForm
-                title="Add Stock to Inventory"
-                fields={stockInFields}
-                onSubmit={handleStockInSubmit}
-                onClear={handleClear}
-                submitButtonLabel="Add Stock"
-                clearButtonLabel="Clear"
-                loading={isSubmitting}
-                enableDynamicSpecs={false}
-                className="shadow-none border-0 p-0"
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* View Inventory Details Modal */}
       {isViewModalOpen && selectedItem && (

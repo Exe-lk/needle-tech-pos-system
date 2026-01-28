@@ -55,6 +55,11 @@ interface OutstandingAlert {
     daysOverdue?: number;
 }
 
+// Helper function to map internal customer type to display label
+const getCustomerTypeLabel = (type: CustomerType): string => {
+    return type === 'Company' ? 'Business' : 'Customer';
+};
+
 // Mock outstanding alerts data
 const mockOutstandingAlerts: OutstandingAlert[] = [
     {
@@ -531,7 +536,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             .filter((c) => c.status === 'Active')
             .map((customer) => ({
                 value: customer.id.toString(),
-                label: `${customer.name} (${customer.type})`,
+                label: `${customer.name} (${getCustomerTypeLabel(customer.type)})`,
             }));
     }, []);
 
@@ -694,7 +699,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }
     };
 
-    // Form fields for Company
+    // Form fields for Business
     const companyFields: FormField[] = [
         {
             name: 'companyName',
@@ -744,7 +749,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
         },
     ];
 
-    // Form fields for Individual
+    // Form fields for Customer
     const individualFields: FormField[] = [
         {
             name: 'fullName',
@@ -790,8 +795,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleCompanySubmit = async (data: Record<string, any>) => {
         setIsSubmitting(true);
         try {
-            console.log('Create company customer payload:', data);
-            alert(`Company "${data.companyName}" registered successfully. Please select this customer.`);
+            console.log('Create business customer payload:', data);
+            alert(`Business "${data.companyName}" registered successfully. Please select this customer.`);
             handleCloseRegisterModal();
         } finally {
             setIsSubmitting(false);
@@ -801,8 +806,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleIndividualSubmit = async (data: Record<string, any>) => {
         setIsSubmitting(true);
         try {
-            console.log('Create individual customer payload:', data);
-            alert(`Individual customer "${data.fullName}" registered successfully. Please select this customer.`);
+            console.log('Create customer payload:', data);
+            alert(`Customer "${data.fullName}" registered successfully. Please select this customer.`);
             handleCloseRegisterModal();
         } finally {
             setIsSubmitting(false);
@@ -856,7 +861,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                         <div className="flex items-center space-x-4">
                             <div>
                                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                                    Create Purchase Request
+                                    Create Purchase Order
                                 </h2>
                                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                                     Create a new purchase request for sewing machines and related tools.
@@ -1010,8 +1015,10 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                 )}
                                             </div>
 
-                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                                <div>
+                                            {/* Machine Input Fields - All in One Row */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                {/* Brand Field */}
+                                                <div className="flex flex-col">
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                         Brand <span className="text-red-500">*</span>
                                                     </label>
@@ -1024,7 +1031,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                     />
                                                 </div>
 
-                                                <div>
+                                                {/* Model Field */}
+                                                <div className="flex flex-col">
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                         Model <span className="text-red-500">*</span>
                                                     </label>
@@ -1038,7 +1046,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                     />
                                                 </div>
 
-                                                <div>
+                                                {/* Type Field */}
+                                                <div className="flex flex-col">
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                         Type <span className="text-red-500">*</span>
                                                     </label>
@@ -1051,13 +1060,14 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                     />
                                                 </div>
 
-                                                <div>
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                {/* Quantity Field */}
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
                                                             Quantity <span className="text-red-500">*</span>
                                                         </label>
                                                         {machine.brand && machine.model && (
-                                                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md ${
+                                                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md flex-shrink-0 ${
                                                                 availableStock > 0 
                                                                     ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700' 
                                                                     : 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'
@@ -1067,7 +1077,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                                         ? 'text-green-700 dark:text-green-400' 
                                                                         : 'text-red-700 dark:text-red-400'
                                                                 }`} />
-                                                                <span className={`text-xs font-semibold ${
+                                                                <span className={`text-xs font-semibold whitespace-nowrap ${
                                                                     availableStock > 0 
                                                                         ? 'text-green-700 dark:text-green-400' 
                                                                         : 'text-red-700 dark:text-red-400'
@@ -1110,11 +1120,12 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
                                             {/* Show price info if machine is fully selected */}
                                             {machine.brand && machine.model && machine.type && machine.quantity > 0 && (
-                                                <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                                                    <span>Unit Price: Rs. {machine.unitPrice.toLocaleString('en-LK')} | </span>
-                                                    <span className="font-medium text-gray-900 dark:text-white">
-                                                        Total: Rs. {machine.totalPrice.toLocaleString('en-LK')}
-                                                    </span>
+                                                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-600">
+                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                        <span>
+                                                            Unit Price: Rs. {machine.unitPrice.toLocaleString('en-LK')} | Sub Total: Rs. {machine.totalPrice.toLocaleString('en-LK')} ({machine.unitPrice.toLocaleString('en-LK')} × {machine.quantity})
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -1204,10 +1215,10 @@ const CreatePurchaseRequestPage: React.FC = () => {
                         {/* Modal Content - Scrollable */}
                         <div className="flex-1 overflow-y-auto p-6">
                             <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-                                {/* Tabs for Company/Individual */}
+                                {/* Tabs for Business/Customer */}
                                 <div className="border-b border-gray-200 dark:border-slate-700 mb-4">
                                     <div className="flex space-x-4">
-                                        <Tooltip content="Company">
+                                        <Tooltip content="Business">
                                             <button
                                                 onClick={() => setActiveCreateTab('company')}
                                                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'company'
@@ -1215,10 +1226,10 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                                                     }`}
                                             >
-                                                Company
+                                                Business
                                             </button>
                                         </Tooltip>
-                                        <Tooltip content="Individual">
+                                        <Tooltip content="Customer">
                                             <button
                                                 onClick={() => setActiveCreateTab('individual')}
                                                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'individual'
@@ -1226,7 +1237,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                                                     }`}
                                             >
-                                                Individual
+                                                Customer
                                             </button>
                                         </Tooltip>
                                     </div>
@@ -1235,11 +1246,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                 {/* Form Content */}
                                 {activeCreateTab === 'company' ? (
                                     <CreateForm
-                                        title="Company Details"
+                                        title="Business Details"
                                         fields={companyFields}
                                         onSubmit={handleCompanySubmit}
                                         onClear={handleClear}
-                                        submitButtonLabel="Register Company"
+                                        submitButtonLabel="Register Business"
                                         clearButtonLabel="Clear"
                                         loading={isSubmitting}
                                         enableDynamicSpecs={false}
@@ -1247,11 +1258,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     />
                                 ) : (
                                     <CreateForm
-                                        title="Individual Details"
+                                        title="Customer Details"
                                         fields={individualFields}
                                         onSubmit={handleIndividualSubmit}
                                         onClear={handleClear}
-                                        submitButtonLabel="Register Individual"
+                                        submitButtonLabel="Register Customer"
                                         clearButtonLabel="Clear"
                                         loading={isSubmitting}
                                         enableDynamicSpecs={false}

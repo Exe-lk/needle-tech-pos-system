@@ -1,193 +1,370 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import QRScannerComponent from '@/src/components/qr-scanner';
+import { 
+  ArrowLeft, 
+  CheckCircle2, 
+  Copy, 
+  ExternalLink,
+  History,
+  QrCode,
+  Share2,
+  X
+} from 'lucide-react';
+
+interface ScanHistoryItem {
+  id: string;
+  data: string;
+  timestamp: Date;
+  source?: string;
+}
 
 const QRScannerPage: React.FC = () => {
-  const [scanning, setScanning] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [copied, setCopied] = useState(false);
+  
+  // Get context from URL params (e.g., ?context=rental-agreement&returnUrl=/rental-agreement)
+  const context = searchParams.get('context') || 'general';
+  const returnUrl = searchParams.get('returnUrl');
+  const title = searchParams.get('title') || 'QR Code Scanner';
+  const subtitle = searchParams.get('subtitle') ?? undefined;
 
+  // Load scan history from localStorage
   useEffect(() => {
-    // Automatically start scanning when component mounts
-    startScanning();
-
-    // Cleanup on unmount
-    return () => {
-      stopScanning();
-    };
-  }, []);
-
-  const startScanning = async () => {
     try {
-      setError(null);
-      setResult(null);
-      
-      const html5QrCode = new Html5Qrcode("qr-reader");
-      scannerRef.current = html5QrCode;
-
-      // Start scanning with camera
-      await html5QrCode.start(
-        { facingMode: "environment" }, // Use back camera if available, otherwise front
-        {
-          fps: 10, // Frames per second
-          qrbox: { width: 250, height: 250 }, // Scanning box size
-          aspectRatio: 1.0,
-        },
-        (decodedText, decodedResult) => {
-          // Success callback
-          handleScanSuccess(decodedText);
-        },
-        (errorMessage) => {
-          // Error callback (ignore most errors, they're just scanning attempts)
-        }
-      );
-
-      setScanning(true);
-    } catch (err: any) {
-      console.error('Error starting scanner:', err);
-      setError(err.message || 'Failed to start camera. Please check permissions.');
-      setScanning(false);
-    }
-  };
-
-  const stopScanning = async () => {
-    try {
-      if (scannerRef.current && scanning) {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
-        scannerRef.current = null;
-        setScanning(false);
+      const saved = localStorage.getItem('qr-scan-history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setScanHistory(parsed.map((item: any) => ({
+          ...item,
+          timestamp: new Date(item.timestamp)
+        })));
       }
     } catch (err) {
-      console.error('Error stopping scanner:', err);
+      console.error('Error loading scan history:', err);
+    }
+  }, []);
+
+  // Save scan history to localStorage
+  const saveToHistory = (data: string) => {
+    const newItem: ScanHistoryItem = {
+      id: Date.now().toString(),
+      data,
+      timestamp: new Date(),
+      source: context,
+    };
+
+    const updated = [newItem, ...scanHistory].slice(0, 50); // Keep last 50 scans
+    setScanHistory(updated);
+    
+    try {
+      localStorage.setItem('qr-scan-history', JSON.stringify(updated));
+    } catch (err) {
+      console.error('Error saving scan history:', err);
     }
   };
 
   const handleScanSuccess = (decodedText: string) => {
-    setResult(decodedText);
-    stopScanning();
+    setScanResult(decodedText);
+    saveToHistory(decodedText);
     
-    // Optional: You can add additional logic here
-    // For example, navigate to a different page or process the QR code data
-    console.log('QR Code scanned:', decodedText);
-    
-    // Optional: Show alert or notification
-    alert(`QR Code Scanned: ${decodedText}`);
+    // Handle different contexts
+    handleContextAction(decodedText);
   };
 
-  const handleRescan = () => {
-    setResult(null);
-    setError(null);
-    startScanning();
+  const handleContextAction = (qrData: string) => {
+    switch (context) {
+      case 'rental-agreement':
+        // Navigate to rental agreement with QR data
+        if (returnUrl) {
+          router.push(`${returnUrl}?qrData=${encodeURIComponent(qrData)}`);
+        }
+        break;
+      case 'returns':
+        // Navigate to returns page with QR data
+        if (returnUrl) {
+          router.push(`${returnUrl}?qrData=${encodeURIComponent(qrData)}`);
+        }
+        break;
+      case 'inventory':
+        // Navigate to inventory with QR data
+        if (returnUrl) {
+          router.push(`${returnUrl}?qrData=${encodeURIComponent(qrData)}`);
+        }
+        break;
+      default:
+        // General use - just show result
+        break;
+    }
   };
 
-  const toggleFullscreen = () => {
-    if (!isFullscreen) {
-      if (containerRef.current?.requestFullscreen) {
-        containerRef.current.requestFullscreen();
-        setIsFullscreen(true);
-      }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
+  const handleCopy = async () => {
+    if (scanResult) {
+      try {
+        await navigator.clipboard.writeText(scanResult);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy:', err);
       }
     }
   };
 
-  // Listen for fullscreen changes
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
+  const handleShare = async () => {
+    if (scanResult && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'QR Code Scan Result',
+          text: scanResult,
+        });
+      } catch (err) {
+        // User cancelled or share failed
+      }
+    }
+  };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
-  }, []);
+  const handleRescan = () => {
+    setScanResult(null);
+  };
+
+  const handleBack = () => {
+    if (returnUrl) {
+      router.push(returnUrl);
+    } else {
+      router.back();
+    }
+  };
+
+  const clearHistory = () => {
+    setScanHistory([]);
+    try {
+      localStorage.removeItem('qr-scan-history');
+    } catch (err) {
+      console.error('Error clearing history:', err);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950 p-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-lg p-6">
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">
-            QR Code Scanner
-          </h1>
-
-          {error && (
-            <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 rounded">
-              <p className="font-semibold">Error:</p>
-              <p>{error}</p>
-              <button
-                onClick={startScanning}
-                className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
-              >
-                Try Again
-              </button>
-            </div>
-          )}
-
-          {result && (
-            <div className="mb-4 p-4 bg-green-100 dark:bg-green-900/30 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 rounded">
-              <p className="font-semibold">Scanned Successfully!</p>
-              <p className="mt-2 break-all">{result}</p>
-              <button
-                onClick={handleRescan}
-                className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
-              >
-                Scan Another
-              </button>
-            </div>
-          )}
-
-          <div 
-            ref={containerRef}
-            className="relative bg-black rounded-lg overflow-hidden"
-            style={{ minHeight: '400px' }}
-          >
-            <div id="qr-reader" className="w-full"></div>
-            
-            {scanning && (
-              <div className="absolute top-4 right-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
+      {/* Header Bar - Only shown when not scanning */}
+      {!scanResult && (
+        <div className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center space-x-4">
                 <button
-                  onClick={toggleFullscreen}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                  onClick={handleBack}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                  aria-label="Go back"
                 >
-                  {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
                 </button>
-              </div>
-            )}
-
-            {scanning && (
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                <button
-                  onClick={stopScanning}
-                  className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
-                >
-                  Stop Scanning
-                </button>
-              </div>
-            )}
-
-            {!scanning && !result && !error && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-white text-center">
-                  <p className="text-lg mb-2">Initializing camera...</p>
+                <div>
+                  <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+                    {title}
+                  </h1>
+                  {subtitle && (
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                      {subtitle}
+                    </p>
+                  )}
                 </div>
               </div>
-            )}
+              <div className="flex items-center space-x-2">
+                {scanHistory.length > 0 && (
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors relative"
+                    aria-label="View scan history"
+                  >
+                    <History className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                    {scanHistory.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+                        {scanHistory.length > 9 ? '9+' : scanHistory.length}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
+        </div>
+      )}
 
-          <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-            <p>• Position the QR code within the scanning box</p>
-            <p>• Ensure good lighting for better scanning</p>
-            <p>• Camera will start automatically when you visit this page</p>
+      {/* Scan History Sidebar */}
+      {showHistory && (
+        <div className="fixed inset-0 z-40 lg:z-auto lg:relative">
+          <div className="absolute inset-0 bg-black/50 lg:hidden" onClick={() => setShowHistory(false)} />
+          <div className="absolute right-0 top-0 bottom-0 lg:relative lg:sticky lg:top-16 w-full max-w-md bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-800 shadow-xl lg:shadow-none overflow-y-auto h-screen lg:h-[calc(100vh-4rem)]">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center space-x-2">
+                <History className="w-5 h-5" />
+                <span>Scan History</span>
+              </h2>
+              <div className="flex items-center space-x-2">
+                {scanHistory.length > 0 && (
+                  <button
+                    onClick={clearHistory}
+                    className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                  >
+                    Clear All
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded"
+                  aria-label="Close history"
+                >
+                  <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 sm:p-6">
+              {scanHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <QrCode className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-600 mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">No scan history yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {scanHistory.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setScanResult(item.data);
+                        setShowHistory(false);
+                        handleContextAction(item.data);
+                      }}
+                    >
+                      <p className="text-sm font-mono break-all text-gray-900 dark:text-white mb-2">
+                        {item.data}
+                      </p>
+                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                        <span>{item.timestamp.toLocaleString()}</span>
+                        {item.source && (
+                          <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
+                            {item.source}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className={`flex ${showHistory ? 'lg:flex-row' : 'flex-col'}`}>
+        {/* Scanner Section */}
+        <div className={`flex-1 ${showHistory ? 'lg:w-2/3' : 'w-full'}`}>
+          {!scanResult ? (
+            <QRScannerComponent
+              onScanSuccess={handleScanSuccess}
+              onClose={handleBack}
+              autoClose={false}
+              showCloseButton={false}
+              title={title}
+              subtitle={subtitle}
+            />
+          ) : (
+            <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
+              <div className="w-full max-w-2xl">
+                {/* Success Card */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-gray-200 dark:border-slate-800 overflow-hidden">
+                  {/* Success Header */}
+                  <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 sm:p-8 text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-white/20 rounded-full mb-4">
+                      <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                      Scan Successful!
+                    </h2>
+                    <p className="text-green-100 text-sm sm:text-base">
+                      QR code scanned successfully
+                    </p>
+                  </div>
+
+                  {/* Result Content */}
+                  <div className="p-6 sm:p-8">
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Scanned Data:
+                      </label>
+                      <div className="relative">
+                        <div className="bg-gray-50 dark:bg-slate-800 border-2 border-gray-200 dark:border-slate-700 rounded-lg p-4 sm:p-6">
+                          <p className="text-sm sm:text-base font-mono break-all text-gray-900 dark:text-white">
+                            {scanResult}
+                          </p>
+                        </div>
+                        <button
+                          onClick={handleCopy}
+                          className="absolute top-2 right-2 p-2 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                          title="Copy to clipboard"
+                        >
+                          {copied ? (
+                            <CheckCircle2 className="w-5 h-5 text-green-600" />
+                          ) : (
+                            <Copy className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={handleRescan}
+                        className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center space-x-2"
+                      >
+                        <QrCode className="w-5 h-5" />
+                        <span>Scan Another</span>
+                      </button>
+                      
+                      {typeof navigator !== 'undefined' && 'share' in navigator && (
+                        <button
+                          onClick={handleShare}
+                          className="px-6 py-3 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors font-medium flex items-center justify-center space-x-2"
+                        >
+                          <Share2 className="w-5 h-5" />
+                          <span>Share</span>
+                        </button>
+                      )}
+
+                      {returnUrl && (
+                        <button
+                          onClick={handleBack}
+                          className="px-6 py-3 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors font-medium flex items-center justify-center space-x-2"
+                        >
+                          <ExternalLink className="w-5 h-5" />
+                          <span>Continue</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="mt-6 text-center">
+                  <button
+                    onClick={handleBack}
+                    className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                  >
+                    ← Go back
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
