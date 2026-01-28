@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Trash2, Printer, FileText, ExternalLink, QrCode, Truck, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
 
@@ -528,6 +528,7 @@ const columns: TableColumn[] = [
 
 const RentalAgreementPage: React.FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -562,27 +563,103 @@ const RentalAgreementPage: React.FC = () => {
 
   // Machine management state for update form
   const [machinesForAgreement, setMachinesForAgreement] = useState<MachineForAgreement[]>([]);
-  const [qrScannerWindow, setQrScannerWindow] = useState<Window | null>(null);
+  //const [qrScannerWindow, setQrScannerWindow] = useState<Window | null>(null);
   const [manualMachineInput, setManualMachineInput] = useState({
     description: '',
     serialNumber: '',
     boxNumber: '',
   });
   const [machineErrors, setMachineErrors] = useState<Record<string, string>>({});
+  const isProcessingQRRef = React.useRef(false);
 
   // Listen for messages from QR scanner popup window
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'QR_SCAN_RESULT') {
-        handleQRScanSuccess(event.data.qrData);
-      }
-    };
+  // Handle QR data from URL params when returning from QR page
+  // Handle QR data from URL params when returning from QR page
+useEffect(() => {
+  const qrData = searchParams.get('qrData');
+  const agreementId = searchParams.get('agreementId');
+  const action = searchParams.get('action');
 
-    window.addEventListener('message', handleMessage);
-    return () => {
-      window.removeEventListener('message', handleMessage);
-    };
-  }, []);
+  // Only process if we have QR data and we're in update mode
+  if (qrData && action === 'update' && agreementId && !isProcessingQRRef.current) {
+    isProcessingQRRef.current = true;
+    const agreementIdNum = parseInt(agreementId, 10);
+
+    // Find the agreement
+    const agreement = mockRentalAgreements.find(a => a.id === agreementIdNum);
+
+    if (agreement) {
+      // Always ensure modal is open and agreement is selected
+      setSelectedAgreement(agreement);
+      setIsUpdateModalOpen(true);
+      
+      // Process the QR scan - use functional update to ensure we have latest state
+      setMachinesForAgreement((currentMachines) => {
+        try {
+          const machineData = JSON.parse(qrData);
+
+          // Validate required fields
+          if (!machineData.serialNumber) {
+            alert('Invalid QR code: Missing serial number');
+            isProcessingQRRef.current = false;
+            return currentMachines;
+          }
+
+          // Check for duplicate serial numbers
+          const isDuplicate = currentMachines.some(
+            m => m.serialNumber.toLowerCase() === (machineData.serialNumber || '').toLowerCase()
+          );
+
+          if (isDuplicate) {
+            alert('This machine is already assigned to this agreement.');
+            isProcessingQRRef.current = false;
+            return currentMachines;
+          }
+
+          const newMachine: MachineForAgreement = {
+            id: Date.now().toString(),
+            description: `${machineData.brandName || ''} ${machineData.modelName || ''} ${machineData.typeName || ''}`.trim() || 'Machine',
+            serialNumber: machineData.serialNumber || '',
+            boxNumber: machineData.boxNumber || '',
+            brandName: machineData.brandName,
+            modelName: machineData.modelName,
+            typeName: machineData.typeName,
+            scannedAt: new Date().toISOString(),
+          };
+
+          const updatedMachines = [...currentMachines, newMachine];
+          
+          // Update status after state is set
+          setTimeout(() => {
+            checkAndUpdateStatus(updatedMachines);
+            // Show success feedback
+            const successEvent = new CustomEvent('machineAdded', { detail: newMachine });
+            window.dispatchEvent(successEvent);
+            isProcessingQRRef.current = false;
+          }, 0);
+
+          return updatedMachines;
+        } catch (error) {
+          console.error('Error parsing QR code:', error);
+          alert('Invalid QR code format. Please ensure you are scanning a valid machine QR code.');
+          isProcessingQRRef.current = false;
+          return currentMachines;
+        }
+      });
+
+      // Clean up URL params after a short delay to ensure state updates
+      setTimeout(() => {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete('qrData');
+        currentUrl.searchParams.delete('agreementId');
+        currentUrl.searchParams.delete('action');
+        window.history.replaceState({}, '', currentUrl.toString());
+      }, 100);
+    } else {
+      isProcessingQRRef.current = false;
+    }
+  }
+}, [searchParams, selectedAgreement]); // Include selectedAgreement in dependencies
 
   // Calculate pricing
   const pricing = useMemo(() => {
@@ -817,11 +894,14 @@ const RentalAgreementPage: React.FC = () => {
   };
 
   const handleUpdateAgreement = (agreement: RentalAgreement) => {
+    // Only reset machines if it's a different agreement
+    if (!selectedAgreement || selectedAgreement.id !== agreement.id) {
+      setMachinesForAgreement([]);
+      setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
+      setMachineErrors({});
+    }
     setSelectedAgreement(agreement);
     setIsUpdateModalOpen(true);
-    setMachinesForAgreement([]);
-    setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
-    setMachineErrors({});
   };
 
   const handleCloseUpdateModal = () => {
@@ -830,10 +910,7 @@ const RentalAgreementPage: React.FC = () => {
     setMachinesForAgreement([]);
     setManualMachineInput({ description: '', serialNumber: '', boxNumber: '' });
     setMachineErrors({});
-    if (qrScannerWindow && !qrScannerWindow.closed) {
-      qrScannerWindow.close();
-      setQrScannerWindow(null);
-    }
+    isProcessingQRRef.current = false; // Reset processing flag
   };
 
   const handleRemoveMachineFromAgreement = (machineId: string) => {
@@ -880,9 +957,6 @@ const RentalAgreementPage: React.FC = () => {
 
       if (isDuplicate) {
         alert('This machine is already assigned to this agreement.');
-        if (qrScannerWindow && !qrScannerWindow.closed) {
-          qrScannerWindow.focus();
-        }
         return;
       }
 
@@ -897,15 +971,9 @@ const RentalAgreementPage: React.FC = () => {
         scannedAt: new Date().toISOString(),
       };
 
-      setMachinesForAgreement([...machinesForAgreement, newMachine]);
-
-      // Close scanner window after successful scan
-      if (qrScannerWindow && !qrScannerWindow.closed) {
-        qrScannerWindow.close();
-        setQrScannerWindow(null);
-      }
-
-      checkAndUpdateStatus([...machinesForAgreement, newMachine]);
+      const updatedMachines = [...machinesForAgreement, newMachine];
+      setMachinesForAgreement(updatedMachines);
+      checkAndUpdateStatus(updatedMachines);
 
       // Show success feedback
       const successEvent = new CustomEvent('machineAdded', { detail: newMachine });
@@ -918,37 +986,23 @@ const RentalAgreementPage: React.FC = () => {
 
   // Enhanced QR Scanner Handler
   const handleOpenQRScanner = () => {
-    const flutterAppUrl = process.env.NEXT_PUBLIC_QR_SCANNER_URL || 'http://localhost:8080';
+    if (!selectedAgreement) return;
 
-    // Responsive window sizing
-    const isMobile = window.innerWidth < 768;
-    const width = isMobile ? window.screen.width * 0.95 : 600;
-    const height = isMobile ? window.screen.height * 0.85 : 800;
-    const left = isMobile ? (window.screen.width - width) / 2 : (window.screen.width - width) / 2;
-    const top = isMobile ? 20 : (window.screen.height - height) / 2;
+    // Check if we've reached the expected machine limit
+    const expectedMachines = selectedAgreement.expectedMachines || 0;
+    const addedMachines = machinesForAgreement.length;
 
-    const popup = window.open(
-      flutterAppUrl,
-      'QRScanner',
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no`
-    );
-
-    if (popup) {
-      setQrScannerWindow(popup);
-
-      // Enhanced window monitoring
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          setQrScannerWindow(null);
-        }
-      }, 500);
-
-      // Focus the popup window
-      popup.focus();
-    } else {
-      alert('Please allow popups for this site to use the QR scanner.');
+    if (expectedMachines > 0 && addedMachines >= expectedMachines) {
+      alert('All expected machines have been added.');
+      return;
     }
+
+    // Build return URL with context
+    const returnUrl = `/rental-agreement?agreementId=${selectedAgreement.id}&action=update`;
+    const qrPageUrl = `/qr?context=rental-agreement&returnUrl=${encodeURIComponent(returnUrl)}&title=Scan Machine QR Code&subtitle=Agreement: ${selectedAgreement.agreementNo}`;
+
+    // Navigate to QR page
+    router.push(qrPageUrl);
   };
 
   // Enhanced Manual Machine Add Handler
@@ -1584,8 +1638,8 @@ const RentalAgreementPage: React.FC = () => {
               <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
                 <div
                   className={`h-3 rounded-full transition-all duration-500 ease-out ${isComplete
-                      ? 'bg-gradient-to-r from-green-500 to-green-600 dark:from-green-500 dark:to-green-600'
-                      : 'bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-500 dark:to-blue-600'
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 dark:from-green-500 dark:to-green-600'
+                    : 'bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-500 dark:to-blue-600'
                     }`}
                   style={{ width: `${progressPercentage}%` }}
                 />
@@ -1611,53 +1665,15 @@ const RentalAgreementPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleOpenQRScanner}
-                disabled={isComplete || (qrScannerWindow !== null && !qrScannerWindow.closed)}
+                disabled={isComplete}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 dark:from-green-700 dark:to-green-800 text-white text-sm font-medium rounded-lg hover:from-green-700 hover:to-green-800 dark:hover:from-green-800 dark:hover:to-green-900 transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
               >
-                {qrScannerWindow && !qrScannerWindow.closed ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Scanner Window Open</span>
-                  </>
-                ) : (
-                  <>
-                    <QrCode className="w-5 h-5" />
-                    <span>Open QR Scanner</span>
-                  </>
-                )}
+                <QrCode className="w-5 h-5" />
+                <span>Scan QR Code</span>
               </button>
-              {qrScannerWindow && !qrScannerWindow.closed && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (qrScannerWindow && !qrScannerWindow.closed) {
-                      qrScannerWindow.close();
-                      setQrScannerWindow(null);
-                    }
-                  }}
-                  className="px-4 py-3 bg-red-600 dark:bg-red-700 text-white text-sm font-medium rounded-lg hover:bg-red-700 dark:hover:bg-red-800 transition-colors flex items-center justify-center space-x-2"
-                >
-                  <X className="w-4 h-4" />
-                  <span className="hidden sm:inline">Close Scanner</span>
-                </button>
-              )}
             </div>
 
-            {qrScannerWindow && !qrScannerWindow.closed && (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <div className="flex items-start space-x-3">
-                  <QrCode className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                      QR Scanner window is open
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                      Scan a machine QR code to add it to this agreement. The scanner window will close automatically after a successful scan.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+
 
             {/* Manual Entry Option */}
             <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
@@ -1967,8 +1983,8 @@ const RentalAgreementPage: React.FC = () => {
                       value={customerId}
                       onChange={(e) => setCustomerId(e.target.value)}
                       className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.customerId
-                          ? 'border-red-500 dark:border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
+                        ? 'border-red-500 dark:border-red-500'
+                        : 'border-gray-300 dark:border-slate-600'
                         } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                     >
                       <option value="">Select a customer</option>
@@ -1994,8 +2010,8 @@ const RentalAgreementPage: React.FC = () => {
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
                         className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.startDate
-                            ? 'border-red-500 dark:border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
+                          ? 'border-red-500 dark:border-red-500'
+                          : 'border-gray-300 dark:border-slate-600'
                           } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                       />
                       {formErrors.startDate && (
@@ -2011,8 +2027,8 @@ const RentalAgreementPage: React.FC = () => {
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
                         className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.endDate
-                            ? 'border-red-500 dark:border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
+                          ? 'border-red-500 dark:border-red-500'
+                          : 'border-gray-300 dark:border-slate-600'
                           } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                       />
                       {formErrors.endDate && (
@@ -2065,8 +2081,8 @@ const RentalAgreementPage: React.FC = () => {
                                 value={machine.brand}
                                 onChange={(e) => handleMachineChange(machine.id, 'brand', e.target.value)}
                                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors[`machine_brand_${index}`]
-                                    ? 'border-red-500 dark:border-red-500'
-                                    : 'border-gray-300 dark:border-slate-600'
+                                  ? 'border-red-500 dark:border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
                                   } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                               >
                                 <option value="">Select brand</option>
@@ -2092,8 +2108,8 @@ const RentalAgreementPage: React.FC = () => {
                                 onChange={(e) => handleMachineChange(machine.id, 'model', e.target.value)}
                                 disabled={!machine.brand}
                                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors[`machine_model_${index}`]
-                                    ? 'border-red-500 dark:border-red-500'
-                                    : 'border-gray-300 dark:border-slate-600'
+                                  ? 'border-red-500 dark:border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
                                   } bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${!machine.brand ? 'opacity-50 cursor-not-allowed' : ''
                                   }`}
                               >
@@ -2119,8 +2135,8 @@ const RentalAgreementPage: React.FC = () => {
                                 value={machine.type}
                                 onChange={(e) => handleMachineChange(machine.id, 'type', e.target.value)}
                                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors[`machine_type_${index}`]
-                                    ? 'border-red-500 dark:border-red-500'
-                                    : 'border-gray-300 dark:border-slate-600'
+                                  ? 'border-red-500 dark:border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
                                   } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                               >
                                 <option value="">Select type</option>
@@ -2149,8 +2165,8 @@ const RentalAgreementPage: React.FC = () => {
                                   handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
                                 }
                                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors[`machine_quantity_${index}`]
-                                    ? 'border-red-500 dark:border-red-500'
-                                    : 'border-gray-300 dark:border-slate-600'
+                                  ? 'border-red-500 dark:border-red-500'
+                                  : 'border-gray-300 dark:border-slate-600'
                                   } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                               />
                               {formErrors[`machine_quantity_${index}`] && (
@@ -2323,8 +2339,8 @@ const RentalAgreementPage: React.FC = () => {
                           value={agreementDate}
                           onChange={(e) => setAgreementDate(e.target.value)}
                           className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.agreementDate
-                              ? 'border-red-500 dark:border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
                             } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                         />
                         {formErrors.agreementDate && (
@@ -2340,8 +2356,8 @@ const RentalAgreementPage: React.FC = () => {
                           value={customerSignatureDate}
                           onChange={(e) => setCustomerSignatureDate(e.target.value)}
                           className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.customerSignatureDate
-                              ? 'border-red-500 dark:border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
                             } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                         />
                         {formErrors.customerSignatureDate && (
@@ -2360,8 +2376,8 @@ const RentalAgreementPage: React.FC = () => {
                           onChange={(e) => setCustomerIdNo(e.target.value)}
                           placeholder="e.g., 72348.961V"
                           className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.customerIdNo
-                              ? 'border-red-500 dark:border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
                             } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                         />
                         {formErrors.customerIdNo && (
@@ -2378,8 +2394,8 @@ const RentalAgreementPage: React.FC = () => {
                           onChange={(e) => setCustomerFullName(e.target.value)}
                           placeholder="Enter full name"
                           className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.customerFullName
-                              ? 'border-red-500 dark:border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
                             } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                         />
                         {formErrors.customerFullName && (
@@ -2398,8 +2414,8 @@ const RentalAgreementPage: React.FC = () => {
                           onChange={(e) => setSignature(e.target.value)}
                           placeholder="Enter signature or name"
                           className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.signature
-                              ? 'border-red-500 dark:border-red-500'
-                              : 'border-gray-300 dark:border-slate-600'
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-gray-300 dark:border-slate-600'
                             } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
                         />
                         {formErrors.signature && (

@@ -59,7 +59,9 @@ const Table: React.FC<TableProps> = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
-  const [dateRangeFilters, setDateRangeFilters] = useState<Record<string, { from: string; to: string }>>({});
+  const [dateRangeFilters, setDateRangeFilters] = useState<
+    Record<string, { from: string; to: string }>
+  >({});
   const [showFilters, setShowFilters] = useState(false);
   const [pageSize, setPageSize] = useState(itemsPerPage);
   const [calculatedHeight, setCalculatedHeight] = useState<string>('calc(100vh - 280px)');
@@ -148,11 +150,11 @@ const Table: React.FC<TableProps> = ({
       if (dateRange.from || dateRange.to) {
         filtered = filtered.filter((row) => {
           const rowValue = row[key];
-          
+
           // Handle date strings (YYYY-MM-DD format)
           if (typeof rowValue === 'string') {
             const rowDate = rowValue.split(' ')[0]; // Extract date part if time is included
-            
+
             if (dateRange.from && rowDate < dateRange.from) {
               return false;
             }
@@ -161,11 +163,11 @@ const Table: React.FC<TableProps> = ({
             }
             return true;
           }
-          
+
           // Handle Date objects
           if (rowValue instanceof Date) {
             const rowDateStr = rowValue.toISOString().split('T')[0];
-            
+
             if (dateRange.from && rowDateStr < dateRange.from) {
               return false;
             }
@@ -174,7 +176,7 @@ const Table: React.FC<TableProps> = ({
             }
             return true;
           }
-          
+
           return true;
         });
       }
@@ -223,7 +225,7 @@ const Table: React.FC<TableProps> = ({
     if (currentPage > calculatedTotalPages && calculatedTotalPages > 0) {
       setCurrentPage(calculatedTotalPages);
     }
-  }, [filteredData.length, pageSize]);
+  }, [filteredData.length, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sorting handler
   const handleSort = (columnKey: string) => {
@@ -310,26 +312,27 @@ const Table: React.FC<TableProps> = ({
   const showHeader = searchable || filterable || !!onCreateClick;
 
   // Check if any filters are active
-  const hasActiveFilters = searchTerm || 
-    Object.values(filters).some((f) => f) || 
+  const hasActiveFilters =
+    searchTerm ||
+    Object.values(filters).some((f) => f) ||
     Object.values(dateRangeFilters).some((dr) => dr.from || dr.to);
 
   return (
     <div
       className={`bg-white dark:bg-slate-800 rounded-lg overflow-hidden flex flex-col ${className}`}
       style={{
-        maxHeight: maxHeight || calculatedHeight,
-        ...(maxHeight === 'none' ? { height: '100%' } : {})
+        maxHeight: tableMaxHeight,
+        ...(maxHeight === 'none' ? { height: '100%' } : {}),
       }}
     >
       {/* Header with search, filter and create button */}
       {showHeader && (
         <div className="p-6 bg-gray-50 dark:bg-slate-700/50 flex-shrink-0">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3 flex-1">
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <div className="flex items-center space-x-3 flex-1 min-w-0">
               {/* Search Bar */}
               {searchable && (
-                <div className="relative flex-1 max-w-md">
+                <div className="relative flex-1 max-w-md min-w-[180px]">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                   </div>
@@ -369,7 +372,7 @@ const Table: React.FC<TableProps> = ({
               <Tooltip content={`Add a new ${createButtonLabel.toLowerCase()}`} position="bottom">
                 <button
                   onClick={onCreateClick}
-                  className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                  className="w-full sm:w-auto mt-3 sm:mt-0 px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
                 >
                   {createButtonLabel}
                 </button>
@@ -379,34 +382,45 @@ const Table: React.FC<TableProps> = ({
 
           {/* Filter Pills Row */}
           {filterable && showFilters && (
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 mt-2">
               {columns
                 .filter((col) => col.filterable)
                 .map((column) => {
                   const filterType = column.filterType || 'select';
-                  
+
                   if (filterType === 'dateRange') {
                     const dateRange = dateRangeFilters[column.key] || { from: '', to: '' };
-                    
+
                     return (
-                      <div key={column.key} className="flex items-center space-x-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2">
+                      <div
+                        key={column.key}
+                        className="flex items-center space-x-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2"
+                      >
                         <Calendar className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                         <div className="flex items-center space-x-2">
                           <div className="flex flex-col">
-                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">From</label>
+                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              From
+                            </label>
                             <input
                               type="date"
                               value={dateRange.from}
-                              onChange={(e) => handleDateRangeChange(column.key, 'from', e.target.value)}
+                              onChange={(e) =>
+                                handleDateRangeChange(column.key, 'from', e.target.value)
+                              }
                               className="border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
                             />
                           </div>
                           <div className="flex flex-col">
-                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">To</label>
+                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              To
+                            </label>
                             <input
                               type="date"
                               value={dateRange.to}
-                              onChange={(e) => handleDateRangeChange(column.key, 'to', e.target.value)}
+                              onChange={(e) =>
+                                handleDateRangeChange(column.key, 'to', e.target.value)
+                              }
                               className="border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
                             />
                           </div>
@@ -414,7 +428,7 @@ const Table: React.FC<TableProps> = ({
                       </div>
                     );
                   }
-                  
+
                   // Default select filter
                   return (
                     <div key={column.key} className="flex items-center">
@@ -438,7 +452,12 @@ const Table: React.FC<TableProps> = ({
                             stroke="currentColor"
                             viewBox="0 0 24 24"
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 9l-7 7-7-7"
+                            />
                           </svg>
                         </div>
                       </div>
@@ -450,128 +469,236 @@ const Table: React.FC<TableProps> = ({
         </div>
       )}
 
-      {/* Table Container with flexible height */}
+      {/* Content Container with flexible height */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-        <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0" style={{
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'rgba(156, 163, 175, 0.5) transparent'
-        }}>
-          <table className="min-w-full">
-            <thead className="bg-gray-50 dark:bg-slate-700 border-y border-gray-200 dark:border-slate-700 sticky top-0 z-10">
-              <tr>
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    onClick={() => handleSort(column.key)}
-                    className={`px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${column.sortable ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600' : ''
+        {/* Desktop / Tablet TABLE view */}
+        <div className="hidden md:flex-1 md:flex md:flex-col md:min-h-0">
+          <div
+            className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgba(156, 163, 175, 0.5) transparent',
+            }}
+          >
+            <table className="min-w-full">
+              <thead className="bg-gray-50 dark:bg-slate-700 border-y border-gray-200 dark:border-slate-700 sticky top-0 z-10">
+                <tr>
+                  {columns.map((column) => (
+                    <th
+                      key={column.key}
+                      onClick={() => handleSort(column.key)}
+                      className={`px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${
+                        column.sortable
+                          ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600'
+                          : ''
                       }`}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>{column.label}</span>
-                      {column.sortable && (
-                        <div className="flex flex-col ml-1">
-                          <svg
-                            className={`w-3 h-3 ${sortColumn === column.key && sortDirection === 'asc'
-                              ? 'text-gray-900 dark:text-gray-200'
-                              : 'text-gray-400 dark:text-gray-500'
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>{column.label}</span>
+                        {column.sortable && (
+                          <div className="flex flex-col ml-1">
+                            <svg
+                              className={`w-3 h-3 ${
+                                sortColumn === column.key && sortDirection === 'asc'
+                                  ? 'text-gray-900 dark:text-gray-200'
+                                  : 'text-gray-400 dark:text-gray-500'
                               }`}
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                  {actions.length > 0 && (
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider sticky top-0 bg-gray-50 dark:bg-slate-700">
+                      Actions
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-100 dark:divide-slate-700">
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={columns.length + (actions.length > 0 ? 1 : 0)}
+                      className="px-6 py-12 text-center"
+                    >
+                      <div className="flex justify-center items-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 dark:border-indigo-500" />
+                        <span className="ml-3 text-gray-500 dark:text-gray-400">Loading...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedData.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={columns.length + (actions.length > 0 ? 1 : 0)}
+                      className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
+                    >
+                      {emptyMessage}
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedData.map((row, index) => {
+                    // Filter actions based on shouldShow for each row
+                    const visibleActions = actions.filter(
+                      (action) => !action.shouldShow || action.shouldShow(row)
+                    );
+
+                    return (
+                      <tr
+                        key={index}
+                        className={`hover:bg-gray-50 dark:hover:bg-slate-700/50 ${
+                          getRowClassName ? getRowClassName(row) : ''
+                        }`}
+                      >
+                        {columns.map((column) => (
+                          <td
+                            key={column.key}
+                            className="px-6 py-4 text-sm text-gray-900 dark:text-white whitespace-nowrap"
                           >
-                            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                          </svg>
+                            {column.render
+                              ? column.render(row[column.key], row)
+                              : row[column.key]}
+                          </td>
+                        ))}
+                        {visibleActions.length > 0 && (
+                          <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                            <div className="flex space-x-2">
+                              {visibleActions.map((action, actionIndex) => (
+                                <Tooltip
+                                  key={actionIndex}
+                                  content={action.tooltip || action.label?.toString() || 'Action'}
+                                  position="top"
+                                >
+                                  <button
+                                    key={actionIndex}
+                                    onClick={() => action.onClick(row)}
+                                    className={action.className || getActionButtonStyles(action.variant)}
+                                  >
+                                    {action.icon && <span className="mr-1">{action.icon}</span>}
+                                    {action.label}
+                                  </button>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </td>
+                        )}
+                        {visibleActions.length === 0 && actions.length > 0 && (
+                          <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                            {/* Empty cell to maintain table structure */}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Mobile LIST/CARD view */}
+        <div className="md:hidden flex-1 overflow-y-auto min-h-0">
+          {loading ? (
+            <div className="flex justify-center items-center h-full py-10">
+              <div className="flex justify-center items-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 dark:border-indigo-500" />
+                <span className="ml-3 text-gray-500 dark:text-gray-400">Loading...</span>
+              </div>
+            </div>
+          ) : paginatedData.length === 0 ? (
+            <div className="flex justify-center items-center h-full py-10">
+              <p className="text-gray-500 dark:text-gray-400 text-sm text-center px-4">
+                {emptyMessage}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 px-3 py-3">
+              {paginatedData.map((row, index) => {
+                const visibleActions = actions.filter(
+                  (action) => !action.shouldShow || action.shouldShow(row)
+                );
+                const rowClassName = getRowClassName ? getRowClassName(row) : '';
+
+                return (
+                  <div
+                    key={index}
+                    className={`rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm ${rowClassName}`}
+                  >
+                    {/* Top: primary columns + actions */}
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        {/* Use first column as title if exists */}
+                        {columns[0] && (
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                            {columns[0].render
+                              ? columns[0].render(row[columns[0].key], row)
+                              : row[columns[0].key]}
+                          </div>
+                        )}
+                      </div>
+
+                      {visibleActions.length > 0 && (
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {visibleActions.map((action, actionIndex) => (
+                            <Tooltip
+                              key={actionIndex}
+                              content={action.tooltip || action.label?.toString() || 'Action'}
+                              position="top"
+                            >
+                              <button
+                                onClick={() => action.onClick(row)}
+                                className={
+                                  action.className ||
+                                  `${getActionButtonStyles(
+                                    action.variant
+                                  )} !px-2 !py-1 text-[11px]`
+                                }
+                              >
+                                {action.icon && <span className="mr-1">{action.icon}</span>}
+                                {action.label}
+                              </button>
+                            </Tooltip>
+                          ))}
                         </div>
                       )}
                     </div>
-                  </th>
-                ))}
-                {actions.length > 0 && (
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider sticky top-0 bg-gray-50 dark:bg-slate-700">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-100 dark:divide-slate-700">
-              {loading ? (
-                <tr>
-                  <td
-                    colSpan={columns.length + (actions.length > 0 ? 1 : 0)}
-                    className="px-6 py-12 text-center"
-                  >
-                    <div className="flex justify-center items-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 dark:border-indigo-500" />
-                      <span className="ml-3 text-gray-500 dark:text-gray-400">Loading...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : paginatedData.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={columns.length + (actions.length > 0 ? 1 : 0)}
-                    className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
-                  >
-                    {emptyMessage}
-                  </td>
-                </tr>
-              ) : (
-                paginatedData.map((row, index) => {
-                  // Filter actions based on shouldShow for each row
-                  const visibleActions = actions.filter(action => 
-                    !action.shouldShow || action.shouldShow(row)
-                  );
 
-                  return (
-                    <tr
-                      key={index}
-                      className={`hover:bg-gray-50 dark:hover:bg-slate-700/50 ${getRowClassName ? getRowClassName(row) : ''
-                        }`}
-                    >
-                      {columns.map((column) => (
-                        <td key={column.key} className="px-6 py-4 text-sm text-gray-900 dark:text-white whitespace-nowrap">
-                          {column.render ? column.render(row[column.key], row) : row[column.key]}
-                        </td>
+                    {/* Details as label-value list */}
+                    <div className="mt-2 space-y-1.5">
+                      {columns.map((column, colIndex) => (
+                        <div
+                          key={column.key}
+                          className="flex text-xs text-gray-700 dark:text-gray-200"
+                        >
+                          <span className="w-28 flex-shrink-0 font-medium text-gray-500 dark:text-gray-400">
+                            {column.label}
+                          </span>
+                          <span className="flex-1 ml-2 break-all">
+                            {column.render
+                              ? column.render(row[column.key], row)
+                              : row[column.key]}
+                          </span>
+                        </div>
                       ))}
-                      {visibleActions.length > 0 && (
-                        <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
-                          <div className="flex space-x-2">
-                            {visibleActions.map((action, actionIndex) => (
-                              <Tooltip
-                                key={actionIndex}
-                                content={action.tooltip || action.label?.toString() || 'Action'}
-                                position="top"
-                              >
-                                <button
-                                  key={actionIndex}
-                                  onClick={() => action.onClick(row)}
-                                  className={action.className || getActionButtonStyles(action.variant)}
-                                >
-                                  {action.icon && <span className="mr-1">{action.icon}</span>}
-                                  {action.label}
-                                </button>
-                              </Tooltip>
-                            ))}
-                          </div>
-                        </td>
-                      )}
-                      {visibleActions.length === 0 && actions.length > 0 && (
-                        <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
-                          {/* Empty cell to maintain table structure */}
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Pagination - Fixed at bottom */}
-      <div className="bg-white dark:bg-slate-800 px-6 py-4 border-t border-gray-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0">
+      <div className="bg-white dark:bg-slate-800 px-4 sm:px-6 py-4 border-t border-gray-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0 flex-wrap gap-3">
         <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
             Showing {filteredData.length === 0 ? 0 : startIndex + 1} to{' '}
             {Math.min(startIndex + pageSize, filteredData.length)} of {filteredData.length} results
           </span>
@@ -582,10 +709,11 @@ const Table: React.FC<TableProps> = ({
           <button
             onClick={handlePreviousPage}
             disabled={effectiveCurrentPage === 1}
-            className={`p-2 rounded-md text-sm font-medium transition-colors duration-200 ${effectiveCurrentPage === 1
-              ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-              : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
-              }`}
+            className={`p-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+              effectiveCurrentPage === 1
+                ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
+            }`}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -603,10 +731,11 @@ const Table: React.FC<TableProps> = ({
                 <button
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
-                  className={`w-8 h-8 rounded-md text-sm font-medium ${pageNum === effectiveCurrentPage
-                    ? 'bg-gray-900 dark:bg-indigo-600 text-white'
-                    : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
-                    }`}
+                  className={`w-8 h-8 rounded-md text-sm font-medium ${
+                    pageNum === effectiveCurrentPage
+                      ? 'bg-gray-900 dark:bg-indigo-600 text-white'
+                      : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
+                  }`}
                 >
                   {pageNum}
                 </button>
@@ -622,21 +751,24 @@ const Table: React.FC<TableProps> = ({
           <button
             onClick={handleNextPage}
             disabled={effectiveCurrentPage === totalPages}
-            className={`p-2 rounded-md text-sm font-medium transition-colors duration-200 ${effectiveCurrentPage === totalPages
-              ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-              : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
-              }`}
+            className={`p-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+              effectiveCurrentPage === totalPages
+                ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600'
+            }`}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
 
           {/* Rows per page */}
-          <div className="flex items-center space-x-2 ml-4">
-            <span className="text-sm text-gray-700 dark:text-gray-300">Rows per page:</span>
+          <div className="flex items-center space-x-2 ml-2 sm:ml-4">
+            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+              Rows per page:
+            </span>
             <select
               value={pageSize}
               onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-              className="border border-gray-300 dark:border-slate-600 rounded-md px-3 py-1 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
+              className="border border-gray-300 dark:border-slate-600 rounded-md px-2 sm:px-3 py-1 text-xs sm:text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>

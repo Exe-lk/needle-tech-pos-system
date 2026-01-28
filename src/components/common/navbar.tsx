@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Moon, Sun, Menu, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import Image from 'next/image';
 import { APP_VERSION } from '@/src/utils/version';
 
 // ---- Match sidebar structure for titles ----
@@ -188,10 +189,13 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
       >
         <div className="px-6 h-full">
           <div className="flex justify-between items-center h-full">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3.5">
+              <div className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-white dark:bg-slate-800/50 shadow-sm border border-gray-200/50 dark:border-slate-700/50">
+                <div className="w-full h-full bg-gray-100 dark:bg-slate-800 rounded-lg" />
+              </div>
               <div className="flex flex-col">
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
-                  EXE.lk
+                  Needle Tech
                 </h1>
                 <span className="text-xs text-gray-500 dark:text-slate-400 font-medium">
                   V {APP_VERSION}
@@ -214,7 +218,7 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
       <div className="px-6 h-full">
         <div className="flex justify-between items-center h-full">
           {/* Left side - Logo, Page Title and Mobile Menu Button */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3.5">
             {/* Mobile menu button */}
             <button
               onClick={onMenuClick || toggleMobileMenu}
@@ -227,10 +231,22 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
               )}
             </button>
 
-            {/* Project Name + Current Page */}
+            {/* Logo - Increased size for better visibility */}
+            <div className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-white dark:bg-slate-800/50 shadow-sm border border-gray-200/50 dark:border-slate-700/50">
+              <Image
+                src="/logo.jpg"
+                alt="Needle Technologies Logo"
+                fill
+                className="object-contain p-1"
+                priority
+                sizes="56px"
+              />
+            </div>
+
+            {/* Company Name + Version */}
             <div className="flex flex-col">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
-                EXE.lk
+                Needle Tech
               </h1>
               <span className="text-xs text-gray-500 dark:text-slate-400 font-medium">
                 V {APP_VERSION}
