@@ -77,9 +77,11 @@ export const getApiDocs = async () => {
                 type: 'object',
                 properties: {
                   totalItems: { type: 'number', description: 'Total number of items' },
-                  page: { type: 'number', description: 'Current page number' },
-                  limit: { type: 'number', description: 'Items per page' },
+                  currentPage: { type: 'number', description: 'Current page number' },
+                  itemsPerPage: { type: 'number', description: 'Items per page' },
                   totalPages: { type: 'number', description: 'Total number of pages' },
+                  hasNextPage: { type: 'boolean', description: 'Whether there is a next page' },
+                  hasPreviousPage: { type: 'boolean', description: 'Whether there is a previous page' },
                 },
               },
               sorting: {

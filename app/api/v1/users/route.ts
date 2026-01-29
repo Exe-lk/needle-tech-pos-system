@@ -1,91 +1,120 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
-import { parseQueryParams, buildPaginationMeta, sanitizeObject } from '@/lib/utils';
-import { withAuth, withAuthAndRole, hashPassword } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import { registerUser } from '@/lib/auth-supabase';
+import prisma from '@/lib/prisma';
 
-// Only ADMIN and MANAGER can view users list
+/**
+ * @swagger
+ * /api/v1/users:
+ *   get:
+ *     summary: Get list of users
+ *     description: Retrieve paginated list of users with filtering and sorting (Admin/Manager only)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [ACTIVE, INACTIVE, SUSPENDED]
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ */
 export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
     const roleFilter = searchParams.get('role');
-    const isActiveFilter = searchParams.get('isActive');
+    const statusFilter = searchParams.get('status');
     
-    // Build filter
-    const filter: any = {};
+    // Build where clause
+    const where: any = {};
     
     if (search) {
-      filter.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { username: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { username: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
       ];
     }
     
     if (roleFilter) {
-      // Need to lookup role by name
-      const rolesCollection = db.collection('roles');
-      const role = await rolesCollection.findOne({ name: roleFilter });
+      const role = await prisma.role.findFirst({
+        where: { name: roleFilter }
+      });
       if (role) {
-        filter.roleId = role._id;
+        where.roleId = role.id;
       }
     }
     
-    if (isActiveFilter !== null) {
-      filter.status = isActiveFilter === 'true' ? 'ACTIVE' : { $ne: 'ACTIVE' };
+    if (statusFilter) {
+      where.status = statusFilter;
     }
     
     // Get total count
-    const totalItems = await db.collection('users').countDocuments(filter);
+    const totalItems = await prisma.user.count({ where });
     
     // Get users with pagination
     const skip = (page - 1) * limit;
-    const sortObj: Record<string, 1 | -1> = { [sortBy]: sortOrder as 1 | -1 };
-    const users = await db
-      .collection('users')
-      .find(filter)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
+    const users = await prisma.user.findMany({
+      where,
+      include: {
+        role: true
+      },
+      orderBy: {
+        [sortBy]: sortOrder
+      },
+      skip,
+      take: limit
+    });
     
-    // Populate role information
-    const rolesCollection = db.collection('roles');
-    const usersWithRoles = await Promise.all(
-      users.map(async (user) => {
-        const role = user.roleId 
-          ? await rolesCollection.findOne({ _id: user.roleId })
-          : null;
-        
-        return {
-          userId: user._id.toString(),
-          firstName: user.fullName?.split(' ')[0] || '',
-          lastName: user.fullName?.split(' ').slice(1).join(' ') || '',
-          email: user.email || '',
-          phone: user.phone || '',
-          username: user.username || '',
-          role: role?.name || '',
-          isActive: user.status === 'ACTIVE',
-          createdDate: user.createdAt || user._id.getTimestamp(),
-        };
-      })
-    );
+    // Format response
+    const formattedUsers = users.map(user => ({
+      userId: user.id,
+      firstName: user.fullName.split(' ')[0] || '',
+      lastName: user.fullName.split(' ').slice(1).join(' ') || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      username: user.username,
+      role: user.role.name,
+      isActive: user.status === 'ACTIVE',
+      createdDate: user.createdAt,
+    }));
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      usersWithRoles,
+      formattedUsers,
       pagination,
       'Users retrieved successfully',
-      { sortBy, sortOrder: sortOrder === 1 ? 'asc' : 'desc' },
+      { sortBy, sortOrder: sortOrder === 'asc' ? 'asc' : 'desc' },
       search || undefined,
       {
         ...(roleFilter && { role: roleFilter }),
-        ...(isActiveFilter !== null && { isActive: isActiveFilter === 'true' }),
+        ...(statusFilter && { status: statusFilter }),
       }
     );
   } catch (error: any) {
@@ -94,78 +123,104 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextReq
   }
 });
 
-// Only ADMIN can create new users
+/**
+ * @swagger
+ * /api/v1/users:
+ *   post:
+ *     summary: Create new user
+ *     description: Create a new user account (Admin only)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - username
+ *               - firstName
+ *               - lastName
+ *               - role
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               username:
+ *                 type: string
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ */
 export const POST = withAuthAndRole(['ADMIN'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { firstName, lastName, email, phone, username, password, role } = body;
     
     // Validation
-    if (!firstName || !lastName || !username || !password || !role) {
+    if (!firstName || !lastName || !username || !password || !role || !email) {
       return validationErrorResponse('Missing required fields', {
         firstName: !firstName ? ['First name is required'] : [],
         lastName: !lastName ? ['Last name is required'] : [],
+        email: !email ? ['Email is required'] : [],
         username: !username ? ['Username is required'] : [],
         password: !password ? ['Password is required'] : [],
         role: !role ? ['Role is required'] : [],
       });
     }
     
-    const db = await getDatabase();
-    
-    // Check if username already exists
-    const existingUser = await db.collection('users').findOne({ username });
-    if (existingUser) {
-      return validationErrorResponse('Username already exists', {
-        username: ['Username already exists'],
-      });
-    }
-    
     // Find role by name
-    const rolesCollection = db.collection('roles');
-    const roleDoc = await rolesCollection.findOne({ name: role });
+    const roleDoc = await prisma.role.findFirst({
+      where: { name: role }
+    });
+    
     if (!roleDoc) {
       return validationErrorResponse('Invalid role', {
         role: ['Role not found'],
       });
     }
     
-    // Hash password using bcrypt
-    const passwordHash = await hashPassword(password);
-    
+    // Register user via Supabase
     const fullName = `${firstName} ${lastName}`;
-    const now = new Date();
-    
-    const newUser = {
+    const result = await registerUser({
+      email,
+      password,
       username,
-      passwordHash,
-      roleId: roleDoc._id,
       fullName,
-      email: email || '',
-      phone: phone || '',
-      status: 'ACTIVE',
-      lastLoginAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    
-    const result = await db.collection('users').insertOne(newUser);
+      roleId: roleDoc.id,
+      phone
+    });
     
     const createdUser = {
-      userId: result.insertedId.toString(),
+      userId: result.user.id,
       firstName,
       lastName,
-      email: email || '',
+      email,
       phone: phone || '',
       username,
       role,
       isActive: true,
-      createdDate: now.toISOString(),
+      createdDate: new Date().toISOString(),
     };
     
     return successResponse(createdUser, 'User created successfully', 201);
   } catch (error: any) {
     console.error('Error creating user:', error);
+    if (error.message.includes('already exists') || error.message.includes('duplicate')) {
+      return validationErrorResponse(error.message);
+    }
     return errorResponse('Failed to create user', 500);
   }
 });

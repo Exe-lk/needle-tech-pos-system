@@ -541,6 +541,205 @@ export const swaggerPaths = {
       },
     },
   },
+  
+  '/api/v1/upload/qr-code': {
+    post: {
+      summary: 'Upload QR code image to Supabase Storage',
+      description: 'Upload a base64 encoded QR code image for a machine and update the machine record. Use either machineId or serialNumber to identify the machine.',
+      tags: ['Upload', 'Machines'],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['qrCodeValue', 'imageData'],
+              properties: {
+                machineId: {
+                  type: 'string',
+                  description: 'MongoDB ObjectId of the machine (use either machineId or serialNumber)',
+                  example: '507f1f77bcf86cd799439011',
+                },
+                serialNumber: {
+                  type: 'string',
+                  description: 'Serial number of the machine (use either machineId or serialNumber)',
+                  example: 'SN12345',
+                },
+                qrCodeValue: {
+                  type: 'string',
+                  description: 'QR code value (used for filename)',
+                  example: 'MCH-JUKI-SN12345',
+                },
+                imageData: {
+                  type: 'string',
+                  description: 'Base64 encoded image data (with or without data URL prefix)',
+                  example: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': {
+          description: 'QR code image uploaded successfully',
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { $ref: '#/components/schemas/ApiResponse' },
+                  {
+                    type: 'object',
+                    properties: {
+                      data: {
+                        type: 'object',
+                        properties: {
+                          imageUrl: { type: 'string' },
+                          machineId: { type: 'string' },
+                          qrCodeValue: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+        '400': { description: 'Validation error' },
+        '404': { description: 'Machine not found' },
+        '500': { description: 'Server error' },
+      },
+    },
+  },
+  
+  '/api/v1/upload/machine-photos': {
+    post: {
+      summary: 'Upload machine photos to Supabase Storage',
+      description: 'Upload one or more photos for a machine. Use either machineId or serialNumber to identify the machine.',
+      tags: ['Upload', 'Machines'],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['photos'],
+              properties: {
+                machineId: {
+                  type: 'string',
+                  description: 'MongoDB ObjectId of the machine (use either machineId or serialNumber)',
+                },
+                serialNumber: {
+                  type: 'string',
+                  description: 'Serial number of the machine (use either machineId or serialNumber)',
+                  example: 'SN12345',
+                },
+                photos: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['imageData'],
+                    properties: {
+                      imageData: { type: 'string', description: 'Base64 encoded image data' },
+                      contentType: { type: 'string', default: 'image/jpeg' },
+                    },
+                  },
+                },
+                append: { type: 'boolean', default: true },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': { description: 'Photos uploaded successfully' },
+        '400': { description: 'Validation error' },
+        '404': { description: 'Machine not found' },
+      },
+    },
+  },
+  
+  '/api/v1/upload/damage-report-photos': {
+    post: {
+      summary: 'Upload damage report photos to Supabase Storage',
+      tags: ['Upload', 'Damage Reports'],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['damageReportId', 'photos'],
+              properties: {
+                damageReportId: { type: 'string' },
+                photos: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['imageData'],
+                    properties: {
+                      imageData: { type: 'string' },
+                      contentType: { type: 'string', default: 'image/jpeg' },
+                    },
+                  },
+                },
+                append: { type: 'boolean', default: true },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': { description: 'Photos uploaded successfully' },
+        '400': { description: 'Validation error' },
+        '404': { description: 'Damage report not found' },
+      },
+    },
+  },
+  
+  '/api/v1/upload/return-photos': {
+    post: {
+      summary: 'Upload return inspection photos to Supabase Storage',
+      tags: ['Upload', 'Returns'],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['returnId', 'photos'],
+              properties: {
+                returnId: { type: 'string' },
+                photos: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['imageData'],
+                    properties: {
+                      imageData: { type: 'string' },
+                      contentType: { type: 'string', default: 'image/jpeg' },
+                    },
+                  },
+                },
+                append: { type: 'boolean', default: true },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': { description: 'Photos uploaded successfully' },
+        '400': { description: 'Validation error' },
+        '404': { description: 'Return record not found' },
+      },
+    },
+  },
+  
   '/api/v1/invoices': {
     get: {
       summary: 'Get all invoices',

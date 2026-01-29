@@ -1,47 +1,68 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
-import { parseQueryParams, buildPaginationMeta, sanitizeObject } from '@/lib/utils';
-import { withAuth, withAuthAndRole } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-// Only ADMIN and MANAGER can view roles
+/**
+ * @swagger
+ * /api/v1/roles:
+ *   get:
+ *     summary: Get list of roles
+ *     description: Retrieve paginated list of roles (Admin/Manager only)
+ *     tags: [Roles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Roles retrieved successfully
+ */
 export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
-    const filter: any = {};
+    const where: any = {};
     
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
       ];
     }
     
-    const totalItems = await db.collection('roles').countDocuments(filter);
+    const totalItems = await prisma.role.count({ where });
     const skip = (page - 1) * limit;
-    const sortObj: Record<string, 1 | -1> = { [sortBy]: sortOrder as 1 | -1 };
     
-    const roles = await db
-      .collection('roles')
-      .find(filter)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
-    
-    const sanitizedRoles = roles.map(role => sanitizeObject(role));
+    const roles = await prisma.role.findMany({
+      where,
+      orderBy: {
+        [sortBy]: sortOrder
+      },
+      skip,
+      take: limit
+    });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      sanitizedRoles,
+      roles,
       pagination,
       'Roles retrieved successfully',
-      { sortBy, sortOrder: sortOrder === 1 ? 'asc' : 'desc' },
+      { sortBy, sortOrder: sortOrder === 'asc' ? 'asc' : 'desc' },
       search || undefined
     );
   } catch (error: any) {
@@ -50,7 +71,37 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextReq
   }
 });
 
-// Only ADMIN can create roles
+/**
+ * @swagger
+ * /api/v1/roles:
+ *   post:
+ *     summary: Create new role
+ *     description: Create a new role with permissions (Admin only)
+ *     tags: [Roles]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - permissions
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               permissions:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       201:
+ *         description: Role created successfully
+ */
 export const POST = withAuthAndRole(['ADMIN'], async (request: NextRequest) => {
   try {
     const body = await request.json();
@@ -63,28 +114,26 @@ export const POST = withAuthAndRole(['ADMIN'], async (request: NextRequest) => {
       });
     }
     
-    const db = await getDatabase();
-    
     // Check if role name already exists
-    const existingRole = await db.collection('roles').findOne({ name });
+    const existingRole = await prisma.role.findUnique({
+      where: { name }
+    });
+    
     if (existingRole) {
       return validationErrorResponse('Role name already exists', {
         name: ['Role name already exists'],
       });
     }
     
-    const now = new Date();
-    const newRole = {
-      name,
-      description: description || '',
-      permissions,
-      createdAt: now,
-    };
+    const newRole = await prisma.role.create({
+      data: {
+        name,
+        description: description || null,
+        permissions
+      }
+    });
     
-    const result = await db.collection('roles').insertOne(newRole);
-    const createdRole = await db.collection('roles').findOne({ _id: result.insertedId });
-    
-    return successResponse(sanitizeObject(createdRole), 'Role created successfully', 201);
+    return successResponse(newRole, 'Role created successfully', 201);
   } catch (error: any) {
     console.error('Error creating role:', error);
     return errorResponse('Failed to create role', 500);

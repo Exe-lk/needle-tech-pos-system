@@ -1,10 +1,30 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
-import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
-import { withAuth, withAuthAndRole } from '@/lib/auth';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
+import { supabaseAdmin } from '@/lib/supabase';
 
-// Only ADMIN and MANAGER can view user details
+/**
+ * @swagger
+ * /api/v1/users/{id}:
+ *   get:
+ *     summary: Get user by ID
+ *     description: Retrieve detailed information about a specific user (Admin/Manager only)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User retrieved successfully
+ *       404:
+ *         description: User not found
+ */
 export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   request: NextRequest,
   auth,
@@ -13,39 +33,30 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid user ID');
-    }
-    
-    const db = await getDatabase();
-    const userId = toObjectId(id);
-    
-    const user = await db.collection('users').findOne({ _id: userId });
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { role: true }
+    });
     
     if (!user) {
       return notFoundResponse('User not found');
     }
     
-    // Get role
-    const rolesCollection = db.collection('roles');
-    const role = user.roleId 
-      ? await rolesCollection.findOne({ _id: user.roleId })
-      : null;
-    
-    const nameParts = (user.fullName || '').split(' ');
+    const nameParts = user.fullName.split(' ');
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
     
     const userData = {
-      userId: user._id.toString(),
+      userId: user.id,
       firstName,
       lastName,
       email: user.email || '',
       phone: user.phone || '',
-      username: user.username || '',
-      role: role?.name || '',
+      username: user.username,
+      role: user.role.name,
       isActive: user.status === 'ACTIVE',
-      createdDate: user.createdAt || user._id.getTimestamp(),
+      createdDate: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
     };
     
     return successResponse(userData, 'User retrieved successfully');
@@ -55,7 +66,43 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   }
 });
 
-// Only ADMIN can update users
+/**
+ * @swagger
+ * /api/v1/users/{id}:
+ *   put:
+ *     summary: Update user
+ *     description: Update user information (Admin only)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *               isActive:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ */
 export const PUT = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
   auth,
@@ -63,76 +110,76 @@ export const PUT = withAuthAndRole(['ADMIN'], async (
 ) => {
   try {
     const { id } = await params;
-    
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid user ID');
-    }
-    
     const body = await request.json();
     const { firstName, lastName, email, phone, role, isActive } = body;
     
-    const db = await getDatabase();
-    const userId = toObjectId(id);
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+      include: { role: true }
+    });
     
-    const existingUser = await db.collection('users').findOne({ _id: userId });
     if (!existingUser) {
       return notFoundResponse('User not found');
     }
     
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
+    const updateData: any = {};
     
     if (firstName !== undefined || lastName !== undefined) {
-      const currentName = existingUser.fullName?.split(' ') || [];
+      const currentName = existingUser.fullName.split(' ');
       const newFirstName = firstName !== undefined ? firstName : (currentName[0] || '');
       const newLastName = lastName !== undefined ? lastName : (currentName.slice(1).join(' ') || '');
       updateData.fullName = `${newFirstName} ${newLastName}`.trim();
     }
     
-    if (email !== undefined) updateData.email = email;
+    if (email !== undefined && email !== existingUser.email) {
+      // Update email in Supabase Auth
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(id, { email });
+        updateData.email = email;
+      } catch (error: any) {
+        console.error('Error updating Supabase email:', error);
+        return validationErrorResponse('Failed to update email in authentication system');
+      }
+    }
+    
     if (phone !== undefined) updateData.phone = phone;
     if (isActive !== undefined) {
       updateData.status = isActive ? 'ACTIVE' : 'INACTIVE';
     }
     
     if (role !== undefined) {
-      const rolesCollection = db.collection('roles');
-      const roleDoc = await rolesCollection.findOne({ name: role });
+      const roleDoc = await prisma.role.findFirst({
+        where: { name: role }
+      });
       if (!roleDoc) {
         return validationErrorResponse('Invalid role', {
           role: ['Role not found'],
         });
       }
-      updateData.roleId = roleDoc._id;
+      updateData.roleId = roleDoc.id;
     }
     
-    await db.collection('users').updateOne(
-      { _id: userId },
-      { $set: updateData }
-    );
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: updateData,
+      include: { role: true }
+    });
     
-    const updatedUser = await db.collection('users').findOne({ _id: userId });
-    const rolesCollection = db.collection('roles');
-    const roleDoc = updatedUser?.roleId 
-      ? await rolesCollection.findOne({ _id: updatedUser.roleId })
-      : null;
-    
-    const nameParts = (updatedUser?.fullName || '').split(' ');
+    const nameParts = updatedUser.fullName.split(' ');
     const firstNameFinal = firstName !== undefined ? firstName : nameParts[0] || '';
     const lastNameFinal = lastName !== undefined ? lastName : nameParts.slice(1).join(' ') || '';
     
     const userData = {
-      userId: updatedUser!._id.toString(),
+      userId: updatedUser.id,
       firstName: firstNameFinal,
       lastName: lastNameFinal,
-      email: updatedUser?.email || '',
-      phone: updatedUser?.phone || '',
-      username: updatedUser?.username || '',
-      role: roleDoc?.name || '',
-      isActive: updatedUser?.status === 'ACTIVE',
-      createdDate: updatedUser?.createdAt || updatedUser!._id.getTimestamp(),
-      updatedAt: updateData.updatedAt,
+      email: updatedUser.email || '',
+      phone: updatedUser.phone || '',
+      username: updatedUser.username,
+      role: updatedUser.role.name,
+      isActive: updatedUser.status === 'ACTIVE',
+      createdDate: updatedUser.createdAt,
+      updatedAt: updatedUser.updatedAt,
     };
     
     return successResponse(userData, 'User updated successfully');
@@ -142,7 +189,25 @@ export const PUT = withAuthAndRole(['ADMIN'], async (
   }
 });
 
-// Only ADMIN can delete users
+/**
+ * @swagger
+ * /api/v1/users/{id}:
+ *   delete:
+ *     summary: Delete user
+ *     description: Soft delete a user by setting status to INACTIVE (Admin only)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ */
 export const DELETE = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
   auth,
@@ -151,28 +216,21 @@ export const DELETE = withAuthAndRole(['ADMIN'], async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid user ID');
-    }
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
     
-    const db = await getDatabase();
-    const userId = toObjectId(id);
-    
-    const user = await db.collection('users').findOne({ _id: userId });
     if (!user) {
       return notFoundResponse('User not found');
     }
     
     // Soft delete - set status to INACTIVE
-    await db.collection('users').updateOne(
-      { _id: userId },
-      { 
-        $set: { 
-          status: 'INACTIVE',
-          updatedAt: new Date(),
-        } 
+    await prisma.user.update({
+      where: { id },
+      data: { 
+        status: 'INACTIVE'
       }
-    );
+    });
     
     return successResponse(null, 'User deleted successfully', 200);
   } catch (error: any) {

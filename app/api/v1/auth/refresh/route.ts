@@ -1,14 +1,13 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, unauthorizedResponse, validationErrorResponse } from '@/lib/api-response';
-import { generateAccessToken, generateRefreshToken, verifyToken } from '@/lib/auth';
+import { refreshToken } from '@/lib/auth-supabase';
 
 /**
  * @swagger
  * /api/v1/auth/refresh:
  *   post:
  *     summary: Refresh access token
- *     description: Use a valid refresh token to obtain a new access token and refresh token
+ *     description: Use a valid refresh token to obtain a new access token using Supabase Auth
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -22,6 +21,7 @@ import { generateAccessToken, generateRefreshToken, verifyToken } from '@/lib/au
  *               refreshToken:
  *                 type: string
  *                 description: Valid refresh token obtained from login
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *     responses:
  *       200:
  *         description: Token refreshed successfully
@@ -35,10 +35,23 @@ import { generateAccessToken, generateRefreshToken, verifyToken } from '@/lib/au
  *                     data:
  *                       type: object
  *                       properties:
+ *                         session:
+ *                           type: object
+ *                           properties:
+ *                             access_token:
+ *                               type: string
+ *                             refresh_token:
+ *                               type: string
+ *                             expires_in:
+ *                               type: integer
+ *                             expires_at:
+ *                               type: integer
  *                         accessToken:
  *                           type: string
+ *                           description: New access token (for backward compatibility)
  *                         refreshToken:
  *                           type: string
+ *                           description: New refresh token (for backward compatibility)
  *       400:
  *         description: Validation error - missing refresh token
  *       401:
@@ -47,58 +60,31 @@ import { generateAccessToken, generateRefreshToken, verifyToken } from '@/lib/au
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { refreshToken } = body;
+    const { refreshToken: refresh_token } = body;
     
     // Validation
-    if (!refreshToken) {
+    if (!refresh_token) {
       return validationErrorResponse('Refresh token is required');
     }
     
-    // Verify refresh token
-    const payload = verifyToken(refreshToken);
+    // Refresh token with Supabase
+    const newSession = await refreshToken(refresh_token);
     
-    if (!payload) {
-      return unauthorizedResponse('Invalid or expired refresh token');
+    if (!newSession) {
+      return unauthorizedResponse('Failed to refresh token');
     }
-    
-    // Check if token type is refresh
-    if (payload.type !== 'refresh') {
-      return unauthorizedResponse('Invalid token type. Must be a refresh token');
-    }
-    
-    // Verify user still exists and is active
-    const db = await getDatabase();
-    const user = await db.collection('users').findOne({ username: payload.username });
-    
-    if (!user) {
-      return unauthorizedResponse('User not found');
-    }
-    
-    if (user.status !== 'ACTIVE') {
-      return unauthorizedResponse('Account is inactive');
-    }
-    
-    // Get role
-    const rolesCollection = db.collection('roles');
-    const role = user.roleId 
-      ? await rolesCollection.findOne({ _id: user.roleId })
-      : null;
-    
-    const roleName = role?.name || 'USER';
-    
-    // Generate new tokens
-    const newAccessToken = generateAccessToken(payload.userId, payload.username, roleName);
-    const newRefreshToken = generateRefreshToken(payload.userId, payload.username, roleName);
     
     return successResponse(
       {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
+        session: newSession,
+        // For backward compatibility
+        accessToken: newSession.access_token,
+        refreshToken: newSession.refresh_token,
       },
       'Token refreshed successfully'
     );
   } catch (error: any) {
     console.error('Error refreshing token:', error);
-    return unauthorizedResponse('Token refresh failed');
+    return unauthorizedResponse(error.message || 'Token refresh failed');
   }
 }

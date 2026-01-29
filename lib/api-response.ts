@@ -10,9 +10,11 @@ export interface ApiResponse<T = any> {
 
 export interface PaginationMeta {
   totalItems: number;
-  page: number;
-  limit: number;
+  currentPage: number;
+  itemsPerPage: number;
   totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -129,5 +131,35 @@ export function unauthorizedResponse(
       data: null,
     },
     { status: 401 }
+  );
+}
+
+export function forbiddenResponse(
+  message: string = 'Forbidden - Insufficient permissions'
+): NextResponse<ApiResponse> {
+  return NextResponse.json(
+    {
+      status: 'error',
+      code: 403,
+      message,
+      timestamp: new Date().toISOString(),
+      data: null,
+    },
+    { status: 403 }
+  );
+}
+
+export function serverErrorResponse(
+  message: string = 'Internal server error'
+): NextResponse<ApiResponse> {
+  return NextResponse.json(
+    {
+      status: 'error',
+      code: 500,
+      message,
+      timestamp: new Date().toISOString(),
+      data: null,
+    },
+    { status: 500 }
   );
 }

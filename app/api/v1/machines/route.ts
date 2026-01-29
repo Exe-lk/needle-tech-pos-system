@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
-import { parseQueryParams, buildPaginationMeta, sanitizeObject } from '@/lib/utils';
+import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
 import { withAuth } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
@@ -67,11 +67,15 @@ export const GET = withAuth(async (request: NextRequest) => {
 export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { brand, model, category, serialNumber, boxNumber, photos, specs, currentLocation } = body;
+    const { 
+      brandId, brandName, brand, // Brand can be provided as ID, name, or string
+      modelId, modelName, model, // Model can be provided as ID, name, or string
+      typeId, typeName, category, // Type can be provided as ID, name, or string
+      serialNumber, boxNumber, photos, specs, currentLocation 
+    } = body;
     
-    if (!brand || !serialNumber) {
+    if (!serialNumber) {
       return validationErrorResponse('Missing required fields', {
-        brand: !brand ? ['Brand is required'] : [],
         serialNumber: !serialNumber ? ['Serial number is required'] : [],
       });
     }
@@ -87,12 +91,124 @@ export const POST = withAuth(async (request: NextRequest) => {
     }
     
     const now = new Date();
-    const qrCodeValue = `MCH-${brand}-${serialNumber}`;
+    
+    // Handle Brand: brandId > brandName > brand (string)
+    let finalBrandName = '';
+    if (brandId && isValidObjectId(brandId)) {
+      const brandDoc = await db.collection('brands').findOne({ _id: toObjectId(brandId) });
+      if (!brandDoc) {
+        return validationErrorResponse('Brand not found', {
+          brandId: ['Invalid brand ID'],
+        });
+      }
+      finalBrandName = brandDoc.name;
+    } else if (brandName) {
+      // Check if brand exists, if not create it
+      let brandDoc = await db.collection('brands').findOne({ 
+        name: { $regex: new RegExp(`^${brandName}$`, 'i') } 
+      });
+      if (!brandDoc) {
+        // Create new brand on-the-fly
+        const brandCode = brandName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        const newBrand = {
+          name: brandName.trim(),
+          code: brandCode,
+          description: '',
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const brandResult = await db.collection('brands').insertOne(newBrand);
+        brandDoc = await db.collection('brands').findOne({ _id: brandResult.insertedId });
+      }
+      finalBrandName = brandDoc.name;
+    } else if (brand) {
+      // Legacy support: brand as string
+      finalBrandName = brand;
+    } else {
+      return validationErrorResponse('Missing required fields', {
+        brand: ['Brand is required (provide brandId, brandName, or brand)'],
+      });
+    }
+    
+    // Handle Model: modelId > modelName > model (string)
+    let finalModelName = '';
+    if (modelId && isValidObjectId(modelId)) {
+      const modelDoc = await db.collection('models').findOne({ _id: toObjectId(modelId) });
+      if (!modelDoc) {
+        return validationErrorResponse('Model not found', {
+          modelId: ['Invalid model ID'],
+        });
+      }
+      finalModelName = modelDoc.name;
+    } else if (modelName) {
+      // Check if model exists for this brand, if not create it
+      let modelDoc = await db.collection('models').findOne({ 
+        name: { $regex: new RegExp(`^${modelName}$`, 'i') },
+        brandName: finalBrandName,
+      });
+      if (!modelDoc) {
+        // Create new model on-the-fly
+        const modelCode = modelName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        const newModel = {
+          name: modelName.trim(),
+          brandName: finalBrandName,
+          code: modelCode,
+          description: '',
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const modelResult = await db.collection('models').insertOne(newModel);
+        modelDoc = await db.collection('models').findOne({ _id: modelResult.insertedId });
+      }
+      finalModelName = modelDoc.name;
+    } else if (model) {
+      // Legacy support: model as string
+      finalModelName = model;
+    }
+    
+    // Handle Type/Category: typeId > typeName > category (string)
+    let finalCategoryName = '';
+    if (typeId && isValidObjectId(typeId)) {
+      const typeDoc = await db.collection('machineTypes').findOne({ _id: toObjectId(typeId) });
+      if (!typeDoc) {
+        return validationErrorResponse('Machine type not found', {
+          typeId: ['Invalid type ID'],
+        });
+      }
+      finalCategoryName = typeDoc.name;
+    } else if (typeName) {
+      // Check if type exists, if not create it
+      let typeDoc = await db.collection('machineTypes').findOne({ 
+        name: { $regex: new RegExp(`^${typeName}$`, 'i') } 
+      });
+      if (!typeDoc) {
+        // Create new type on-the-fly
+        const typeCode = typeName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        const newType = {
+          name: typeName.trim(),
+          code: typeCode,
+          description: '',
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const typeResult = await db.collection('machineTypes').insertOne(newType);
+        typeDoc = await db.collection('machineTypes').findOne({ _id: typeResult.insertedId });
+      }
+      finalCategoryName = typeDoc.name;
+    } else if (category) {
+      // Legacy support: category as string
+      finalCategoryName = category;
+    }
+    
+    const qrCodeValue = `MCH-${finalBrandName}-${serialNumber}`;
     
     const newMachine = {
-      brand,
-      model: model || '',
-      category: category || '',
+      brand: finalBrandName,
+      model: finalModelName,
+      category: finalCategoryName,
       serialNumber,
       boxNumber: boxNumber || '',
       qrCode: {

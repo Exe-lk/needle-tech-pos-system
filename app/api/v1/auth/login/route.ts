@@ -1,22 +1,34 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, unauthorizedResponse, validationErrorResponse } from '@/lib/api-response';
-import { generateAccessToken, generateRefreshToken, verifyPassword } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { loginUser } from '@/lib/auth-supabase';
 
 /**
  * @swagger
  * /api/v1/auth/login:
  *   post:
  *     summary: User login
- *     description: Authenticate user with username and password, returns access and refresh tokens
+ *     description: Authenticate user with email and password using Supabase Auth
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User email address
+ *                 example: admin@example.com
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 description: User password
+ *                 example: password123
  *     responses:
  *       200:
  *         description: Login successful
@@ -28,72 +40,78 @@ import { ObjectId } from 'mongodb';
  *                 - type: object
  *                   properties:
  *                     data:
- *                       $ref: '#/components/schemas/LoginResponse'
+ *                       type: object
+ *                       properties:
+ *                         user:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                             email:
+ *                               type: string
+ *                             username:
+ *                               type: string
+ *                             fullName:
+ *                               type: string
+ *                             role:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: string
+ *                                 name:
+ *                                   type: string
+ *                                 permissions:
+ *                                   type: array
+ *                                   items:
+ *                                     type: string
+ *                         session:
+ *                           type: object
+ *                           properties:
+ *                             access_token:
+ *                               type: string
+ *                               description: JWT access token for API requests
+ *                             refresh_token:
+ *                               type: string
+ *                               description: Refresh token for obtaining new access tokens
+ *                             expires_in:
+ *                               type: integer
+ *                               description: Token expiration time in seconds
+ *                             expires_at:
+ *                               type: integer
+ *                               description: Token expiration timestamp
  *       400:
- *         description: Validation error - missing username or password
+ *         description: Validation error - missing email or password
  *       401:
  *         description: Invalid credentials or inactive account
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { username, password } = body;
+    const { email, password } = body;
     
     // Validation
-    if (!username || !password) {
-      return validationErrorResponse('Username and password are required');
+    if (!email || !password) {
+      return validationErrorResponse('Email and password are required');
     }
     
-    const db = await getDatabase();
-    
-    // Find user by username
-    const user = await db.collection('users').findOne({ username });
-    
-    if (!user) {
-      return unauthorizedResponse('Invalid username or password');
-    }
-    
-    // Check if user is active
-    if (user.status !== 'ACTIVE') {
-      return unauthorizedResponse('Account is inactive');
-    }
-    
-    // Verify password using bcrypt
-    const isPasswordValid = await verifyPassword(password, user.passwordHash);
-    if (!isPasswordValid) {
-      return unauthorizedResponse('Invalid username or password');
-    }
-    
-    // Get role
-    const rolesCollection = db.collection('roles');
-    const role = user.roleId 
-      ? await rolesCollection.findOne({ _id: user.roleId })
-      : null;
-    
-    const roleName = role?.name || 'USER';
-    
-    // Update last login
-    await db.collection('users').updateOne(
-      { _id: user._id },
-      { $set: { lastLoginAt: new Date() } }
-    );
-    
-    // Generate JWT tokens
-    const accessToken = generateAccessToken(user._id.toString(), user.username, roleName);
-    const refreshToken = generateRefreshToken(user._id.toString(), user.username, roleName);
+    // Login with Supabase
+    const result = await loginUser(email, password);
     
     return successResponse(
       {
-        userId: user._id.toString(),
-        username: user.username,
-        role: roleName,
-        accessToken,
-        refreshToken,
+        user: result.user,
+        session: result.session,
+        // For backward compatibility
+        userId: result.user.id,
+        username: result.user.username,
+        role: result.user.role.name,
+        accessToken: result.session.access_token,
+        refreshToken: result.session.refresh_token,
       },
       'Login successful'
     );
   } catch (error: any) {
     console.error('Error during login:', error);
-    return unauthorizedResponse('Login failed');
+    return unauthorizedResponse(error.message || 'Login failed');
   }
 }

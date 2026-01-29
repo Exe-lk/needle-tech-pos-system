@@ -32,11 +32,14 @@ export function buildPaginationMeta(
   page: number,
   limit: number
 ) {
+  const totalPages = Math.ceil(totalItems / limit);
   return {
     totalItems,
-    page,
-    limit,
-    totalPages: Math.ceil(totalItems / limit),
+    currentPage: page,
+    itemsPerPage: limit,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPreviousPage: page > 1,
   };
 }
 
