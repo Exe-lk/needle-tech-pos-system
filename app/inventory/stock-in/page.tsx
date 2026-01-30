@@ -12,6 +12,15 @@ import { validateSerialNumber, validateBoxNumber } from '@/src/utils/validation'
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type StockType = 'New' | 'Used';
 
+const MACHINE_TYPE_OPTIONS: { value: MachineType; label: string }[] = [
+  { value: 'Industrial', label: 'Industrial' },
+  { value: 'Domestic', label: 'Domestic' },
+  { value: 'Embroidery', label: 'Embroidery' },
+  { value: 'Overlock', label: 'Overlock' },
+  { value: 'Buttonhole', label: 'Buttonhole' },
+  { value: 'Other', label: 'Other' },
+];
+
 // Mock registered machines (should be fetched from machines API)
 const mockRegisteredMachines = [
   { brand: 'Brother', model: 'XL2600i', type: 'Domestic' as MachineType },
@@ -252,6 +261,7 @@ const StockInPage: React.FC = () => {
   // New model form state
   const [newModelBrand, setNewModelBrand] = useState('');
   const [newModelModel, setNewModelModel] = useState('');
+  const [newModelType, setNewModelType] = useState('');
   const [newModelStockType, setNewModelStockType] = useState('');
   const [newModelQuantity, setNewModelQuantity] = useState('');
   const [newModelWarrantyExpiry, setNewModelWarrantyExpiry] = useState('');
@@ -268,20 +278,25 @@ const StockInPage: React.FC = () => {
   const [selectedMachineForQR, setSelectedMachineForQR] = useState<{ modelId: string; machineId: string } | null>(null);
   const qrCodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // QR Batch modal (after submit): Print Now / Print Later
+  const [showQrBatchModal, setShowQrBatchModal] = useState(false);
+  const [submittedStockModels, setSubmittedStockModels] = useState<StockModelEntry[]>([]);
+
   // Get unique brands for dropdown
   const uniqueBrands = useMemo(() => {
     return [...new Set(mockRegisteredMachines.map((m) => m.brand))].sort();
   }, []);
 
-  // Get models for selected brand
+  // Get models for selected brand (unique models)
   const getModelsForBrand = (brand: string) => {
-    return mockRegisteredMachines
+    const models = mockRegisteredMachines
       .filter((m) => m.brand === brand)
-      .map((m) => ({ label: m.model, value: m.model }));
+      .map((m) => m.model);
+    return [...new Set(models)].sort().map((m) => ({ label: m, value: m }));
   };
 
-  // Get machine type for selected brand/model
-  const getMachineType = (brand: string, model: string): MachineType => {
+  // Default machine type for selected brand/model (user can override via Type field)
+  const getDefaultMachineType = (brand: string, model: string): MachineType => {
     const machine = mockRegisteredMachines.find(
       (m) => m.brand === brand && m.model === model
     );
@@ -326,12 +341,23 @@ const StockInPage: React.FC = () => {
     return JSON.stringify(qrData, null, 2);
   };
 
+  // Sync default type when brand/model change (only set when type is empty)
+  useEffect(() => {
+    if (newModelBrand && newModelModel) {
+      const defaultType = getDefaultMachineType(newModelBrand, newModelModel);
+      setNewModelType((prev) => (prev && MACHINE_TYPE_OPTIONS.some((o) => o.value === prev) ? prev : defaultType));
+    } else {
+      setNewModelType('');
+    }
+  }, [newModelBrand, newModelModel]);
+
   // Validate new model form
   const validateNewModel = (): boolean => {
     const errors: Record<string, string> = {};
     
     if (!newModelBrand) errors.brand = 'Brand is required';
     if (!newModelModel) errors.model = 'Model is required';
+    if (!newModelType) errors.type = 'Type (machine type) is required';
     if (!newModelStockType) errors.stockType = 'Stock type is required';
     if (!newModelQuantity || parseInt(newModelQuantity) < 1) {
       errors.quantity = 'Quantity must be at least 1';
@@ -364,7 +390,7 @@ const StockInPage: React.FC = () => {
       id: `model-${Date.now()}`,
       brand: newModelBrand,
       model: newModelModel,
-      type: getMachineType(newModelBrand, newModelModel),
+      type: newModelType as MachineType,
       stockType: newModelStockType as StockType,
       quantity,
       warrantyExpiry: newModelWarrantyExpiry,
@@ -380,6 +406,7 @@ const StockInPage: React.FC = () => {
     // Reset form
     setNewModelBrand('');
     setNewModelModel('');
+    setNewModelType('');
     setNewModelStockType('');
     setNewModelQuantity('');
     setNewModelWarrantyExpiry('');
@@ -520,7 +547,7 @@ const StockInPage: React.FC = () => {
     return true;
   };
 
-  // Submit stock in
+  // Submit stock in: record transaction then show QR batch modal
   const handleSubmit = async () => {
     if (!validateAll()) return;
 
@@ -547,12 +574,9 @@ const StockInPage: React.FC = () => {
       }));
 
       console.log('Stock In transaction:', payload);
-      
-      const totalMachines = stockModels.reduce((sum, m) => sum + m.quantity, 0);
-      alert(
-        `Successfully added ${totalMachines} machine(s) across ${stockModels.length} model(s) to inventory.`
-      );
-      router.push('/inventory');
+      setSubmittedStockModels([...stockModels]);
+      setShowQrBatchModal(true);
+      document.body.classList.add('qr-batch-printing');
     } catch (error) {
       console.error('Error processing stock in:', error);
       alert('Failed to process stock in. Please try again.');
@@ -561,12 +585,24 @@ const StockInPage: React.FC = () => {
     }
   };
 
+  const handlePrintNow = () => {
+    window.print();
+  };
+
+  const handlePrintLater = () => {
+    document.body.classList.remove('qr-batch-printing');
+    setShowQrBatchModal(false);
+    setSubmittedStockModels([]);
+    router.push('/inventory');
+  };
+
   // Clear all
   const handleClear = () => {
     if (confirm('Are you sure you want to clear all entries? This action cannot be undone.')) {
       setStockModels([]);
       setNewModelBrand('');
       setNewModelModel('');
+      setNewModelType('');
       setNewModelStockType('');
       setNewModelQuantity('');
       setNewModelWarrantyExpiry('');
@@ -612,8 +648,16 @@ const StockInPage: React.FC = () => {
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Page header */}
-          <div className="flex items-center justify-between">
+          {/* Page header: back button top left */}
+          <div className="flex items-center gap-4">
+            <Tooltip content="Back to Inventory">
+              <button
+                onClick={() => router.push('/inventory')}
+                className="flex items-center justify-center p-2 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors shrink-0"
+              >
+                <ChevronRight className="w-5 h-5 rotate-180" />
+              </button>
+            </Tooltip>
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Stock In
@@ -621,16 +665,6 @@ const StockInPage: React.FC = () => {
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Add new stock to inventory with individual machine serial numbers and QR codes.
               </p>
-            </div>
-            <div className="flex gap-3">
-              <Tooltip content="Back to Inventory">
-                <button
-                  onClick={() => router.push('/inventory')}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors"
-                >
-                  Back
-                </button>
-              </Tooltip>
             </div>
           </div>
 
@@ -693,6 +727,21 @@ const StockInPage: React.FC = () => {
                   placeholder="Select model"
                   disabled={!newModelBrand}
                   error={newModelErrors.model}
+                />
+              </div>
+
+              {/* Type (machine type: Industrial, Domestic, etc.) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Type <span className="text-red-500">*</span>
+                </label>
+                <SearchableSelect
+                  value={newModelType}
+                  onChange={setNewModelType}
+                  options={MACHINE_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  placeholder="Select type"
+                  disabled={!newModelBrand || !newModelModel}
+                  error={newModelErrors.type}
                 />
               </div>
 
@@ -827,25 +876,10 @@ const StockInPage: React.FC = () => {
           {/* Stock Models List */}
           {stockModels.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                   Machine Models ({stockModels.length})
                 </h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleClear}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
-                  >
-                    Clear All
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting || completedMachines !== totalMachines}
-                    className="px-6 py-2 text-sm font-medium text-white bg-green-600 dark:bg-green-700 rounded-lg hover:bg-green-700 dark:hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting ? 'Submitting...' : `Submit Stock In (${totalMachines} machines)`}
-                  </button>
-                </div>
               </div>
 
               {stockModels.map((model) => {
@@ -1004,6 +1038,22 @@ const StockInPage: React.FC = () => {
                   </div>
                 );
               })}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={handleClear}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
+                >
+                  Clear All
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || completedMachines !== totalMachines}
+                  className="px-6 py-2 text-sm font-medium text-white bg-green-600 dark:bg-green-700 rounded-lg hover:bg-green-700 dark:hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Submitting...' : `Submit Stock In (${totalMachines} machines)`}
+                </button>
+              </div>
             </div>
           )}
 
@@ -1022,7 +1072,7 @@ const StockInPage: React.FC = () => {
         </div>
       </main>
 
-      {/* QR Code Modal */}
+      {/* QR Code Modal (single machine) */}
       {qrModalOpen && selectedMachineForQR && (() => {
         const model = stockModels.find(m => m.id === selectedMachineForQR.modelId);
         const machine = model?.machines.find(m => m.id === selectedMachineForQR.machineId);
@@ -1131,6 +1181,72 @@ const StockInPage: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* QR Batch Modal: after submit – Print Now / Print Later */}
+      {showQrBatchModal && submittedStockModels.length > 0 && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Stock In Successful
+                </h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Generate and print QR codes for each machine as a batch.
+                </p>
+              </div>
+              <button
+                onClick={handlePrintLater}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                {submittedStockModels.reduce((sum, m) => sum + m.machines.length, 0)} machine(s) across{' '}
+                {submittedStockModels.length} model(s) have been recorded. You can print all QR codes now or later.
+              </p>
+              <div className="flex gap-3 justify-end pt-4">
+                <button
+                  onClick={handlePrintLater}
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
+                >
+                  Print Later
+                </button>
+                <button
+                  onClick={handlePrintNow}
+                  className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors inline-flex items-center gap-2"
+                >
+                  <QrCode className="w-4 h-4" />
+                  Print Now
+                </button>
+              </div>
+            </div>
+          </div>
+          {/* Printable area: only visible when printing (see globals.css) */}
+          <div id="qr-batch-print" className="hidden print:block p-4">
+            <h1 className="text-lg font-semibold text-gray-900 mb-4">Stock In – QR Codes</h1>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {submittedStockModels.map((model) =>
+                model.machines.map((machine, idx) => {
+                  const qrData = machine.qrCodeData || generateQRCodeData(model, machine);
+                  return (
+                    <div key={`${model.id}-${machine.id}`} className="border border-gray-300 p-3 rounded-lg break-inside-avoid">
+                      <div className="flex justify-center mb-2">
+                        <QRCodeSVG value={qrData} size={120} level="H" includeMargin />
+                      </div>
+                      <p className="text-xs font-medium text-gray-900 truncate">{model.brand} {model.model}</p>
+                      <p className="text-xs text-gray-600">SN: {machine.serialNumber}</p>
+                      {machine.boxNo && <p className="text-xs text-gray-600">Box: {machine.boxNo}</p>}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

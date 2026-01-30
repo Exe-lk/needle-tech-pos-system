@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { Moon, Sun, Menu, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
-import { APP_VERSION } from '@/src/utils/version';
 
 // ---- Match sidebar structure for titles ----
 type MenuChild = {
@@ -197,9 +196,6 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
                   Needle Tech
                 </h1>
-                <span className="text-xs text-gray-500 dark:text-slate-400 font-medium">
-                  V {APP_VERSION}
-                </span>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -243,14 +239,11 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
               />
             </div>
 
-            {/* Company Name + Version */}
+            {/* Company Name */}
             <div className="flex flex-col">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
                 Needle Tech
               </h1>
-              <span className="text-xs text-gray-500 dark:text-slate-400 font-medium">
-                V {APP_VERSION}
-              </span>
             </div>
            
           </div>

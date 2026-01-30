@@ -13,9 +13,9 @@ import {
   Trash2,
   Printer,
   ShieldCheck,
-  CheckCircle2,
-  XCircle,
   RotateCcw,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
@@ -258,9 +258,58 @@ interface SecurityScanLogItem {
   id: string;
   raw: string;
   extractedSerial: string;
+  extractedBox: string;
   result: ScanResultType;
   reason: string;
   timestamp: Date;
+}
+
+/** Build a unique key for (serial, box) pair used in expected/matched sets */
+function pairKey(serial: string, box: string): string {
+  return `${normalizeSerial(serial)}|${normalizeSerial(box)}`;
+}
+
+/** Extract both serial number and box number from QR decoded text (JSON or plain text). */
+function extractSerialAndBoxFromQR(decodedText: string): { serial: string; box: string } | null {
+  const raw = (decodedText || '').trim();
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      const serialCandidates = [
+        parsed.serialNo,
+        parsed.serialNO,
+        parsed.serial,
+        parsed.serialNumber,
+        parsed.SerialNo,
+        parsed.Serial,
+        parsed.machineSerial,
+        parsed.machineSerialNo,
+      ].filter((v: unknown) => typeof v === 'string' && (v as string).trim().length > 0);
+      const boxCandidates = [
+        parsed.motorBoxNo,
+        parsed.boxNo,
+        parsed.boxNumber,
+        parsed.MotorBoxNo,
+        parsed.BoxNo,
+        parsed.box,
+      ].filter((v: unknown) => typeof v === 'string' && (v as string).trim().length > 0);
+      const serial = serialCandidates.length > 0 ? (serialCandidates[0] as string).trim() : '';
+      const box = boxCandidates.length > 0 ? (boxCandidates[0] as string).trim() : '';
+      if (serial || box) return { serial, box: box || '' };
+    }
+  } catch {
+    // ignore
+  }
+
+  const serialMatch = raw.match(/serial\s*(no|number)?\s*[:\-=]\s*([A-Za-z0-9\-_/]+)/i);
+  const boxMatch = raw.match(/(?:motor)?\s*box\s*(no|number)?\s*[:\-=]\s*([A-Za-z0-9\-_/]+)/i);
+  const serial = serialMatch ? serialMatch[2].trim() : '';
+  const box = boxMatch ? boxMatch[2].trim() : '';
+  if (serial || box) return { serial, box: box || '' };
+
+  return null;
 }
 
 function normalizeSerial(input: string): string {
@@ -268,43 +317,8 @@ function normalizeSerial(input: string): string {
 }
 
 function extractSerialFromQR(decodedText: string): string {
-  const raw = (decodedText || '').trim();
-  if (!raw) return '';
-
-  // Try JSON payloads like: {"serialNo":"ABC"} or {"serial":"ABC"} etc.
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') {
-      const candidates = [
-        parsed.serialNo,
-        parsed.serialNO,
-        parsed.serial,
-        parsed.serialNumber,
-        parsed.SerialNo,
-        parsed.Serial,
-        parsed.SerialNumber,
-        parsed.machineSerial,
-        parsed.machineSerialNo,
-      ].filter((v: any) => typeof v === 'string' && v.trim().length > 0);
-
-      if (candidates.length > 0) return candidates[0].trim();
-    }
-  } catch {
-    // ignore
-  }
-
-  // Try common patterns like "SERIAL: XXX" / "Serial No: XXX"
-  const m =
-    raw.match(/serial\s*(no|number)?\s*[:\-]\s*([A-Za-z0-9\-_/]+)\s*$/i) ||
-    raw.match(/^([A-Za-z0-9][A-Za-z0-9\-_/]{3,})$/);
-
-  if (m) {
-    const val = (m[2] || m[1] || '').trim();
-    if (val) return val;
-  }
-
-  // Fallback: use full text
-  return raw;
+  const result = extractSerialAndBoxFromQR(decodedText);
+  return result ? result.serial : '';
 }
 
 const GatePassPage: React.FC = () => {
@@ -316,18 +330,22 @@ const GatePassPage: React.FC = () => {
   const [selectedGatePass, setSelectedGatePass] = useState<GatePass | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Security approval modal
+  // Security approval modal: Step 1 = enter gatepass number, Step 2 = scan QR + approve
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [securityModalStep, setSecurityModalStep] = useState<1 | 2>(1);
+  const [securityGatePassNumberInput, setSecurityGatePassNumberInput] = useState('');
+  const [securityGatePassLookupError, setSecurityGatePassLookupError] = useState<string | null>(null);
   const [securityGatePass, setSecurityGatePass] = useState<GatePass | null>(null);
   const [scannerKey, setScannerKey] = useState(1);
   const [scanLog, setScanLog] = useState<SecurityScanLogItem[]>([]);
-  const [matchedSerials, setMatchedSerials] = useState<Set<string>>(new Set());
+  const [matchedPairs, setMatchedPairs] = useState<Set<string>>(new Set());
   const [failedCount, setFailedCount] = useState(0);
   const [lastFeedback, setLastFeedback] = useState<{
     type: ScanResultType;
     title: string;
     message: string;
   } | null>(null);
+  const [isScannerExpanded, setIsScannerExpanded] = useState(false);
 
   const feedbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -339,21 +357,19 @@ const GatePassPage: React.FC = () => {
     };
   }, []);
 
-  const expectedSerialSet = useMemo(() => {
+  const expectedPairs = useMemo(() => {
     if (!securityGatePass) return new Set<string>();
     const s = new Set<string>();
     for (const item of securityGatePass.items || []) {
-      const serial = normalizeSerial(item.serialNo);
-      if (serial) s.add(serial);
+      const key = pairKey(item.serialNo, item.motorBoxNo);
+      if (key !== '|') s.add(key);
     }
     return s;
   }, [securityGatePass]);
 
-  const expectedSerialCount = expectedSerialSet.size;
-
-  const matchedCount = matchedSerials.size;
-
-  const allMatched = expectedSerialCount > 0 && matchedCount === expectedSerialCount;
+  const expectedPairCount = expectedPairs.size;
+  const matchedCount = matchedPairs.size;
+  const allMatched = expectedPairCount > 0 && matchedCount === expectedPairCount;
   const canApprove = allMatched && failedCount === 0;
 
   const handleMenuClick = () => {
@@ -564,28 +580,60 @@ const GatePassPage: React.FC = () => {
     window.print();
   };
 
-  // --- Security approval flow ---
+  // --- Security approval flow (3 steps: enter number → scan QR one by one → approve if all clear) ---
   const resetSecuritySession = () => {
     setScannerKey((k) => k + 1);
     setScanLog([]);
-    setMatchedSerials(new Set());
+    setMatchedPairs(new Set());
     setFailedCount(0);
     setLastFeedback(null);
   };
 
-  const handleOpenSecurityApproval = (gatePass: GatePass) => {
-    setSecurityGatePass(gatePass);
+  const handleOpenSecurityApproval = () => {
+    setSecurityModalStep(1);
+    setSecurityGatePassNumberInput('');
+    setSecurityGatePassLookupError(null);
+    setSecurityGatePass(null);
     setIsSecurityModalOpen(true);
+    resetSecuritySession();
+  };
+
+  const handleSecurityContinueFromStep1 = () => {
+    const trimmed = securityGatePassNumberInput.trim();
+    if (!trimmed) {
+      setSecurityGatePassLookupError('Please enter a gatepass number.');
+      return;
+    }
+    const found = mockGatePasses.find((g) => g.gatepassNo === trimmed || g.gatepassNo === trimmed.padStart(6, '0'));
+    if (!found) {
+      setSecurityGatePassLookupError('Gatepass not found. Please check the number.');
+      return;
+    }
+    setSecurityGatePassLookupError(null);
+    setSecurityGatePass(found);
+    setSecurityModalStep(2);
+    resetSecuritySession();
+  };
+
+  const handleBackToStep1 = () => {
+    setSecurityModalStep(1);
+    setSecurityGatePassNumberInput('');
+    setSecurityGatePassLookupError(null);
+    setSecurityGatePass(null);
+    setIsScannerExpanded(false);
     resetSecuritySession();
   };
 
   const handleCloseSecurityModal = () => {
     setIsSecurityModalOpen(false);
+    setSecurityModalStep(1);
+    setSecurityGatePassNumberInput('');
+    setSecurityGatePassLookupError(null);
     setSecurityGatePass(null);
+    setIsScannerExpanded(false);
     setLastFeedback(null);
-    // keep other state cleared for next open
     setScanLog([]);
-    setMatchedSerials(new Set());
+    setMatchedPairs(new Set());
     setFailedCount(0);
     setScannerKey((k) => k + 1);
   };
@@ -606,18 +654,19 @@ const GatePassPage: React.FC = () => {
   const handleSecurityScanSuccess = (decodedText: string) => {
     if (!securityGatePass) return;
 
-    const extracted = normalizeSerial(extractSerialFromQR(decodedText));
+    const parsed = extractSerialAndBoxFromQR(decodedText);
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-    if (!extracted) {
+    if (!parsed || (!parsed.serial && !parsed.box)) {
       setFailedCount((c) => c + 1);
       setScanLog((prev) => [
         {
           id,
           raw: decodedText,
-          extractedSerial: '',
+          extractedSerial: parsed?.serial ?? '',
+          extractedBox: parsed?.box ?? '',
           result: 'failed',
-          reason: 'Could not extract serial number from QR',
+          reason: 'Could not extract serial number and box number from QR',
           timestamp: new Date(),
         },
         ...prev,
@@ -625,51 +674,49 @@ const GatePassPage: React.FC = () => {
       showFeedback({
         type: 'failed',
         title: 'Scan Failed',
-        message: 'Could not extract a serial number from this QR.',
+        message: 'QR must contain serial number and box number.',
       });
       restartScannerSoon();
       return;
     }
 
-    const isExpected = expectedSerialSet.has(extracted);
-    const alreadyMatched = matchedSerials.has(extracted);
+    const serial = normalizeSerial(parsed.serial);
+    const box = normalizeSerial(parsed.box);
+    const key = pairKey(parsed.serial, parsed.box);
 
-    if (isExpected && !alreadyMatched) {
-      // success: mark matched
-      setMatchedSerials((prev) => {
-        const next = new Set(prev);
-        next.add(extracted);
-        return next;
-      });
-      setScanLog((prev) => [
-        {
-          id,
-          raw: decodedText,
-          extractedSerial: extracted,
-          result: 'success',
-          reason: 'Matched with Gatepass serial list',
-          timestamp: new Date(),
-        },
-        ...prev,
-      ]);
-      showFeedback({
-        type: 'success',
-        title: 'Matched',
-        message: `${extracted} verified successfully.`,
-      });
-      restartScannerSoon();
-      return;
-    }
-
-    if (isExpected && alreadyMatched) {
+    if (!expectedPairs.has(key)) {
       setFailedCount((c) => c + 1);
       setScanLog((prev) => [
         {
           id,
           raw: decodedText,
-          extractedSerial: extracted,
+          extractedSerial: parsed.serial,
+          extractedBox: parsed.box,
+          result: 'failed',
+          reason: 'Serial/Box pair not found on this gatepass',
+          timestamp: new Date(),
+        },
+        ...prev,
+      ]);
+      showFeedback({
+        type: 'failed',
+        title: 'Not Matched',
+        message: `Serial ${serial} / Box ${box} is not on this gatepass.`,
+      });
+      restartScannerSoon();
+      return;
+    }
+
+    if (matchedPairs.has(key)) {
+      setFailedCount((c) => c + 1);
+      setScanLog((prev) => [
+        {
+          id,
+          raw: decodedText,
+          extractedSerial: parsed.serial,
+          extractedBox: parsed.box,
           result: 'duplicate',
-          reason: 'This serial is already verified (duplicate scan)',
+          reason: 'This serial/box pair was already verified',
           timestamp: new Date(),
         },
         ...prev,
@@ -677,29 +724,33 @@ const GatePassPage: React.FC = () => {
       showFeedback({
         type: 'duplicate',
         title: 'Duplicate Scan',
-        message: `${extracted} was already verified.`,
+        message: `${serial} / ${box} was already verified.`,
       });
       restartScannerSoon();
       return;
     }
 
-    // not expected
-    setFailedCount((c) => c + 1);
+    setMatchedPairs((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
     setScanLog((prev) => [
       {
         id,
         raw: decodedText,
-        extractedSerial: extracted,
-        result: 'failed',
-        reason: 'Serial not found in Gatepass serial list',
+        extractedSerial: parsed.serial,
+        extractedBox: parsed.box,
+        result: 'success',
+        reason: 'Matched with gatepass',
         timestamp: new Date(),
       },
       ...prev,
     ]);
     showFeedback({
-      type: 'failed',
-      title: 'Not Matched',
-      message: `${extracted} is NOT in the Gatepass list.`,
+      type: 'success',
+      title: 'Matched',
+      message: `${serial} / ${box} verified.`,
     });
     restartScannerSoon();
   };
@@ -833,8 +884,8 @@ const GatePassPage: React.FC = () => {
       label: '',
       icon: <ShieldCheck className="w-4 h-4" />,
       variant: 'secondary',
-      onClick: handleOpenSecurityApproval,
-      tooltip: 'aprove by security officer',
+      onClick: () => handleOpenSecurityApproval(),
+      tooltip: 'Approve by security officer',
       className:
         'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800',
     },
@@ -1016,171 +1067,6 @@ const GatePassPage: React.FC = () => {
     );
   };
 
-  const renderSecurityItemsTable = () => {
-    if (!securityGatePass) return null;
-
-    return (
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
-        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
-          <div>
-            <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
-              Machine Verification List
-            </h3>
-            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-1">
-              Match scanned QR serial numbers with Gatepass serial numbers.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span
-              className={`px-2 py-1 rounded-full text-[11px] sm:text-xs font-semibold ${canApprove
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                  : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-gray-300'
-                }`}
-            >
-              {canApprove ? 'READY TO APPROVE' : 'IN PROGRESS'}
-            </span>
-          </div>
-        </div>
-
-        <div className="p-3 sm:p-4">
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <div className="p-2 sm:p-3 rounded-lg bg-gray-50 dark:bg-slate-700/50 border border-gray-200 dark:border-slate-700">
-              <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Expected</div>
-              <div className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                {expectedSerialCount}
-              </div>
-            </div>
-            <div className="p-2 sm:p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-              <div className="text-[11px] sm:text-xs text-emerald-700 dark:text-emerald-300">
-                Matched
-              </div>
-              <div className="text-base sm:text-lg font-bold text-emerald-800 dark:text-emerald-200">
-                {matchedCount}
-              </div>
-            </div>
-            <div className="p-2 sm:p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-              <div className="text-[11px] sm:text-xs text-red-700 dark:text-red-300">Failed</div>
-              <div className="text-base sm:text-lg font-bold text-red-800 dark:text-red-200">
-                {failedCount}
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs sm:text-sm">
-              <thead className="bg-gray-50 dark:bg-slate-700/50">
-                <tr>
-                  <th className="px-2 sm:px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-300">
-                    #
-                  </th>
-                  <th className="px-2 sm:px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-300">
-                    Description
-                  </th>
-                  <th className="px-2 sm:px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-300">
-                    Serial No
-                  </th>
-                  <th className="px-2 sm:px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-300">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                {securityGatePass.items.map((item, idx) => {
-                  const serial = normalizeSerial(item.serialNo);
-                  const isMatched = serial ? matchedSerials.has(serial) : false;
-
-                  return (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-gray-50 dark:hover:bg-slate-700/30 align-top"
-                    >
-                      <td className="px-2 sm:px-3 py-2 text-[11px] sm:text-sm text-gray-700 dark:text-gray-300">
-                        {idx + 1}
-                      </td>
-                      <td className="px-2 sm:px-3 py-2 text-[11px] sm:text-sm text-gray-900 dark:text-white break-words">
-                        {item.description}
-                      </td>
-                      <td className="px-2 sm:px-3 py-2 text-[11px] sm:text-sm font-mono text-gray-900 dark:text-white break-all">
-                        {item.serialNo}
-                      </td>
-                      <td className="px-2 sm:px-3 py-2 text-[11px] sm:text-sm">
-                        {isMatched ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                            <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                            Matched
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-gray-300">
-                            <XCircle className="w-3 h-3 sm:w-4 sm:h-4" />
-                            Pending
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {scanLog.length > 0 && (
-            <div className="mt-3 sm:mt-4">
-              <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white mb-2">
-                Scan Log (latest first)
-              </h4>
-              <div className="max-h-44 sm:max-h-56 overflow-y-auto space-y-2 pr-1">
-                {scanLog.slice(0, 30).map((log) => {
-                  const badge =
-                    log.result === 'success'
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                      : log.result === 'duplicate'
-                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
-                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
-
-                  return (
-                    <div
-                      key={log.id}
-                      className="p-2 sm:p-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold ${badge}`}
-                          >
-                            {log.result.toUpperCase()}
-                          </span>
-                          <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
-                            {log.timestamp.toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400">
-                          {log.reason}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 text-[10px] sm:text-xs">
-                        <div className="text-gray-600 dark:text-gray-400">Extracted</div>
-                        <div className="font-mono text-gray-900 dark:text-white break-all">
-                          {log.extractedSerial || '(none)'}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {scanLog.length > 30 && (
-                <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Showing latest 30 scans.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const renderSecurityFeedback = () => {
     if (!lastFeedback) return null;
 
@@ -1249,8 +1135,8 @@ const GatePassPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Gate Pass table card */}
-            <div className="min-h-[300px]">
+            {/* Gate Pass table card — horizontal scroll on small screens */}
+            <div className="min-h-[300px] w-full overflow-x-auto">
               <Table
                 data={mockGatePasses}
                 columns={columns}
@@ -1666,8 +1552,8 @@ const GatePassPage: React.FC = () => {
           </div>
         )}
 
-        {/* Security Officer Approval Modal */}
-        {isSecurityModalOpen && securityGatePass && (
+        {/* Security Officer Approval Modal — Step 1: Enter gatepass number → Step 2: Scan QR one by one → Step 3: Approve if all clear */}
+        {isSecurityModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleCloseSecurityModal} />
             <div className="relative bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl shadow-xl w-full max-w-7xl max-h-[96vh] sm:max-h-[92vh] overflow-hidden flex flex-col">
@@ -1678,20 +1564,32 @@ const GatePassPage: React.FC = () => {
                     <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 dark:text-emerald-400" />
                     <span>Security Officer Verification</span>
                   </h2>
-                  
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                    {securityModalStep === 1 ? 'Step 1: Enter gatepass number' : 'Step 2: Scan each machine QR one by one. Step 3: Approve when all match.'}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <Tooltip content="Reset verification session">
-                    <button
-                      onClick={resetSecuritySession}
-                      className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 dark:bg-slate-800 text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 flex items-center gap-1 sm:gap-2"
-                    >
-                      <RotateCcw className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span>Reset</span>
-                    </button>
-                  </Tooltip>
-
+                  {securityModalStep === 2 && securityGatePass && (
+                    <>
+                      <Tooltip content="Clear scans and start over (same gatepass)">
+                        <button
+                          onClick={resetSecuritySession}
+                          className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 dark:bg-slate-800 text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 flex items-center gap-1 sm:gap-2"
+                        >
+                          <RotateCcw className="w-3 h-3 sm:w-4 sm:h-4" />
+                          <span>Reset scans</span>
+                        </button>
+                      </Tooltip>
+                      <button
+                        type="button"
+                        onClick={handleBackToStep1}
+                        className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 dark:bg-slate-800 text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700"
+                      >
+                        Change gatepass no
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={handleCloseSecurityModal}
                     className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
@@ -1704,142 +1602,112 @@ const GatePassPage: React.FC = () => {
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                  {/* Left: Gatepass details + verification table */}
-                  <div className="space-y-4 sm:space-y-6">
-                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
-                      <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
-                        <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
-                          Gatepass Details (reference)
-                        </h3>
-                        <span className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400">
-                          (Print view not used here)
-                        </span>
-                      </div>
-                      <div className="p-3 sm:p-4">
-                        {/* compact header (not full printable doc, to keep modal light) */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
-                          <div className="space-y-1 sm:space-y-1.5">
-                            <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
-                              FROM
-                            </div>
-                            <div className="font-medium text-gray-900 dark:text-white break-words">
-                              {securityGatePass.from}
-                            </div>
-                            <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 mt-2">
-                              TO
-                            </div>
-                            <div className="font-medium text-gray-900 dark:text-white break-words">
-                              {securityGatePass.to}
-                            </div>
-                            <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 break-words">
-                              {securityGatePass.toAddress}
-                            </div>
-                            <div className="font-medium text-gray-900 dark:text-white break-words">
-                            Agreement No: {' '}
-                            {securityGatePass.agreementReference}
-                            </div>
-                          </div>
-                          <div className="space-y-1 sm:space-y-1.5 text-left sm:text-right">
-                            <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
-                              GATEPASS
-                            </div>
-                            <div className="text-sm sm:text-lg font-bold text-gray-900 dark:text-white break-words">
-                              {securityGatePass.gatepassNo}
-                            </div>
-                            <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 mt-2">
-                              DATE
-                            </div>
-                            <div className="font-medium text-gray-900 dark:text-white">
-                              {securityGatePass.dateOfIssue}
-                            </div>
-                            <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 mt-2">
-                              VEHICLE / DRIVER
-                            </div>
-                            <div className="font-medium text-gray-900 dark:text-white break-words">
-                              {securityGatePass.vehicleNumber}
-                            </div>
-                            <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 break-words">
-                              {securityGatePass.driverName}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {renderSecurityItemsTable()}
-                  </div>
-
-                  {/* Right: Scanner + feedback + approve */}
-                  <div className="space-y-3 sm:space-y-4">
-                    {renderSecurityFeedback()}
-
-                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
-                      <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
-                        <div>
-                          <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
-                            QR Scanner
-                          </h3>
-                          <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-1">
-                            Scan each machine QR. Scanner auto-restarts after each scan.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="p-0">
-                        <div className="h-[380px] sm:h-[460px] md:h-[520px]">
-                          <QRScannerComponent
-                            key={scannerKey}
-                            onScanSuccess={handleSecurityScanSuccess}
-                            autoClose={false}
-                            showCloseButton={false}
-                            title="Scan Machine QR"
-                            subtitle={`Matched ${matchedCount}/${expectedSerialCount} • Failed ${failedCount}`}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
-                      <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
-                        {canApprove ? (
-                          <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                            All machines verified successfully. You can approve now.
-                          </span>
-                        ) : allMatched ? (
-                          <span className="font-semibold text-yellow-700 dark:text-yellow-300">
-                            All expected serials matched, but there are failed scans. Review before approving.
-                          </span>
-                        ) : (
-                          <span>
-                            Please scan all machines. Approval is enabled only when all expected serials
-                            are matched and failed scans are 0.
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-end gap-2">
+                {securityModalStep === 1 ? (
+                  /* Step 1: Enter gatepass number */
+                  <div className="max-w-md mx-auto py-6 sm:py-8">
+                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4 sm:p-6 space-y-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Enter gatepass number
+                      </label>
+                      <input
+                        type="text"
+                        value={securityGatePassNumberInput}
+                        onChange={(e) => {
+                          setSecurityGatePassNumberInput(e.target.value);
+                          setSecurityGatePassLookupError(null);
+                        }}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSecurityContinueFromStep1()}
+                        placeholder="e.g. 016633"
+                        className="w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                        autoFocus
+                      />
+                      {securityGatePassLookupError && (
+                        <p className="text-sm text-red-600 dark:text-red-400">{securityGatePassLookupError}</p>
+                      )}
+                      <div className="flex gap-2 pt-2">
                         <button
-                          onClick={handleApproveGatePass}
-                          disabled={!canApprove}
-                          className={`w-full sm:w-auto px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-medium text-white flex items-center justify-center gap-1 sm:gap-2 ${canApprove
-                              ? 'bg-emerald-600 hover:bg-emerald-700'
-                              : 'bg-gray-400 cursor-not-allowed'
-                            }`}
+                          type="button"
+                          onClick={handleCloseSecurityModal}
+                          className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600"
                         >
-                          <ShieldCheck className="w-4 h-4" />
-                          <span>Approve Gate Pass</span>
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSecurityContinueFromStep1}
+                          className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700"
+                        >
+                          Continue
                         </button>
                       </div>
                     </div>
-
-                    {/* Safety note */}
-                    <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
-                      Note: This approval is frontend-only right now. Later you can store approvals in
-                      your backend with an SO user + timestamp.
-                    </p>
                   </div>
-                </div>
+                ) : securityGatePass ? (
+                  /* Step 2: Only QR scanner — scan all machines one by one; approve when all match */
+                  <div className="flex flex-col items-center w-full max-w-2xl mx-auto py-3 sm:py-6 px-0 sm:px-2">
+                    {/* Compact per-scan feedback (success / not on gatepass / duplicate) */}
+                    {renderSecurityFeedback()}
+
+                    {/* Scanner header with expand/collapse */}
+                    <div className="w-full flex items-center justify-between gap-2 mt-2 sm:mt-3 mb-1">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">QR Scanner</span>
+                      <Tooltip content={isScannerExpanded ? 'Collapse scanner' : 'Expand scanner to full size'}>
+                        <button
+                          type="button"
+                          onClick={() => setIsScannerExpanded((prev) => !prev)}
+                          className="p-2 rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                          aria-label={isScannerExpanded ? 'Collapse scanner' : 'Expand scanner'}
+                        >
+                          {isScannerExpanded ? (
+                            <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                          ) : (
+                            <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                          )}
+                        </button>
+                      </Tooltip>
+                    </div>
+
+                    {/* Scanner — main focus (collapsed or expanded) */}
+                    <div className="w-full rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden bg-gray-900 dark:bg-black transition-[height] duration-300 ease-in-out">
+                      <div
+                        className={isScannerExpanded
+                          ? 'h-[min(85vh,900px)] min-h-[min(80vh,500px)]'
+                          : 'h-[min(70vh,520px)] min-h-[280px] sm:min-h-[320px]'
+                        }
+                      >
+                        <QRScannerComponent
+                          key={scannerKey}
+                          onScanSuccess={handleSecurityScanSuccess}
+                          autoClose={false}
+                          showCloseButton={false}
+                          title="Scan each machine QR"
+                          subtitle={canApprove ? 'All matched — you can approve below' : `Scanned ${matchedCount} of ${expectedPairCount}${failedCount > 0 ? ' · One or more did not match' : ''}`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Single line status + Approve */}
+                    <div className="w-full mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 text-center sm:text-left">
+                        {canApprove ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">All machines matched. You can approve.</span>
+                        ) : failedCount > 0 ? (
+                          <span className="text-red-600 dark:text-red-400 font-medium">A scan did not match this gatepass. You cannot approve.</span>
+                        ) : (
+                          <span>Scan every machine QR one by one. Order does not matter.</span>
+                        )}
+                      </p>
+                      <button
+                        onClick={handleApproveGatePass}
+                        disabled={!canApprove}
+                        className={`w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-2 ${canApprove ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-400 cursor-not-allowed dark:bg-slate-600'}`}
+                      >
+                        <ShieldCheck className="w-4 h-4 shrink-0" />
+                        Approve Gate Pass
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

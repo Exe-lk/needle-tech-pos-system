@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import { 
   X, 
-  Maximize2, 
-  Minimize2, 
   RotateCcw, 
   CheckCircle2, 
   AlertCircle,
@@ -44,6 +43,7 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
   const isStartingRef = useRef(false);
   const isStoppingRef = useRef(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [overlayExpanded, setOverlayExpanded] = useState(false);
   const [cameraPermission, setCameraPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
   const retryCountRef = useRef(0);
   const maxRetries = 3;
@@ -60,13 +60,20 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
   useEffect(() => {
     isMountedRef.current = true;
     checkCameraPermission();
-    startScanning();
-
     return () => {
       isMountedRef.current = false;
       stopScanning();
     };
   }, []);
+
+  // Start/stop scanner when switching between inline and overlay (e.g. embedded in overflow-hidden)
+  useEffect(() => {
+    const timer = setTimeout(() => startScanning(), 150);
+    return () => {
+      clearTimeout(timer);
+      stopScanning();
+    };
+  }, [overlayExpanded]);
 
   // Listen for fullscreen changes
   useEffect(() => {
@@ -250,38 +257,57 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
     startScanning();
   };
 
-  const toggleFullscreen = () => {
-    if (!isFullscreen) {
-      const element = containerRef.current;
-      if (element) {
-        if (element.requestFullscreen) {
-          element.requestFullscreen();
-        } else if ((element as any).webkitRequestFullscreen) {
-          (element as any).webkitRequestFullscreen();
-        } else if ((element as any).mozRequestFullScreen) {
-          (element as any).mozRequestFullScreen();
-        } else if ((element as any).msRequestFullscreen) {
-          (element as any).msRequestFullscreen();
+  const toggleFullscreen = async () => {
+    if (overlayExpanded) {
+      setOverlayExpanded(false);
+      return;
+    }
+    if (isFullscreen) {
+      try {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozCancelFullScreen) {
+          (document as any).mozCancelFullScreen();
+        } else if ((document as any).msExitFullscreen) {
+          (document as any).msExitFullscreen();
         }
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    const element = containerRef.current;
+    if (element) {
+      const requestFs =
+        element.requestFullscreen ||
+        (element as any).webkitRequestFullscreen ||
+        (element as any).mozRequestFullScreen ||
+        (element as any).msRequestFullscreen;
+      if (requestFs) {
+        try {
+          await requestFs.call(element);
+        } catch {
+          // Fullscreen API failed (e.g. element inside overflow:hidden) – use overlay fallback
+          await stopScanning();
+          setOverlayExpanded(true);
+        }
+      } else {
+        await stopScanning();
+        setOverlayExpanded(true);
       }
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      } else if ((document as any).webkitExitFullscreen) {
-        (document as any).webkitExitFullscreen();
-      } else if ((document as any).mozCancelFullScreen) {
-        (document as any).mozCancelFullScreen();
-      } else if ((document as any).msExitFullscreen) {
-        (document as any).msExitFullscreen();
-      }
+      await stopScanning();
+      setOverlayExpanded(true);
     }
   };
 
-  return (
-    <div 
-      ref={containerRef} 
-      className="relative w-full min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col items-center justify-center p-3 sm:p-4 md:p-6"
-    >
+  const wrapperClass =
+    'relative w-full min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col items-center justify-center p-3 sm:p-4 md:p-6';
+
+  const scannerBody = (
+    <>
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-black/60 backdrop-blur-md border-b border-white/10 p-3 sm:p-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -296,20 +322,6 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
             )}
           </div>
           <div className="flex items-center space-x-2 ml-4">
-            {scanning && (
-              <button
-                onClick={toggleFullscreen}
-                className="p-2 sm:p-2.5 text-white hover:bg-white/20 rounded-lg transition-all duration-200 active:scale-95"
-                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-              >
-                {isFullscreen ? (
-                  <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                ) : (
-                  <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                )}
-              </button>
-            )}
             {showCloseButton && onClose && (
               <button
                 onClick={onClose}
@@ -463,6 +475,20 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
           <span>Hold the device steady</span>
         </p>
       </div>
+    </>
+  );
+
+  if (overlayExpanded && typeof document !== 'undefined') {
+    return createPortal(
+      <div className={`fixed inset-0 z-[9999] overflow-auto safe-area-inset ${wrapperClass}`}>
+        {scannerBody}
+      </div>,
+      document.body
+    );
+  }
+  return (
+    <div ref={containerRef} className={wrapperClass}>
+      {scannerBody}
     </div>
   );
 };

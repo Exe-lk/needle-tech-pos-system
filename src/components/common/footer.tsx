@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useSidebar } from '@/src/contexts/SidebarContext';
+import { APP_VERSION } from '@/src/utils/version';
 
 interface FooterProps {
   className?: string;
@@ -17,7 +18,7 @@ const Footer: React.FC<FooterProps> = ({ className = '' }) => {
       className={`bg-white dark:bg-slate-950 border-t border-gray-200/80 dark:border-slate-800/80 transition-all duration-300 ${footerLeftMargin} ${className}`}
     >
       <div className="px-4 py-4 max-w-7xl mx-auto">
-        <div className="flex justify-center items-center text-sm text-gray-600 dark:text-slate-400">
+        <div className="flex justify-between items-center text-sm text-gray-600 dark:text-slate-400">
           <span>
             © {currentYear} Powered by{' '}
             <a
@@ -29,6 +30,7 @@ const Footer: React.FC<FooterProps> = ({ className = '' }) => {
               EXE.lk
             </a>
           </span>
+          <span className="text-xs font-medium">V {APP_VERSION}</span>
         </div>
       </div>
     </footer>

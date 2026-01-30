@@ -69,3 +69,21 @@ body {
 .animate-scan-line {
   animation: scan-line 2s ease-in-out infinite;
 }
+
+/* Stock-in: print only QR batch when printing from QR batch modal */
+@media print {
+  body.qr-batch-printing * {
+    visibility: hidden;
+  }
+  body.qr-batch-printing #qr-batch-print,
+  body.qr-batch-printing #qr-batch-print * {
+    visibility: visible;
+  }
+  body.qr-batch-printing #qr-batch-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 1rem;
+  }
+}

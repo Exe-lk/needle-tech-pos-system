@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, Clock, X } from 'lucide-react';
+import { Eye, Clock, X, QrCode, Printer } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type StockType = 'New' | 'Used';
@@ -23,6 +24,16 @@ interface InventoryItem {
   maintenanceStock: number;
   retiredStock: number;
   lastUpdated: string;
+}
+
+// Individual machine unit (one row per physical machine)
+interface MachineUnit {
+  id: string;
+  brand: string;
+  model: string;
+  type: MachineType;
+  serialNumber: string;
+  boxNumber: string;
 }
 
 // Stock Transaction - Records individual stock movements
@@ -151,6 +162,29 @@ const mockTransactions: StockTransaction[] = [
   },
 ];
 
+/** Expand inventory items into individual machine units (one per physical machine). */
+function expandInventoryToMachineUnits(items: InventoryItem[]): MachineUnit[] {
+  const units: MachineUnit[] = [];
+  let globalIndex = 0;
+  for (const item of items) {
+    const prefix = `${item.brand}-${item.model}`.replace(/\s+/g, '-');
+    for (let i = 0; i < item.totalStock; i++) {
+      globalIndex += 1;
+      const serialNum = String(globalIndex).padStart(4, '0');
+      const boxNum = `${prefix}-B${String(i + 1).padStart(3, '0')}`;
+      units.push({
+        id: `unit-${item.id}-${i + 1}`,
+        brand: item.brand,
+        model: item.model,
+        type: item.type,
+        serialNumber: `${prefix}-SN${serialNum}`,
+        boxNumber: boxNum,
+      });
+    }
+  }
+  return units;
+}
+
 const InventoryManagementPage: React.FC = () => {
   const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -160,6 +194,12 @@ const InventoryManagementPage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
   const [transactions, setTransactions] = useState<StockTransaction[]>(mockTransactions);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [selectedMachineForQR, setSelectedMachineForQR] = useState<MachineUnit | null>(null);
+  const qrCodeRef = useRef<HTMLDivElement>(null);
+
+  /** All individual machine units (70 total from 5 inventory rows). */
+  const allMachineUnits = useMemo(() => expandInventoryToMachineUnits(inventory), [inventory]);
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -185,6 +225,57 @@ const InventoryManagementPage: React.FC = () => {
   const handleCloseViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedItem(null);
+  };
+
+  /** QR code payload: only serial number and box number (for scanning in gatepass/returns). */
+  const getQRCodePayload = (machine: MachineUnit | null): string => {
+    if (!machine) return '';
+    return JSON.stringify({
+      serialNumber: machine.serialNumber,
+      boxNo: machine.boxNumber,
+    });
+  };
+
+  const handleGenerateQR = (machine: MachineUnit) => {
+    setSelectedMachineForQR(machine);
+    setIsQRModalOpen(true);
+  };
+
+  const handleCloseQRModal = () => {
+    setIsQRModalOpen(false);
+    setSelectedMachineForQR(null);
+  };
+
+  const handlePrintQR = () => {
+    if (!qrCodeRef.current || !selectedMachineForQR) return;
+    const svg = qrCodeRef.current.querySelector('svg');
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const m = selectedMachineForQR;
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>QR Code - ${m.brand} ${m.model}</title>
+          <style>
+            body { font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+            h2 { margin: 0 0 8px 0; font-size: 1.25rem; }
+            p { margin: 0 0 16px 0; color: #666; font-size: 0.875rem; }
+            div.qr-wrap { padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px; }
+          </style>
+        </head>
+        <body>
+          <h2>Machine QR Code</h2>
+          <p>${m.brand} ${m.model} &middot; ${m.serialNumber} / ${m.boxNumber}</p>
+          <div class="qr-wrap">${svgData}</div>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+    printWin.focus();
+    printWin.print();
   };
 
   const handleViewHistory = (item: InventoryItem) => {
@@ -431,119 +522,47 @@ const InventoryManagementPage: React.FC = () => {
     },
   ];
 
-  // Render inventory details view
-  const renderInventoryDetails = () => {
-    if (!selectedItem) return null;
+  // View details modal: table columns for all machine units (brand, model, type, serial, box)
+  const viewDetailsColumns: TableColumn[] = [
+    { key: 'brand', label: 'Brand', sortable: true, filterable: true },
+    { key: 'model', label: 'Model', sortable: true, filterable: true },
+    {
+      key: 'type',
+      label: 'Type',
+      sortable: true,
+      filterable: true,
+      render: (value: MachineType) => {
+        const base =
+          'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
+        const typeColors: Record<MachineType, string> = {
+          Industrial: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+          Domestic: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+          Embroidery: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+          Overlock: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+          Buttonhole: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
+          Other: 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200',
+        };
+        return (
+          <span className={`${base} ${typeColors[value] || typeColors.Other}`}>
+            {value}
+          </span>
+        );
+      },
+    },
+    { key: 'serialNumber', label: 'Serial Number', sortable: true, filterable: true },
+    { key: 'boxNumber', label: 'Box Number', sortable: true, filterable: true },
+  ];
 
-    const availablePercentage =
-      selectedItem.totalStock > 0
-        ? (selectedItem.availableStock / selectedItem.totalStock) * 100
-        : 0;
-
-    return (
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Inventory Details
-          </h3>
-        </div>
-
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-            Machine Information
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Brand:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedItem.brand}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Model:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedItem.model}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Type:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {selectedItem.type}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500 dark:text-gray-400">Last Updated:</span>
-              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                {new Date(selectedItem.lastUpdated).toLocaleDateString('en-LK')}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-            Stock Levels
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="text-center p-4 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {selectedItem.totalStock}
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total Stock</div>
-            </div>
-            <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {selectedItem.availableStock}
-              </div>
-              <div className="text-xs text-green-600 dark:text-green-400 mt-1">Available</div>
-            </div>
-            <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {selectedItem.rentedStock}
-              </div>
-              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">Rented</div>
-            </div>
-            <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-              <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                {selectedItem.maintenanceStock}
-              </div>
-              <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Maintenance</div>
-            </div>
-            <div className="text-center p-4 bg-gray-50 dark:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-600">
-              <div className="text-2xl font-bold text-gray-500 dark:text-gray-400">
-                {selectedItem.retiredStock}
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Retired</div>
-            </div>
-          </div>
-
-          {/* Availability Status */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                Availability Rate
-              </span>
-              <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                {availablePercentage.toFixed(1)}%
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full transition-all duration-300 ${
-                  availablePercentage >= 50
-                    ? 'bg-green-500'
-                    : availablePercentage >= 25
-                    ? 'bg-yellow-500'
-                    : 'bg-red-500'
-                }`}
-                style={{ width: `${availablePercentage}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const viewDetailsActions: ActionButton[] = [
+    {
+      label: '',
+      icon: <QrCode className="w-4 h-4" />,
+      variant: 'secondary',
+      onClick: (row: MachineUnit) => handleGenerateQR(row),
+      tooltip: 'Generate QR Code',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
@@ -590,10 +609,10 @@ const InventoryManagementPage: React.FC = () => {
         </div>
       </main>
 
-      {/* View Inventory Details Modal */}
-      {isViewModalOpen && selectedItem && (
+      {/* View Inventory Details Modal - All machine units table with pagination */}
+      {isViewModalOpen && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <div>
@@ -601,7 +620,7 @@ const InventoryManagementPage: React.FC = () => {
                   Inventory Details
                 </h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  {selectedItem.brand} {selectedItem.model}
+                  All machines ({allMachineUnits.length} total)
                 </p>
               </div>
               <button
@@ -612,9 +631,17 @@ const InventoryManagementPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Modal Content - Scrollable */}
+            {/* Modal Content - Table with pagination */}
             <div className="flex-1 overflow-y-auto p-6">
-              {renderInventoryDetails()}
+              <Table
+                data={allMachineUnits}
+                columns={viewDetailsColumns}
+                actions={viewDetailsActions}
+                itemsPerPage={10}
+                searchable
+                filterable
+                emptyMessage="No machines found."
+              />
             </div>
           </div>
         </div>
@@ -652,6 +679,44 @@ const InventoryManagementPage: React.FC = () => {
                 filterable
                 emptyMessage="No transaction history found for this item."
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal - serial number and box number only */}
+      {isQRModalOpen && selectedMachineForQR && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Machine QR Code
+              </h2>
+              <button
+                onClick={handleCloseQRModal}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div
+                ref={qrCodeRef}
+                className="flex justify-center p-4 bg-white dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600"
+              >
+                <QRCodeSVG value={getQRCodePayload(selectedMachineForQR)} size={200} level="M" />
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                This QR code contains only serial number and box number for scanning in gatepass or returns.
+              </p>
+              <button
+                type="button"
+                onClick={handlePrintQR}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-slate-800 transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                Print
+              </button>
             </div>
           </div>
         </div>
