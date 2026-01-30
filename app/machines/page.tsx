@@ -61,6 +61,7 @@ interface MachineRentalHistory {
   status: 'Active' | 'Completed' | 'Cancelled';
 }
 
+
 // Mock machine data
 const mockMachines: Machine[] = [
   {
@@ -219,19 +220,7 @@ const getMachineRentalHistory = (machineId: number): MachineRentalHistory[] => {
 const columns: TableColumn[] = [
   {
     key: 'barcode',
-    label: 'QR/Barcode',
-    sortable: true,
-    filterable: true,
-  },
-  {
-    key: 'serialNumber',
-    label: 'Serial No',
-    sortable: true,
-    filterable: true,
-  },
-  {
-    key: 'boxNo',
-    label: 'BOX No',
+    label: 'Description',
     sortable: true,
     filterable: true,
   },

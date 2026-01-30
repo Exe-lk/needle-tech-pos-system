@@ -201,7 +201,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     const filteredOptions = useMemo(() => {
         if (!searchTerm) return options;
         const term = searchTerm.toLowerCase();
-        return options.filter(opt => 
+        return options.filter(opt =>
             opt.label.toLowerCase().includes(term)
         );
     }, [options, searchTerm]);
@@ -258,7 +258,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 break;
             case 'ArrowDown':
                 e.preventDefault();
-                setHighlightedIndex(prev => 
+                setHighlightedIndex(prev =>
                     prev < filteredOptions.length - 1 ? prev + 1 : prev
                 );
                 break;
@@ -478,6 +478,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     // Create form state
     const [selectedCustomerId, setSelectedCustomerId] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
     const [activeCreateTab, setActiveCreateTab] = useState<'company' | 'individual'>('company');
     const [machines, setMachines] = useState<MachineRequestItem[]>([
         { id: '1', brand: '', model: '', type: '', quantity: 1, availableStock: 0, unitPrice: 0, totalPrice: 0 },
@@ -647,6 +649,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
         const errors: Record<string, string> = {};
 
         if (!selectedCustomerId) errors.selectedCustomerId = 'Customer is required';
+        if (!startDate.trim()) errors.startDate = 'Start date is required';
+        if (!endDate.trim()) errors.endDate = 'End date is required';
+        if (startDate && endDate && endDate < startDate) {
+            errors.endDate = 'End date must be on or after start date';
+        }
 
         machines.forEach((machine, index) => {
             if (!machine.brand) errors[`machine_brand_${index}`] = 'Brand is required';
@@ -683,6 +690,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
             const payload = {
                 customerId: selectedCustomerId,
                 customerName: selectedCustomer?.name || '',
+                startDate: startDate.trim(),
+                endDate: endDate.trim(),
                 machines: machinesWithStatus,
                 totalAmount: pricing,
                 requestDate: new Date().toISOString().split('T')[0],
@@ -912,12 +921,49 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     />
                                 </div>
 
+                                {/* Renting period – Start Date & End Date */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Start Date <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={(e) => setStartDate(e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${formErrors.startDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                                        />
+                                        {formErrors.startDate && (
+                                            <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                                                {formErrors.startDate}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            End Date <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={endDate}
+                                            onChange={(e) => setEndDate(e.target.value)}
+                                            min={startDate || undefined}
+                                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${formErrors.endDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                                        />
+                                        {formErrors.endDate && (
+                                            <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                                                {formErrors.endDate}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
                                 {/* Outstanding Alerts Warning Banner */}
                                 {selectedCustomerId && customerOutstandingAlerts.length > 0 && (
                                     <div className={`mt-4 p-4 rounded-lg border-2 ${getSeverityStyles(highestSeverity!)}`}>
                                         <div className="flex items-start space-x-3">
                                             <AlertTriangle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                                                highestSeverity === 'Critical' 
+                                                highestSeverity === 'Critical'
                                                     ? 'text-red-600 dark:text-red-400'
                                                     : highestSeverity === 'High'
                                                     ? 'text-orange-600 dark:text-orange-400'
@@ -1068,18 +1114,18 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         </label>
                                                         {machine.brand && machine.model && (
                                                             <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md flex-shrink-0 ${
-                                                                availableStock > 0 
-                                                                    ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700' 
+                                                                availableStock > 0
+                                                                    ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
                                                                     : 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'
                                                             }`}>
                                                                 <Package className={`w-3.5 h-3.5 ${
-                                                                    availableStock > 0 
-                                                                        ? 'text-green-700 dark:text-green-400' 
+                                                                    availableStock > 0
+                                                                        ? 'text-green-700 dark:text-green-400'
                                                                         : 'text-red-700 dark:text-red-400'
                                                                 }`} />
                                                                 <span className={`text-xs font-semibold whitespace-nowrap ${
-                                                                    availableStock > 0 
-                                                                        ? 'text-green-700 dark:text-green-400' 
+                                                                    availableStock > 0
+                                                                        ? 'text-green-700 dark:text-green-400'
                                                                         : 'text-red-700 dark:text-red-400'
                                                                 }`}>
                                                                     Available: <span className="text-sm">{availableStock}</span>

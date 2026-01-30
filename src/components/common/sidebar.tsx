@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { APP_VERSION } from '@/src/utils/version';
+import { useSidebar } from '@/src/contexts/SidebarContext';
 import {
     Monitor,
     Users,
@@ -55,7 +56,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     hasNavbar = true,
     navbarHeight = 70,
 }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
+    // Use context instead of local state
+    const { isSidebarExpanded: isExpanded, setIsSidebarExpanded } = useSidebar();
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
     const pathname = usePathname();
 
@@ -87,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         },
         {
             icon: FileText,
-            label: 'Rental Agreement',
+            label: 'Hiring Machine Agreement',
             href: '/rental-agreement',
         },
         {
@@ -161,7 +163,9 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     const toggleSidebar = () => {
         const newExpanded = !isExpanded;
-        setIsExpanded(newExpanded);
+        setIsSidebarExpanded(newExpanded);
+        
+        // Still call the callback if provided (for backward compatibility)
         if (onExpandedChange) {
             onExpandedChange(newExpanded);
         }

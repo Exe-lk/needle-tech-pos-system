@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, Filter, ChevronLeft, ChevronRight, Calendar, ChevronDown, Check } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 
 export interface TableColumn {
@@ -9,7 +9,7 @@ export interface TableColumn {
   label: string;
   sortable?: boolean;
   filterable?: boolean;
-  filterType?: 'select' | 'dateRange'; // New: support date range filtering
+  filterType?: 'select' | 'dateRange';
   render?: (value: any, row: any) => React.ReactNode;
 }
 
@@ -20,7 +20,7 @@ export interface ActionButton {
   icon?: React.ReactNode;
   variant?: 'primary' | 'secondary' | 'danger' | 'warning';
   tooltip?: string;
-  shouldShow?: (row: any) => boolean; // Add conditional visibility support
+  shouldShow?: (row: any) => boolean;
 }
 
 export interface TableProps {
@@ -38,6 +38,147 @@ export interface TableProps {
   getRowClassName?: (row: any) => string;
   maxHeight?: string | 'none';
 }
+
+interface SearchableFilterSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  className?: string;
+}
+
+const SearchableFilterSelect: React.FC<SearchableFilterSelectProps> = ({
+  value,
+  onChange,
+  options,
+  placeholder,
+  className = '',
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm) return options;
+    const term = searchTerm.toLowerCase();
+    return options.filter((opt) => opt.label.toLowerCase().includes(term));
+  }, [options, searchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSearchTerm('');
+        setHighlightedIndex(0);
+      }
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) inputRef.current.focus();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && dropdownRef.current && highlightedIndex >= 0) {
+      const el = dropdownRef.current.children[highlightedIndex] as HTMLElement;
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightedIndex, isOpen]);
+
+  const handleSelect = (optionValue: string) => {
+    onChange(optionValue);
+    setIsOpen(false);
+    setSearchTerm('');
+    setHighlightedIndex(0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case 'Enter':
+        e.preventDefault();
+        if (filteredOptions[highlightedIndex]) handleSelect(filteredOptions[highlightedIndex].value);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : prev));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+        break;
+      case 'Escape':
+        setIsOpen(false);
+        setSearchTerm('');
+        setHighlightedIndex(0);
+        break;
+    }
+  };
+
+  return (
+    <div ref={containerRef} className={`relative min-w-[140px] ${className}`}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-full bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between hover:border-blue-500 dark:hover:bg-slate-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-indigo-500 transition-colors"
+      >
+        {isOpen ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setHighlightedIndex(0);
+            }}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 min-w-0 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm"
+            placeholder={placeholder}
+          />
+        ) : (
+          <span
+            className={`flex-1 truncate text-sm ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}
+          >
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
+        )}
+        <ChevronDown
+          className={`w-4 h-4 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </div>
+      {isOpen && (
+        <div
+          ref={dropdownRef}
+          className="absolute z-[100] w-full mt-1 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg max-h-60 overflow-auto"
+        >
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option, index) => (
+              <div
+                key={option.value}
+                onClick={() => handleSelect(option.value)}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                className={`px-3 py-2 cursor-pointer flex items-center justify-between text-sm ${
+                  index === highlightedIndex ? 'bg-blue-50 dark:bg-indigo-900/30' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
+                } ${option.value === value ? 'bg-blue-100 dark:bg-indigo-900/50' : ''}`}
+              >
+                <span className="text-gray-900 dark:text-white truncate">{option.label}</span>
+                {option.value === value && <Check className="w-4 h-4 flex-shrink-0 text-blue-600 dark:text-indigo-400" />}
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">No options found</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Table: React.FC<TableProps> = ({
   data,
@@ -66,62 +207,43 @@ const Table: React.FC<TableProps> = ({
   const [pageSize, setPageSize] = useState(itemsPerPage);
   const [calculatedHeight, setCalculatedHeight] = useState<string>('calc(100vh - 280px)');
 
-  // Calculate responsive height based on viewport
   useEffect(() => {
     const calculateHeight = () => {
       const vh = window.innerHeight;
-
-      if (vh >= 1024) {
-        setCalculatedHeight('calc(100vh - 280px)');
-      } else if (vh >= 768) {
-        setCalculatedHeight('calc(100vh - 240px)');
-      } else {
-        setCalculatedHeight('calc(100vh - 200px)');
-      }
+      if (vh >= 1024) setCalculatedHeight('calc(100vh - 280px)');
+      else if (vh >= 768) setCalculatedHeight('calc(100vh - 240px)');
+      else setCalculatedHeight('calc(100vh - 200px)');
     };
-
     calculateHeight();
     window.addEventListener('resize', calculateHeight);
     return () => window.removeEventListener('resize', calculateHeight);
   }, []);
 
-  // Sync pageSize with itemsPerPage prop changes
   useEffect(() => {
     setPageSize(itemsPerPage);
   }, [itemsPerPage]);
 
-  // Get display value for filtering and searching
   const getDisplayValue = (value: any): string => {
     if (value === null || value === undefined) return '';
-
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       return String(value);
     }
-
     if (typeof value === 'object') {
-      if ('name' in value && typeof (value as any).name === 'string') {
-        return (value as any).name;
-      }
+      if ('name' in value && typeof (value as any).name === 'string') return (value as any).name;
       return JSON.stringify(value);
     }
-
     return String(value);
   };
 
-  // Get unique values for filter options
   const getFilterOptions = (columnKey: string) => {
     const values = data
       .map((row) => getDisplayValue(row[columnKey]))
       .filter((v) => v);
-
     return [...new Set(values)].sort();
   };
 
-  // Filter, search, sort
   const filteredData = useMemo(() => {
     let filtered = [...data];
-
-    // Search across all columns
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       filtered = filtered.filter((row) =>
@@ -132,11 +254,8 @@ const Table: React.FC<TableProps> = ({
         })
       );
     }
-
-    // Column filters (select type)
     Object.entries(filters).forEach(([key, filterValue]) => {
       if (!filterValue) return;
-
       const lower = filterValue.toLowerCase();
       filtered = filtered.filter((row) => {
         const value = row[key];
@@ -144,94 +263,64 @@ const Table: React.FC<TableProps> = ({
         return displayValue.toLowerCase().includes(lower);
       });
     });
-
-    // Date range filters
     Object.entries(dateRangeFilters).forEach(([key, dateRange]) => {
       if (dateRange.from || dateRange.to) {
         filtered = filtered.filter((row) => {
           const rowValue = row[key];
-
-          // Handle date strings (YYYY-MM-DD format)
           if (typeof rowValue === 'string') {
-            const rowDate = rowValue.split(' ')[0]; // Extract date part if time is included
-
-            if (dateRange.from && rowDate < dateRange.from) {
-              return false;
-            }
-            if (dateRange.to && rowDate > dateRange.to) {
-              return false;
-            }
+            const rowDate = rowValue.split(' ')[0];
+            if (dateRange.from && rowDate < dateRange.from) return false;
+            if (dateRange.to && rowDate > dateRange.to) return false;
             return true;
           }
-
-          // Handle Date objects
           if (rowValue instanceof Date) {
             const rowDateStr = rowValue.toISOString().split('T')[0];
-
-            if (dateRange.from && rowDateStr < dateRange.from) {
-              return false;
-            }
-            if (dateRange.to && rowDateStr > dateRange.to) {
-              return false;
-            }
+            if (dateRange.from && rowDateStr < dateRange.from) return false;
+            if (dateRange.to && rowDateStr > dateRange.to) return false;
             return true;
           }
-
           return true;
         });
       }
     });
-
-    // Sorting
     if (sortColumn) {
       filtered.sort((a, b) => {
         let aValue: any = getDisplayValue(a[sortColumn]);
         let bValue: any = getDisplayValue(b[sortColumn]);
-
-        // Numeric sort if possible
         if (!isNaN(Number(aValue)) && !isNaN(Number(bValue))) {
           aValue = Number(aValue);
           bValue = Number(bValue);
         }
-
-        // Date sort if possible
         if (aValue && bValue && !isNaN(Date.parse(aValue)) && !isNaN(Date.parse(bValue))) {
           aValue = new Date(aValue).getTime();
           bValue = new Date(bValue).getTime();
         }
-
         if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
         return 0;
       });
     }
-
     return filtered;
   }, [data, searchTerm, filters, dateRangeFilters, sortColumn, sortDirection, columns]);
 
-  // Calculate pagination values
   const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
   const startIndex = (currentPage - 1) * pageSize;
   const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
 
-  // Reset to page 1 when search term or filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filters, dateRangeFilters]);
 
-  // Ensure current page is valid when filtered data or page size changes
   useEffect(() => {
     const calculatedTotalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
     if (currentPage > calculatedTotalPages && calculatedTotalPages > 0) {
       setCurrentPage(calculatedTotalPages);
     }
-  }, [filteredData.length, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filteredData.length, pageSize]);
 
-  // Sorting handler
   const handleSort = (columnKey: string) => {
     const column = columns.find((col) => col.key === columnKey);
     if (!column?.sortable) return;
-
     if (sortColumn === columnKey) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -240,16 +329,11 @@ const Table: React.FC<TableProps> = ({
     }
   };
 
-  // Filter change (for select type filters)
   const handleFilterChange = (columnKey: string, value: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      [columnKey]: value,
-    }));
+    setFilters((prev) => ({ ...prev, [columnKey]: value }));
     setCurrentPage(1);
   };
 
-  // Date range filter change
   const handleDateRangeChange = (columnKey: string, type: 'from' | 'to', value: string) => {
     setDateRangeFilters((prev) => ({
       ...prev,
@@ -261,7 +345,6 @@ const Table: React.FC<TableProps> = ({
     setCurrentPage(1);
   };
 
-  // Clear filters
   const clearFilters = () => {
     setFilters({});
     setDateRangeFilters({});
@@ -269,26 +352,22 @@ const Table: React.FC<TableProps> = ({
     setCurrentPage(1);
   };
 
-  // Page size
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
     setCurrentPage(1);
   };
 
-  // Navigation handlers
   const handlePreviousPage = () => {
     setCurrentPage((prev) => Math.max(1, prev - 1));
   };
 
   const handleNextPage = () => {
-    setCurrentPage((prev) => Math.min(totalPages, prev - 1));
+    setCurrentPage((prev) => Math.min(totalPages, prev + 1));
   };
 
-  // Action button styles
   const getActionButtonStyles = (variant: string = 'primary') => {
     const base =
       'px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800';
-
     switch (variant) {
       case 'primary':
         return `${base} bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500`;
@@ -297,21 +376,15 @@ const Table: React.FC<TableProps> = ({
       case 'danger':
         return `${base} bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500`;
       case 'warning':
-        return `${base} bg-yellow-600 dark:bg-yellow-700 text-white hover:bg-yellow-700 dark:hover:bg-yellow-600 focus:ring-yellow-500 dark:focus:ring-yellow-500`;
+        return `${base} bg-yellow-600 dark:yellow-700 text-white hover:bg-yellow-700 dark:hover:bg-yellow-600 focus:ring-yellow-500 dark:focus:ring-yellow-500`;
       default:
         return `${base} bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600`;
     }
   };
 
-  // Clamp current page if filters/search changed
   const effectiveCurrentPage = Math.min(currentPage, totalPages);
-
-  // Use provided maxHeight or calculated responsive height
   const tableMaxHeight = maxHeight || calculatedHeight;
-
   const showHeader = searchable || filterable || !!onCreateClick;
-
-  // Check if any filters are active
   const hasActiveFilters =
     searchTerm ||
     Object.values(filters).some((f) => f) ||
@@ -325,12 +398,10 @@ const Table: React.FC<TableProps> = ({
         ...(maxHeight === 'none' ? { height: '100%' } : {}),
       }}
     >
-      {/* Header with search, filter and create button */}
       {showHeader && (
         <div className="p-6 bg-gray-50 dark:bg-slate-700/50 flex-shrink-0">
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <div className="flex items-center space-x-3 flex-1 min-w-0">
-              {/* Search Bar */}
               {searchable && (
                 <div className="relative flex-1 max-w-md min-w-[180px]">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -345,8 +416,6 @@ const Table: React.FC<TableProps> = ({
                   />
                 </div>
               )}
-
-              {/* Filter Icon */}
               {filterable && (
                 <button
                   onClick={() => setShowFilters((prev) => !prev)}
@@ -355,8 +424,6 @@ const Table: React.FC<TableProps> = ({
                   <Filter className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                 </button>
               )}
-
-              {/* Clear Filters */}
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
@@ -366,13 +433,11 @@ const Table: React.FC<TableProps> = ({
                 </button>
               )}
             </div>
-
-            {/* Create Button */}
             {onCreateClick && (
               <Tooltip content={`Add a new ${createButtonLabel.toLowerCase()}`} position="bottom">
                 <button
                   onClick={onCreateClick}
-                  className="w-full sm:w-auto mt-3 sm:mt-0 px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                  className="w-full sm:w-auto mt-3 sm:mt-0 px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:ring-offset-2 transition-colors duration-200"
                 >
                   {createButtonLabel}
                 </button>
@@ -380,7 +445,6 @@ const Table: React.FC<TableProps> = ({
             )}
           </div>
 
-          {/* Filter Pills Row */}
           {filterable && showFilters && (
             <div className="flex flex-wrap gap-3 mt-2">
               {columns
@@ -390,7 +454,6 @@ const Table: React.FC<TableProps> = ({
 
                   if (filterType === 'dateRange') {
                     const dateRange = dateRangeFilters[column.key] || { from: '', to: '' };
-
                     return (
                       <div
                         key={column.key}
@@ -399,29 +462,21 @@ const Table: React.FC<TableProps> = ({
                         <Calendar className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                         <div className="flex items-center space-x-2">
                           <div className="flex flex-col">
-                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                              From
-                            </label>
+                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">From</label>
                             <input
                               type="date"
                               value={dateRange.from}
-                              onChange={(e) =>
-                                handleDateRangeChange(column.key, 'from', e.target.value)
-                              }
-                              className="border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
+                              onChange={(e) => handleDateRangeChange(column.key, 'from', e.target.value)}
+                              className="border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
                             />
                           </div>
                           <div className="flex flex-col">
-                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                              To
-                            </label>
+                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">To</label>
                             <input
                               type="date"
                               value={dateRange.to}
-                              onChange={(e) =>
-                                handleDateRangeChange(column.key, 'to', e.target.value)
-                              }
-                              className="border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
+                              onChange={(e) => handleDateRangeChange(column.key, 'to', e.target.value)}
+                              className="border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
                             />
                           </div>
                         </div>
@@ -429,38 +484,15 @@ const Table: React.FC<TableProps> = ({
                     );
                   }
 
-                  // Default select filter
                   return (
                     <div key={column.key} className="flex items-center">
-                      <div className="relative">
-                        <select
-                          value={filters[column.key] || ''}
-                          onChange={(e) => handleFilterChange(column.key, e.target.value)}
-                          className="appearance-none bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-full px-4 py-2 pr-8 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500"
-                        >
-                          <option value="">{column.label}</option>
-                          {getFilterOptions(column.key).map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                          <svg
-                            className="w-4 h-4 text-gray-400 dark:text-gray-500"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 9l-7 7-7-7"
-                            />
-                          </svg>
-                        </div>
-                      </div>
+                      <SearchableFilterSelect
+                        value={filters[column.key] || ''}
+                        onChange={(value) => handleFilterChange(column.key, value)}
+                        options={getFilterOptions(column.key).map((opt) => ({ value: opt, label: opt }))}
+                        placeholder={column.label}
+                        className="flex-shrink-0"
+                      />
                     </div>
                   );
                 })}
@@ -469,9 +501,7 @@ const Table: React.FC<TableProps> = ({
         </div>
       )}
 
-      {/* Content Container with flexible height */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-        {/* Desktop / Tablet TABLE view */}
         <div className="hidden md:flex-1 md:flex md:flex-col md:min-h-0">
           <div
             className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
@@ -496,7 +526,7 @@ const Table: React.FC<TableProps> = ({
                       <div className="flex items-center space-x-1">
                         <span>{column.label}</span>
                         {column.sortable && (
-                          <div className="flex flex-col ml-1">
+                          <div className="flex-col ml-1">
                             <svg
                               className={`w-3 h-3 ${
                                 sortColumn === column.key && sortDirection === 'asc'
@@ -544,11 +574,9 @@ const Table: React.FC<TableProps> = ({
                   </tr>
                 ) : (
                   paginatedData.map((row, index) => {
-                    // Filter actions based on shouldShow for each row
                     const visibleActions = actions.filter(
                       (action) => !action.shouldShow || action.shouldShow(row)
                     );
-
                     return (
                       <tr
                         key={index}
@@ -589,9 +617,7 @@ const Table: React.FC<TableProps> = ({
                           </td>
                         )}
                         {visibleActions.length === 0 && actions.length > 0 && (
-                          <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
-                            {/* Empty cell to maintain table structure */}
-                          </td>
+                          <td className="px-6 py-4 text-sm font-medium whitespace-nowrap" />
                         )}
                       </tr>
                     );
@@ -602,7 +628,6 @@ const Table: React.FC<TableProps> = ({
           </div>
         </div>
 
-        {/* Mobile LIST/CARD view */}
         <div className="md:hidden flex-1 overflow-y-auto min-h-0">
           {loading ? (
             <div className="flex justify-center items-center h-full py-10">
@@ -613,9 +638,7 @@ const Table: React.FC<TableProps> = ({
             </div>
           ) : paginatedData.length === 0 ? (
             <div className="flex justify-center items-center h-full py-10">
-              <p className="text-gray-500 dark:text-gray-400 text-sm text-center px-4">
-                {emptyMessage}
-              </p>
+              <p className="text-gray-500 dark:text-gray-400 text-sm text-center px-4">{emptyMessage}</p>
             </div>
           ) : (
             <div className="space-y-3 px-3 py-3">
@@ -624,16 +647,13 @@ const Table: React.FC<TableProps> = ({
                   (action) => !action.shouldShow || action.shouldShow(row)
                 );
                 const rowClassName = getRowClassName ? getRowClassName(row) : '';
-
                 return (
                   <div
                     key={index}
                     className={`rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm ${rowClassName}`}
                   >
-                    {/* Top: primary columns + actions */}
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex-1">
-                        {/* Use first column as title if exists */}
                         {columns[0] && (
                           <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
                             {columns[0].render
@@ -642,7 +662,6 @@ const Table: React.FC<TableProps> = ({
                           </div>
                         )}
                       </div>
-
                       {visibleActions.length > 0 && (
                         <div className="flex flex-wrap gap-1 justify-end">
                           {visibleActions.map((action, actionIndex) => (
@@ -655,9 +674,7 @@ const Table: React.FC<TableProps> = ({
                                 onClick={() => action.onClick(row)}
                                 className={
                                   action.className ||
-                                  `${getActionButtonStyles(
-                                    action.variant
-                                  )} !px-2 !py-1 text-[11px]`
+                                  `${getActionButtonStyles(action.variant)} !px-2 !py-1 text-[11px]`
                                 }
                               >
                                 {action.icon && <span className="mr-1">{action.icon}</span>}
@@ -668,14 +685,9 @@ const Table: React.FC<TableProps> = ({
                         </div>
                       )}
                     </div>
-
-                    {/* Details as label-value list */}
                     <div className="mt-2 space-y-1.5">
-                      {columns.map((column, colIndex) => (
-                        <div
-                          key={column.key}
-                          className="flex text-xs text-gray-700 dark:text-gray-200"
-                        >
+                      {columns.map((column) => (
+                        <div key={column.key} className="flex text-xs text-gray-700 dark:text-gray-200">
                           <span className="w-28 flex-shrink-0 font-medium text-gray-500 dark:text-gray-400">
                             {column.label}
                           </span>
@@ -695,7 +707,6 @@ const Table: React.FC<TableProps> = ({
         </div>
       </div>
 
-      {/* Pagination - Fixed at bottom */}
       <div className="bg-white dark:bg-slate-800 px-4 sm:px-6 py-4 border-t border-gray-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0 flex-wrap gap-3">
         <div className="flex items-center space-x-2">
           <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
@@ -703,9 +714,7 @@ const Table: React.FC<TableProps> = ({
             {Math.min(startIndex + pageSize, filteredData.length)} of {filteredData.length} results
           </span>
         </div>
-
         <div className="flex items-center space-x-2">
-          {/* Previous Button */}
           <button
             onClick={handlePreviousPage}
             disabled={effectiveCurrentPage === 1}
@@ -717,8 +726,6 @@ const Table: React.FC<TableProps> = ({
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-
-          {/* Page Numbers */}
           <div className="flex items-center space-x-1">
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
               let pageNum = i + 1;
@@ -726,7 +733,6 @@ const Table: React.FC<TableProps> = ({
                 pageNum = effectiveCurrentPage - 2 + i;
                 if (pageNum > totalPages) pageNum = totalPages - 4 + i;
               }
-
               return (
                 <button
                   key={pageNum}
@@ -741,13 +747,10 @@ const Table: React.FC<TableProps> = ({
                 </button>
               );
             })}
-
             {totalPages > 5 && effectiveCurrentPage < totalPages - 2 && (
               <span className="text-gray-500 dark:text-gray-400">...</span>
             )}
           </div>
-
-          {/* Next Button */}
           <button
             onClick={handleNextPage}
             disabled={effectiveCurrentPage === totalPages}
@@ -759,12 +762,8 @@ const Table: React.FC<TableProps> = ({
           >
             <ChevronRight className="w-4 h-4" />
           </button>
-
-          {/* Rows per page */}
           <div className="flex items-center space-x-2 ml-2 sm:ml-4">
-            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
-              Rows per page:
-            </span>
+            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Rows per page:</span>
             <select
               value={pageSize}
               onChange={(e) => handlePageSizeChange(Number(e.target.value))}

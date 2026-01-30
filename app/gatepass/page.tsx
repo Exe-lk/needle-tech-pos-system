@@ -238,11 +238,10 @@ const columns: TableColumn[] = [
     render: (value: 'IN' | 'OUT') => {
       return (
         <span
-          className={`px-2 py-1 rounded-full text-xs font-semibold ${
-            value === 'OUT'
+          className={`px-2 py-1 rounded-full text-xs font-semibold ${value === 'OUT'
               ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
               : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-          }`}
+            }`}
         >
           {value}
         </span>
@@ -590,6 +589,8 @@ const GatePassPage: React.FC = () => {
     setFailedCount(0);
     setScannerKey((k) => k + 1);
   };
+
+  
 
   const showFeedback = (fb: { type: ScanResultType; title: string; message: string }) => {
     setLastFeedback(fb);
@@ -1032,11 +1033,10 @@ const GatePassPage: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <span
-              className={`px-2 py-1 rounded-full text-[11px] sm:text-xs font-semibold ${
-                canApprove
+              className={`px-2 py-1 rounded-full text-[11px] sm:text-xs font-semibold ${canApprove
                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                   : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-gray-300'
-              }`}
+                }`}
             >
               {canApprove ? 'READY TO APPROVE' : 'IN PROGRESS'}
             </span>
@@ -1135,8 +1135,8 @@ const GatePassPage: React.FC = () => {
                     log.result === 'success'
                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                       : log.result === 'duplicate'
-                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
-                      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
 
                   return (
                     <div
@@ -1188,8 +1188,8 @@ const GatePassPage: React.FC = () => {
       lastFeedback.type === 'success'
         ? 'bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-200'
         : lastFeedback.type === 'duplicate'
-        ? 'bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/30 dark:border-yellow-800 dark:text-yellow-200'
-        : 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-200';
+          ? 'bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/30 dark:border-yellow-800 dark:text-yellow-200'
+          : 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-200';
 
     return (
       <div className={`p-2 sm:p-3 rounded-lg border ${styles}`}>
@@ -1222,9 +1222,8 @@ const GatePassPage: React.FC = () => {
 
         {/* Main content area */}
         <main
-          className={`pt-24 sm:pt-28 lg:pt-32 px-3 sm:px-4 md:px-6 pb-6 transition-all duration-300 ${
-            isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-          }`}
+          className={`pt-24 sm:pt-28 lg:pt-32 px-3 sm:px-4 md:px-6 pb-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+            }`}
         >
           <div className="max-w-7xl mx-auto space-y-4 sm:space-y-5">
             {/* Page header */}
@@ -1296,11 +1295,10 @@ const GatePassPage: React.FC = () => {
                       <select
                         value={agreementReference}
                         onChange={(e) => setAgreementReference(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${
-                          formErrors.agreementReference
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.agreementReference
                             ? 'border-red-500'
                             : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                       >
                         <option value="">Select Agreement Reference</option>
                         {mockRentalAgreements.map((agreement) => (
@@ -1325,11 +1323,10 @@ const GatePassPage: React.FC = () => {
                         type="date"
                         value={dateOfIssue}
                         onChange={(e) => setDateOfIssue(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${
-                          formErrors.dateOfIssue
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.dateOfIssue
                             ? 'border-red-500'
                             : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                       />
                       {formErrors.dateOfIssue && (
                         <p className="mt-1 text-xs sm:text-sm text-red-500">
@@ -1378,11 +1375,10 @@ const GatePassPage: React.FC = () => {
                         value={vehicleNumber}
                         onChange={(e) => setVehicleNumber(e.target.value)}
                         placeholder="Enter vehicle number"
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${
-                          formErrors.vehicleNumber
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.vehicleNumber
                             ? 'border-red-500'
                             : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                       />
                       {formErrors.vehicleNumber && (
                         <p className="mt-1 text-xs sm:text-sm text-red-500">
@@ -1401,11 +1397,10 @@ const GatePassPage: React.FC = () => {
                         value={driverName}
                         onChange={(e) => setDriverName(e.target.value)}
                         placeholder="Enter driver name"
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${
-                          formErrors.driverName
+                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.driverName
                             ? 'border-red-500'
                             : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                       />
                       {formErrors.driverName && (
                         <p className="mt-1 text-xs sm:text-sm text-red-500">
@@ -1500,11 +1495,10 @@ const GatePassPage: React.FC = () => {
                               value={item.description}
                               onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
                               placeholder="e.g., JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE"
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${
-                                formErrors[`item_description_${index}`]
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${formErrors[`item_description_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                             />
                             {formErrors[`item_description_${index}`] && (
                               <p className="mt-1 text-xs sm:text-sm text-red-500">
@@ -1536,11 +1530,10 @@ const GatePassPage: React.FC = () => {
                               value={item.serialNo}
                               onChange={(e) => handleItemChange(item.id, 'serialNo', e.target.value)}
                               placeholder="Enter serial number"
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${
-                                formErrors[`item_serialNo_${index}`]
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${formErrors[`item_serialNo_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                             />
                             {formErrors[`item_serialNo_${index}`] && (
                               <p className="mt-1 text-xs sm:text-sm text-red-500">
@@ -1557,11 +1550,10 @@ const GatePassPage: React.FC = () => {
                               value={item.motorBoxNo}
                               onChange={(e) => handleItemChange(item.id, 'motorBoxNo', e.target.value)}
                               placeholder="Enter motor/box number"
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${
-                                formErrors[`item_motorBoxNo_${index}`]
+                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${formErrors[`item_motorBoxNo_${index}`]
                                   ? 'border-red-500'
                                   : 'border-gray-300 dark:border-slate-600'
-                              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                             />
                             {formErrors[`item_motorBoxNo_${index}`] && (
                               <p className="mt-1 text-xs sm:text-sm text-red-500">
@@ -1686,10 +1678,7 @@ const GatePassPage: React.FC = () => {
                     <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 dark:text-emerald-400" />
                     <span>Security Officer Verification</span>
                   </h2>
-                  <p className="mt-1 text-[11px] sm:text-sm text-gray-600 dark:text-gray-400 truncate">
-                    Gatepass #{securityGatePass.gatepassNo} • Agreement{' '}
-                    {securityGatePass.agreementReference}
-                  </p>
+                  
                 </div>
 
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -1745,6 +1734,10 @@ const GatePassPage: React.FC = () => {
                             </div>
                             <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 break-words">
                               {securityGatePass.toAddress}
+                            </div>
+                            <div className="font-medium text-gray-900 dark:text-white break-words">
+                            Agreement No: {' '}
+                            {securityGatePass.agreementReference}
                             </div>
                           </div>
                           <div className="space-y-1 sm:space-y-1.5 text-left sm:text-right">
@@ -1829,11 +1822,10 @@ const GatePassPage: React.FC = () => {
                         <button
                           onClick={handleApproveGatePass}
                           disabled={!canApprove}
-                          className={`w-full sm:w-auto px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-medium text-white flex items-center justify-center gap-1 sm:gap-2 ${
-                            canApprove
+                          className={`w-full sm:w-auto px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-medium text-white flex items-center justify-center gap-1 sm:gap-2 ${canApprove
                               ? 'bg-emerald-600 hover:bg-emerald-700'
                               : 'bg-gray-400 cursor-not-allowed'
-                          }`}
+                            }`}
                         >
                           <ShieldCheck className="w-4 h-4" />
                           <span>Approve Gate Pass</span>

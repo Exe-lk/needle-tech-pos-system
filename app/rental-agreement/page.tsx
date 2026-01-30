@@ -5,7 +5,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
-import { Eye, Pencil, X, Plus, Trash2, Printer, FileText, ExternalLink, QrCode, Truck, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Eye, Pencil, X, Plus, Trash2, Printer, FileText, ExternalLink, QrCode, Truck, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check  } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -123,6 +123,149 @@ interface MachineForAgreement {
   typeName?: string;
   scannedAt?: string;
 }
+
+interface SearchableSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  disabled?: boolean;
+  error?: string;
+  className?: string;
+}
+
+const SearchableSelect: React.FC<SearchableSelectProps> = ({
+  value,
+  onChange,
+  options,
+  placeholder = 'Select...',
+  disabled = false,
+  error,
+  className = '',
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedOption = options.find(opt => opt.value === value);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm) return options;
+    const term = searchTerm.toLowerCase();
+    return options.filter(opt => opt.label.toLowerCase().includes(term));
+  }, [options, searchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSearchTerm('');
+        setHighlightedIndex(0);
+      }
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) inputRef.current.focus();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && dropdownRef.current && highlightedIndex >= 0) {
+      const el = dropdownRef.current.children[highlightedIndex] as HTMLElement;
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightedIndex, isOpen]);
+
+  const handleSelect = (optionValue: string) => {
+    onChange(optionValue);
+    setIsOpen(false);
+    setSearchTerm('');
+    setHighlightedIndex(0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+    switch (e.key) {
+      case 'Enter':
+        e.preventDefault();
+        if (filteredOptions[highlightedIndex]) handleSelect(filteredOptions[highlightedIndex].value);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev < filteredOptions.length - 1 ? prev + 1 : prev));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev > 0 ? prev - 1 : 0));
+        break;
+      case 'Escape':
+        setIsOpen(false);
+        setSearchTerm('');
+        setHighlightedIndex(0);
+        break;
+    }
+  };
+
+  return (
+    <div ref={containerRef} className={`relative ${className}`}>
+      <div
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between ${
+          error ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
+        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-500 dark:hover:border-indigo-500'} focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-indigo-500 transition-colors`}
+      >
+        {isOpen ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setHighlightedIndex(0); }}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+            placeholder={placeholder}
+            disabled={disabled}
+          />
+        ) : (
+          <span className={`flex-1 ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
+        )}
+        <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${isOpen ? 'transform rotate-180' : ''}`} />
+      </div>
+      {isOpen && (
+        <div
+          ref={dropdownRef}
+          className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg max-h-60 overflow-auto"
+        >
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option, index) => (
+              <div
+                key={option.value}
+                onClick={() => handleSelect(option.value)}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                className={`px-3 py-2 cursor-pointer flex items-center justify-between ${
+                  index === highlightedIndex ? 'bg-blue-50 dark:bg-indigo-900/30' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
+                } ${option.value === value ? 'bg-blue-100 dark:bg-indigo-900/50' : ''}`}
+              >
+                <span className="text-gray-900 dark:text-white">{option.label}</span>
+                {option.value === value && <Check className="w-4 h-4 text-blue-600 dark:text-indigo-400" />}
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">No options found</div>
+          )}
+        </div>
+      )}
+      {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+    </div>
+  );
+};
 
 // Mock customer data
 const mockCustomers = [
@@ -404,7 +547,7 @@ const columns: TableColumn[] = [
   },
   {
     key: 'purchaseRequestNumber',
-    label: 'Purchase Request',
+    label: 'Purchase Order',
     sortable: true,
     filterable: true,
     render: (value: string | undefined, row: RentalAgreement) => {
@@ -694,6 +837,38 @@ useEffect(() => {
     const brandData = mockMachineModels.find((m) => m.brand === brand);
     return brandData?.models || [];
   };
+
+  // Customer options for SearchableSelect
+const customerOptions = useMemo(() => {
+  return mockCustomers.map((customer) => ({
+    value: customer.id,
+    label: `${customer.name} - ${customer.address}`,
+  }));
+}, []);
+
+// Brand options for SearchableSelect
+const brandOptions = useMemo(() => {
+  return mockMachineBrands.map((brand) => ({
+    value: brand,
+    label: brand,
+  }));
+}, []);
+
+// Model options for a given brand (used per machine row)
+const getModelOptions = (brand: string) => {
+  return getAvailableModels(brand).map((model) => ({
+    value: model,
+    label: model,
+  }));
+};
+
+// Type options for SearchableSelect
+const typeOptions = useMemo(() => {
+  return mockMachineTypes.map((type) => ({
+    value: type,
+    label: type,
+  }));
+}, []);
 
   // Get available machine IDs for add-ons
   const getAvailableMachineIds = () => {
@@ -1888,7 +2063,7 @@ useEffect(() => {
             {/* Page header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Rental Agreement</h2>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Hiring Machine Agreement</h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                   Overview of all rental agreements with their details, customer information, and
                   outstanding balances. Rental agreements can be created from purchase requests.
@@ -1975,25 +2150,18 @@ useEffect(() => {
               <div className="flex-1 overflow-y-auto p-6">
                 <form onSubmit={(e) => { e.preventDefault(); handleSubmitCreate(); }} className="space-y-6">
                   {/* Customer Selection */}
-                  <div>
+                                    {/* Customer Selection */}
+                                    <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Customer <span className="text-red-500">*</span>
                     </label>
-                    <select
+                    <SearchableSelect
                       value={customerId}
-                      onChange={(e) => setCustomerId(e.target.value)}
-                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.customerId
-                        ? 'border-red-500 dark:border-red-500'
-                        : 'border-gray-300 dark:border-slate-600'
-                        } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                    >
-                      <option value="">Select a customer</option>
-                      {mockCustomers.map((customer) => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.name} - {customer.address}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setCustomerId}
+                      options={customerOptions}
+                      placeholder="Select a customer"
+                      error={formErrors.customerId}
+                    />
                     {formErrors.customerId && (
                       <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formErrors.customerId}</p>
                     )}
@@ -2073,25 +2241,17 @@ useEffect(() => {
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
+                          <div>
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Brand <span className="text-red-500">*</span>
                               </label>
-                              <select
+                              <SearchableSelect
                                 value={machine.brand}
-                                onChange={(e) => handleMachineChange(machine.id, 'brand', e.target.value)}
-                                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors[`machine_brand_${index}`]
-                                  ? 'border-red-500 dark:border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                                  } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                              >
-                                <option value="">Select brand</option>
-                                {mockMachineBrands.map((brand) => (
-                                  <option key={brand} value={brand}>
-                                    {brand}
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={(value) => handleMachineChange(machine.id, 'brand', value)}
+                                options={brandOptions}
+                                placeholder="Select brand"
+                                error={formErrors[`machine_brand_${index}`]}
+                              />
                               {formErrors[`machine_brand_${index}`] && (
                                 <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                                   {formErrors[`machine_brand_${index}`]}
@@ -2103,23 +2263,14 @@ useEffect(() => {
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Model <span className="text-red-500">*</span>
                               </label>
-                              <select
+                              <SearchableSelect
                                 value={machine.model}
-                                onChange={(e) => handleMachineChange(machine.id, 'model', e.target.value)}
+                                onChange={(value) => handleMachineChange(machine.id, 'model', value)}
+                                options={getModelOptions(machine.brand)}
+                                placeholder="Select model"
                                 disabled={!machine.brand}
-                                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors[`machine_model_${index}`]
-                                  ? 'border-red-500 dark:border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                                  } bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${!machine.brand ? 'opacity-50 cursor-not-allowed' : ''
-                                  }`}
-                              >
-                                <option value="">Select model</option>
-                                {getAvailableModels(machine.brand).map((model) => (
-                                  <option key={model} value={model}>
-                                    {model}
-                                  </option>
-                                ))}
-                              </select>
+                                error={formErrors[`machine_model_${index}`]}
+                              />
                               {formErrors[`machine_model_${index}`] && (
                                 <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                                   {formErrors[`machine_model_${index}`]}
@@ -2131,21 +2282,13 @@ useEffect(() => {
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Type <span className="text-red-500">*</span>
                               </label>
-                              <select
+                              <SearchableSelect
                                 value={machine.type}
-                                onChange={(e) => handleMachineChange(machine.id, 'type', e.target.value)}
-                                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors[`machine_type_${index}`]
-                                  ? 'border-red-500 dark:border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                                  } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                              >
-                                <option value="">Select type</option>
-                                {mockMachineTypes.map((type) => (
-                                  <option key={type} value={type}>
-                                    {type}
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={(value) => handleMachineChange(machine.id, 'type', value)}
+                                options={typeOptions}
+                                placeholder="Select type"
+                                error={formErrors[`machine_type_${index}`]}
+                              />
                               {formErrors[`machine_type_${index}`] && (
                                 <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                                   {formErrors[`machine_type_${index}`]}
