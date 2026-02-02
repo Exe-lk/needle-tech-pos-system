@@ -10,7 +10,6 @@ import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, History, Image as ImageIcon, ChevronLeft, ChevronRight, QrCode, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Tooltip from '@/src/components/common/tooltip';
-import { validateSerialNumber, validateBoxNumber } from '@/src/utils/validation';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
@@ -447,8 +446,9 @@ const MachineListPage: React.FC = () => {
       name: 'brand',
       label: 'Brand',
       type: 'select',
-      placeholder: 'Select brand',
+      placeholder: 'Search or select brand',
       required: true,
+      searchable: true,
       options: [
         { label: 'Brother', value: 'Brother' },
         { label: 'Singer', value: 'Singer' },
@@ -463,15 +463,18 @@ const MachineListPage: React.FC = () => {
       name: 'model',
       label: 'Model',
       type: 'select',
-      placeholder: 'Select model',
+      placeholder: 'Search or select model',
       required: true,
+      searchable: true,
       options: [
         { label: 'XL2600i', value: 'XL2600i' },
         { label: 'Heavy Duty 4423', value: 'Heavy Duty 4423' },
         { label: 'HD3000', value: 'HD3000' },
         { label: 'SE600', value: 'SE600' },
         { label: 'MO-654DE', value: 'MO-654DE' },
+        { label: 'Buttonhole 160', value: 'Buttonhole 160' },
         { label: 'CS6000i', value: 'CS6000i' },
+        { label: 'MB-4S', value: 'MB-4S' },
         { label: 'Other', value: 'Other' },
       ],
     },
@@ -479,8 +482,9 @@ const MachineListPage: React.FC = () => {
       name: 'type',
       label: 'Type',
       type: 'select',
-      placeholder: 'Select machine type',
+      placeholder: 'Search or select machine type',
       required: true,
+      searchable: true,
       options: [
         { label: 'Industrial', value: 'Industrial' },
         { label: 'Domestic', value: 'Domestic' },
@@ -489,22 +493,6 @@ const MachineListPage: React.FC = () => {
         { label: 'Buttonhole', value: 'Buttonhole' },
         { label: 'Other', value: 'Other' },
       ],
-    },
-    {
-      name: 'serialNumber',
-      label: 'Serial Number',
-      type: 'text',
-      placeholder: 'Enter serial number',
-      required: true,
-      validation: validateSerialNumber,
-    },
-    {
-      name: 'boxNo',
-      label: 'BOX No',
-      type: 'text',
-      placeholder: 'Enter BOX number',
-      required: true,
-      validation: validateBoxNumber,
     },
     {
       name: 'manufactureYear',
@@ -609,16 +597,34 @@ const MachineListPage: React.FC = () => {
     {
       name: 'toolName',
       label: 'Tool Name',
-      type: 'text',
-      placeholder: 'Enter tool name',
+      type: 'select',
+      placeholder: 'Search or select tool name',
       required: true,
+      searchable: true,
+      options: [
+        { label: 'Thread Stand', value: 'Thread Stand' },
+        { label: 'Extension Table', value: 'Extension Table' },
+        { label: 'Presser Foot Set', value: 'Presser Foot Set' },
+        { label: 'Bobbin Case', value: 'Bobbin Case' },
+        { label: 'Needle Set', value: 'Needle Set' },
+        { label: 'Thread Spool', value: 'Thread Spool' },
+        { label: 'Seam Ripper', value: 'Seam Ripper' },
+        { label: 'Measuring Tape', value: 'Measuring Tape' },
+        { label: 'Scissors', value: 'Scissors' },
+        { label: 'Walking Foot', value: 'Walking Foot' },
+        { label: 'Zipper Foot', value: 'Zipper Foot' },
+        { label: 'Buttonhole Foot', value: 'Buttonhole Foot' },
+        { label: 'Quilting Foot', value: 'Quilting Foot' },
+        { label: 'Other', value: 'Other' },
+      ],
     },
     {
       name: 'toolType',
       label: 'Tool Type',
       type: 'select',
-      placeholder: 'Select tool type',
+      placeholder: 'Search or select tool type',
       required: true,
+      searchable: true,
       options: [
         { label: 'Thread Stand', value: 'Thread Stand' },
         { label: 'Extension Table', value: 'Extension Table' },
@@ -635,16 +641,36 @@ const MachineListPage: React.FC = () => {
     {
       name: 'brand',
       label: 'Brand',
-      type: 'text',
-      placeholder: 'Enter brand name',
+      type: 'select',
+      placeholder: 'Search or select brand',
       required: false,
+      searchable: true,
+      options: [
+        { label: 'Brother', value: 'Brother' },
+        { label: 'Singer', value: 'Singer' },
+        { label: 'Janome', value: 'Janome' },
+        { label: 'Juki', value: 'Juki' },
+        { label: 'Pfaff', value: 'Pfaff' },
+        { label: 'Bernina', value: 'Bernina' },
+        { label: 'Generic', value: 'Generic' },
+        { label: 'Other', value: 'Other' },
+      ],
     },
     {
       name: 'model',
       label: 'Model',
-      type: 'text',
-      placeholder: 'Enter model number',
+      type: 'select',
+      placeholder: 'Search or select model',
       required: false,
+      searchable: true,
+      options: [
+        { label: 'Standard', value: 'Standard' },
+        { label: 'Heavy Duty', value: 'Heavy Duty' },
+        { label: 'Professional', value: 'Professional' },
+        { label: 'Compact', value: 'Compact' },
+        { label: 'Universal', value: 'Universal' },
+        { label: 'Other', value: 'Other' },
+      ],
     },
     {
       name: 'serialNumber',
@@ -731,10 +757,11 @@ const MachineListPage: React.FC = () => {
     },
   ];
 
-  // Auto-generate QR/Barcode from Brand + Model + Serial Number
-  const generateBarcode = (brand: string, model: string, serialNumber: string): string => {
-    if (!brand || !model || !serialNumber) return '';
-    return `${brand}-${model}-${serialNumber}`.replace(/\s+/g, '-').toUpperCase();
+  // Auto-generate QR/Barcode from Brand + Model + unique suffix (serial/box removed from form)
+  const generateBarcode = (brand: string, model: string): string => {
+    if (!brand || !model) return '';
+    const suffix = Date.now().toString(36).toUpperCase();
+    return `${brand}-${model}-${suffix}`.replace(/\s+/g, '-').toUpperCase();
   };
 
   // Get initial data for update form
@@ -768,8 +795,8 @@ const MachineListPage: React.FC = () => {
   const handleMachineSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      // Auto-generate barcode
-      const barcode = generateBarcode(data.brand, data.model, data.serialNumber);
+      // Auto-generate barcode (serial number and box number no longer in form)
+      const barcode = generateBarcode(data.brand, data.model);
       
       const submissionData = {
         ...data,

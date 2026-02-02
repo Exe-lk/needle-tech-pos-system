@@ -7,6 +7,7 @@ import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
+import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 
 type PurchaseRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Completed' | 'Cancelled' | 'Partially Fulfilled';
 type CustomerType = 'Business' | 'Customer';
@@ -362,72 +363,73 @@ const PurchaseOrderPage: React.FC = () => {
         );
     };
 
+    /** Printable purchase order in letterhead (used when user clicks Print in view modal). */
     const renderPurchaseOrderDocument = (request: PurchaseRequest) => (
-        <div className="bg-white p-8 max-w-4xl mx-auto text-black" style={{ fontFamily: 'Arial, sans-serif' }}>
-            <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
-                <div className="text-2xl font-bold text-gray-900">NEEDLE TECHNOLOGIES</div>
-                <div className="text-sm text-gray-700 mt-1">Purchase Order</div>
-                <div className="text-xl font-bold text-gray-900 mt-2">{request.requestNumber}</div>
-            </div>
-            <div className="mb-6 space-y-2">
-                <div><span className="font-semibold text-gray-700">Customer:</span> <span className="text-gray-900">{request.customerName}</span></div>
-                <div><span className="font-semibold text-gray-700">Customer Type:</span> <span className="text-gray-900">{request.customerType}</span></div>
-                <div><span className="font-semibold text-gray-700">Request Date:</span> <span className="text-gray-900">{new Date(request.requestDate).toLocaleDateString('en-LK')}</span></div>
-                <div><span className="font-semibold text-gray-700">Status:</span> <span className="text-gray-900">{request.status}</span></div>
-            </div>
-            <div className="mb-6">
-                <table className="w-full border-collapse border border-gray-800">
-                    <thead>
-                        <tr className="bg-gray-100">
-                            <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Brand</th>
-                            <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Model</th>
-                            <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Type</th>
-                            <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold">Quantity</th>
-                            <th className="border border-gray-800 px-4 py-2 text-right text-sm font-semibold">Unit Price (Rs.)</th>
-                            <th className="border border-gray-800 px-4 py-2 text-right text-sm font-semibold">Total (Rs.)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {request.machines?.map((m, i) => (
-                            <tr key={i}>
-                                <td className="border border-gray-800 px-4 py-2 text-sm">{m.brand}</td>
-                                <td className="border border-gray-800 px-4 py-2 text-sm">{m.model}</td>
-                                <td className="border border-gray-800 px-4 py-2 text-sm">{m.type}</td>
-                                <td className="border border-gray-800 px-4 py-2 text-sm text-center">{m.quantity}</td>
-                                <td className="border border-gray-800 px-4 py-2 text-sm text-right">{m.unitPrice.toLocaleString('en-LK')}</td>
-                                <td className="border border-gray-800 px-4 py-2 text-sm text-right">{m.totalPrice.toLocaleString('en-LK')}</td>
-                            </tr>
-                        ))}
-                        <tr className="bg-gray-50 font-semibold">
-                            <td colSpan={5} className="border border-gray-800 px-4 py-2 text-right text-sm">Total Amount:</td>
-                            <td className="border border-gray-800 px-4 py-2 text-right text-sm">Rs. {request.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            {request.rentalAgreementIds && request.rentalAgreementIds.length > 0 && (
-                <div className="border-t border-gray-300 pt-4">
-                    <div className="text-sm font-semibold text-gray-700 mb-1">Associated Rental Agreements</div>
-                    <div className="text-sm text-gray-900">{request.rentalAgreementIds.map(id => `RA-2024-${String(id).padStart(3, '0')}`).join(', ')}</div>
+        <div className="bg-white p-8 max-w-[210mm] mx-auto min-h-[297mm] flex flex-col print:p-8">
+            <LetterheadDocument documentTitle="PURCHASE ORDER" footerStyle="simple" className="print:p-0 flex flex-col flex-1">
+                <div className="text-center mb-4">
+                    <p className="text-lg font-bold text-gray-900">{request.requestNumber}</p>
                 </div>
-            )}
+                <div className="mb-4 space-y-2 text-sm">
+                    <div><span className="font-semibold text-gray-700">Customer:</span> <span className="text-gray-900">{request.customerName}</span></div>
+                    <div><span className="font-semibold text-gray-700">Customer Type:</span> <span className="text-gray-900">{request.customerType}</span></div>
+                    <div><span className="font-semibold text-gray-700">Request Date:</span> <span className="text-gray-900">{new Date(request.requestDate).toLocaleDateString('en-LK')}</span></div>
+                    <div><span className="font-semibold text-gray-700">Status:</span> <span className="text-gray-900">{request.status}</span></div>
+                </div>
+                <div className="mb-4 flex-1">
+                    <table className="w-full border-collapse border border-gray-800">
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Brand</th>
+                                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Model</th>
+                                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Type</th>
+                                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold">Quantity</th>
+                                <th className="border border-gray-800 px-4 py-2 text-right text-sm font-semibold">Unit Price (Rs.)</th>
+                                <th className="border border-gray-800 px-4 py-2 text-right text-sm font-semibold">Total (Rs.)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {request.machines?.map((m, i) => (
+                                <tr key={i}>
+                                    <td className="border border-gray-800 px-4 py-2 text-sm">{m.brand}</td>
+                                    <td className="border border-gray-800 px-4 py-2 text-sm">{m.model}</td>
+                                    <td className="border border-gray-800 px-4 py-2 text-sm">{m.type}</td>
+                                    <td className="border border-gray-800 px-4 py-2 text-sm text-center">{m.quantity}</td>
+                                    <td className="border border-gray-800 px-4 py-2 text-sm text-right">{m.unitPrice.toLocaleString('en-LK')}</td>
+                                    <td className="border border-gray-800 px-4 py-2 text-sm text-right">{m.totalPrice.toLocaleString('en-LK')}</td>
+                                </tr>
+                            ))}
+                            <tr className="bg-gray-50 font-semibold">
+                                <td colSpan={5} className="border border-gray-800 px-4 py-2 text-right text-sm">Total Amount:</td>
+                                <td className="border border-gray-800 px-4 py-2 text-right text-sm">Rs. {request.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                {request.rentalAgreementIds && request.rentalAgreementIds.length > 0 && (
+                    <div className="border-t border-gray-300 pt-4 mt-4">
+                        <div className="text-sm font-semibold text-gray-700 mb-1">Associated Rental Agreements</div>
+                        <div className="text-sm text-gray-900">{request.rentalAgreementIds.map(id => `RA-2024-${String(id).padStart(3, '0')}`).join(', ')}</div>
+                    </div>
+                )}
+            </LetterheadDocument>
         </div>
     );
 
     const renderViewModalContent = () => {
         if (!selectedRequest) return null;
         return (
-            <div>
-                <div className="print:hidden"><div className="space-y-6">{renderRequestDetails()}</div></div>
-                <div className="hidden print:block print:fixed print:inset-0 print:z-50 print:bg-white print:p-0 print:m-0">{renderPurchaseOrderDocument(selectedRequest)}</div>
+            <div className="print:hidden">
+                <div className="space-y-6">{renderRequestDetails()}</div>
             </div>
         );
     };
 
     return (
         <>
+            {/* Print-only: purchase order in letterhead (shown when user clicks Print in view modal) */}
             {selectedRequest && (
-                <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white">
+                <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white print:p-0 print:m-0">
                     {renderPurchaseOrderDocument(selectedRequest)}
                 </div>
             )}

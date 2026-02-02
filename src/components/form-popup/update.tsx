@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Upload, X, Image as ImageIcon, FileText } from 'lucide-react';
+import SearchableSelect from '@/src/components/common/searchable-select';
 
 export interface FormField {
   name: string;
@@ -22,6 +23,8 @@ export interface FormField {
   placeholder?: string;
   required?: boolean;
   options?: { label: string; value: any }[];
+  /** When true and type is 'select', renders a searchable dropdown instead of native select */
+  searchable?: boolean;
   validation?: (value: any) => string | null;
   disabled?: boolean;
   defaultValue?: any;
@@ -354,6 +357,21 @@ const UpdateForm: React.FC<UpdateFormProps> = ({
         );
 
       case 'select':
+        if (field.searchable && field.options && field.options.length > 0) {
+          const selectOptions = field.options.map((opt) => ({
+            value: String(opt.value),
+            label: opt.label,
+          }));
+          return (
+            <SearchableSelect
+              value={String(formData[field.name] ?? '')}
+              onChange={(val) => handleInputChange(field.name, val)}
+              options={selectOptions}
+              placeholder={field.placeholder || `Select ${field.label}`}
+              disabled={field.disabled}
+            />
+          );
+        }
         return (
           <div className="relative">
             <select

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
+import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 
 interface GatePassItem {
   id: string;
@@ -891,177 +892,137 @@ const GatePassPage: React.FC = () => {
     },
   ];
 
-  // Render Gate Pass Document (matches the image format)
-  const renderGatePassDocument = (gatePass: GatePass) => {
-    return (
-      <div className="bg-white p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto" style={{ fontFamily: 'Arial, sans-serif' }}>
-        {/* Header */}
-        <div className="text-center mb-4 sm:mb-6 border-b-2 border-gray-800 pb-3 sm:pb-4">
-          <div className="flex items-center justify-center mb-1 sm:mb-2">
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">NEEDLE TECHNOLOGIES</div>
-          </div>
-          <div className="text-3xl sm:text-4xl font-bold text-gray-900 mt-1 sm:mt-2">GATEPASS</div>
-          <div className="text-xs sm:text-sm text-gray-700 mt-1">
-            Supplier of Industrial Sewing Machines and Accessories
-          </div>
-        </div>
-
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-          {/* Left Side - Sender/Receiver Info */}
-          <div className="space-y-3 sm:space-y-4">
-            <div>
-              <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">FROM:</div>
-              <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">
-                {gatePass.from}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">TO:</div>
-              <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.to}</div>
-              <div className="text-[11px] sm:text-xs text-gray-700 mt-1 break-words">
-                {gatePass.toAddress}
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <div className="text-xs sm:text-sm font-semibold text-gray-700">Vehicle:</div>
-              <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">
-                {gatePass.vehicleNumber}
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <div className="text-xs sm:text-sm font-semibold text-gray-700">Driver:</div>
-              <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">
-                {gatePass.driverName}
-              </div>
-            </div>
-          </div>
-
-          {/* Right Side - Gatepass Details */}
-          <div className="space-y-3 sm:space-y-4 md:text-right">
-            <div>
-              <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Gatepass:</div>
-              <div className="text-base sm:text-lg text-gray-900 font-bold break-words">
-                {gatePass.gatepassNo}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Date of Issue:</div>
-              <div className="text-xs sm:text-sm text-gray-900 font-medium">
-                {new Date(gatePass.dateOfIssue).toLocaleDateString('en-LK', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                })}
-              </div>
-            </div>
-            <div className="flex md:flex-col justify-between md:justify-start gap-2 md:gap-3">
-              <div>
-                <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Returnable:</div>
-                <div className="text-xs sm:text-sm text-gray-900 font-medium">
-                  {gatePass.returnable ? 'YES' : 'NO'}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Entry:</div>
-                <div className="text-xs sm:text-sm text-gray-900 font-medium">{gatePass.entry}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Items Table */}
-        <div className="mb-4 sm:mb-6 overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-800 text-xs sm:text-sm">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-800 px-2 sm:px-4 py-2 text-left font-semibold text-gray-900">
-                  Description
-                </th>
-                <th className="border border-gray-800 px-2 sm:px-4 py-2 text-center font-semibold text-gray-900">
-                  Status
-                </th>
-                <th className="border border-gray-800 px-2 sm:px-4 py-2 text-center font-semibold text-gray-900">
-                  Serial No
-                </th>
-                <th className="border border-gray-800 px-2 sm:px-4 py-2 text-center font-semibold text-gray-900">
-                  Motor / Box No
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {gatePass.items.map((item) => (
-                <tr key={item.id}>
-                  <td className="border border-gray-800 px-2 sm:px-4 py-2 text-gray-900 break-words">
-                    {item.description}
-                  </td>
-                  <td className="border border-gray-800 px-2 sm:px-4 py-2 text-center text-gray-900">
-                    {item.status}
-                  </td>
-                  <td className="border border-gray-800 px-2 sm:px-4 py-2 text-center text-gray-900 break-all">
-                    {item.serialNo}
-                  </td>
-                  <td className="border border-gray-800 px-2 sm:px-4 py-2 text-center text-gray-900 break-all">
-                    {item.motorBoxNo}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Signatures */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+  /** Gatepass body content (details + table) for use inside LetterheadDocument */
+  const renderGatePassLetterheadBody = (gatePass: GatePass) => (
+    <>
+      {/* Top row: left = FROM/TO/Vehicle/Driver, right = Gatepass/Date/Returnable/Entry */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+        <div className="space-y-3 sm:space-y-4">
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-2">Issued By:</div>
-            <div className="border-b border-gray-800 pb-1 mb-2 min-h-[32px] sm:min-h-[40px]">
-              {gatePass.issuedBy && (
-                <div className="text-xs sm:text-sm text-gray-900 break-words">{gatePass.issuedBy}</div>
-              )}
-            </div>
-            <div className="text-[11px] sm:text-xs text-gray-600">Signature & Stamp</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">FROM:</div>
+            <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.from}</div>
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-2">Received By:</div>
-            <div className="border-b border-gray-800 pb-1 mb-2 min-h-[32px] sm:min-h-[40px]">
-              {gatePass.receivedBy && (
-                <div className="text-xs sm:text-sm text-gray-900 break-words">
-                  {gatePass.receivedBy}
-                </div>
-              )}
-            </div>
-            <div className="text-[11px] sm:text-xs text-gray-600">Signature</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">TO:</div>
+            <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.to}</div>
+            <div className="text-[11px] sm:text-xs text-gray-700 mt-1 break-words">{gatePass.toAddress}</div>
+          </div>
+          <div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Vehicle:</div>
+            <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.vehicleNumber}</div>
+          </div>
+          <div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Driver:</div>
+            <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.driverName}</div>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="border-t border-gray-300 pt-3 sm:pt-4 mt-4 sm:mt-6">
-          <div className="text-[10px] sm:text-xs text-gray-700 text-center mb-2 px-2">
-            IMPORTERS & DISTRIBUTORS OF SPARE PARTS & ATTACHMENTS FOR: JUKI, SINGER, KANSAI,
-            BROTHER, SUNSTAR, EASTMAN, CUTTING PEGASUS & RECECINNUSTRIAL SEWING MACHINES, NAQMO
-            IRONS, ORGAN & ORANGE NEEDLES.
+        <div className="space-y-3 sm:space-y-4 md:text-right">
+          <div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Gatepass:</div>
+            <div className="text-base sm:text-lg text-gray-900 font-bold break-words">{gatePass.gatepassNo}</div>
           </div>
-          <div className="text-[10px] sm:text-xs text-gray-700 text-center px-2">
-            No. 137M, Colombo Road, Biyagama, Tel: 0112488735, 011-5737711, 011-5737712 Fax: 2487623,
-            Email: needistec@sltnet.lk
+          <div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Date of Issue:</div>
+            <div className="text-xs sm:text-sm text-gray-900 font-medium">
+              {gatePass.dateOfIssue}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Returnable:</div>
+            <div className="text-xs sm:text-sm text-gray-900 font-medium">{gatePass.returnable ? 'YES' : 'NO'}</div>
+          </div>
+          <div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Entry:</div>
+            <div className="text-xs sm:text-sm text-gray-900 font-medium">{gatePass.entry}</div>
           </div>
         </div>
       </div>
-    );
-  };
 
-  // View Gate Pass Content
+      {/* Items Table - clean layout matching letterhead style */}
+      <div className="mb-4 sm:mb-6 overflow-x-auto">
+        <table className="w-full border-collapse text-xs sm:text-sm">
+          <thead>
+            <tr className="border-b border-gray-800">
+              <th className="text-left py-2 pr-2 font-semibold text-gray-900">Description</th>
+              <th className="text-center py-2 px-2 font-semibold text-gray-900 w-20">Status</th>
+              <th className="text-center py-2 px-2 font-semibold text-gray-900">Serial No</th>
+              <th className="text-center py-2 px-2 font-semibold text-gray-900">Motor / Box No</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gatePass.items.map((item, idx) => (
+              <tr key={item.id} className="border-b border-gray-200">
+                <td className="py-2 pr-2 text-gray-900 break-words align-top">
+                  {idx + 1}. {item.description}
+                </td>
+                <td className="py-2 px-2 text-center text-gray-900 align-top">{item.status}</td>
+                <td className="py-2 px-2 text-center text-gray-900 break-all align-top">{item.serialNo}</td>
+                <td className="py-2 px-2 text-center text-gray-900 break-all align-top">{item.motorBoxNo}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+
+  /** Signatures row for LetterheadDocument footerContent */
+  const renderGatePassSignatures = (gatePass: GatePass) => (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
+      <div>
+        <div className="border-b border-gray-800 pb-1 min-h-[36px] mb-1 flex items-end">
+          {gatePass.issuedBy && (
+            <span className="text-xs sm:text-sm text-gray-900 break-words">{gatePass.issuedBy}</span>
+          )}
+        </div>
+        <div className="text-[11px] sm:text-xs text-gray-600">Issued By</div>
+      </div>
+      <div className="hidden md:block" />
+      <div>
+        <div className="border-b border-gray-800 pb-1 min-h-[36px] mb-1 flex items-end">
+          {gatePass.receivedBy && (
+            <span className="text-xs sm:text-sm text-gray-900 break-words">{gatePass.receivedBy}</span>
+          )}
+        </div>
+        <div className="text-[11px] sm:text-xs text-gray-600">Received By</div>
+      </div>
+    </div>
+  );
+
+  /** Full gatepass on letterhead - for both screen preview and print */
+  const renderGatePassOnLetterhead = (gatePass: GatePass) => (
+    <div className="bg-white p-6 sm:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 rounded-lg print:shadow-none print:border-0 print:rounded-none print:p-8 print:max-w-none">
+      <LetterheadDocument
+        documentTitle="GATEPASS"
+        footerStyle="full"
+        footerContent={renderGatePassSignatures(gatePass)}
+        className="print:p-0"
+      >
+        {renderGatePassLetterheadBody(gatePass)}
+      </LetterheadDocument>
+    </div>
+  );
+
+  // View Gate Pass Content: same letterhead layout on screen and in print
   const renderGatePassDetails = () => {
     if (!selectedGatePass) return null;
 
     return (
       <div>
-        {/* Screen View */}
-        <div className="print:hidden">{renderGatePassDocument(selectedGatePass)}</div>
+        {/* Screen View - letterhead layout (matches print) */}
+        <div className="print:hidden">{renderGatePassOnLetterhead(selectedGatePass)}</div>
 
-        {/* Print View - Only visible when printing */}
-        <div className="hidden print:block print:fixed print:inset-0 print:z-50 print:bg-white print:p-0 print:m-0">
-          {renderGatePassDocument(selectedGatePass)}
+        {/* Print View - only visible when printing */}
+        <div className="hidden print:block print:fixed print:inset-0 print:z-50 print:bg-white print:p-0 print:m-0 print:overflow-auto">
+          <div className="min-h-full p-8 max-w-[210mm] mx-auto">
+            <LetterheadDocument
+              documentTitle="GATEPASS"
+              footerStyle="full"
+              footerContent={renderGatePassSignatures(selectedGatePass)}
+            >
+              {renderGatePassLetterheadBody(selectedGatePass)}
+            </LetterheadDocument>
+          </div>
         </div>
       </div>
     );
@@ -1087,10 +1048,18 @@ const GatePassPage: React.FC = () => {
 
   return (
     <>
-      {/* Print-only gate pass document - hidden on screen, visible when printing */}
+      {/* Print-only gate pass on letterhead - hidden on screen, visible when printing */}
       {selectedGatePass && (
-        <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white">
-          {renderGatePassDocument(selectedGatePass)}
+        <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white print:overflow-auto">
+          <div className="min-h-full p-8 max-w-[210mm] mx-auto">
+            <LetterheadDocument
+              documentTitle="GATEPASS"
+              footerStyle="full"
+              footerContent={renderGatePassSignatures(selectedGatePass)}
+            >
+              {renderGatePassLetterheadBody(selectedGatePass)}
+            </LetterheadDocument>
+          </div>
         </div>
       )}
 

@@ -8,6 +8,7 @@ import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Trash2, Printer, FileText, ExternalLink, QrCode, Truck, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, ArrowLeft } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
+import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 
 type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
 
@@ -1570,126 +1571,105 @@ const typeOptions = useMemo(() => {
     },
   ];
 
-  // Render Rental Agreement Document for Printing
+  // Render Rental Agreement Document for Printing (letterhead style - matches HIRING MACHINE AGREEMENT)
   const renderRentalAgreementDocument = (agreementInfo: RentalAgreementInfo) => {
     const totalMonthlyRent = agreementInfo.machines.reduce((sum, machine) => sum + machine.monthlyRent, 0);
+    const dateOfIssue = agreementInfo.startDate
+      ? new Date(agreementInfo.startDate).toLocaleDateString('en-LK', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        })
+      : 'TBD';
+    const signatureDate = agreementInfo.customerSignatureDate
+      ? new Date(agreementInfo.customerSignatureDate).toLocaleDateString('en-LK', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        })
+      : 'N/A';
 
-    return (
-      <div className="bg-white p-8 max-w-4xl mx-auto" style={{ fontFamily: 'Arial, sans-serif' }}>
-        {/* Header */}
-        <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
-          <div className="flex items-center justify-center mb-2">
-            <div className="text-3xl font-bold text-gray-900">NEEDLE TECHNOLOGIES</div>
-          </div>
-          <div className="text-sm text-gray-700 mt-1">
-            Supplier of industrial Sewing Machines and Accessories
-          </div>
-          <div className="text-4xl font-bold text-gray-900 mt-2">HIRING MACHINE AGREEMENT</div>
-        </div>
-
-        {/* Agreement Details */}
-        <div className="mb-6 space-y-3">
-          <div>
-            <span className="text-sm font-semibold text-gray-700">Customer:</span>
-            <span className="ml-2 text-sm text-gray-900">{agreementInfo.customerName}</span>
-          </div>
-          <div>
-            <span className="text-sm font-semibold text-gray-700">Address:</span>
-            <span className="ml-2 text-sm text-gray-900">{agreementInfo.customerAddress || 'N/A'}</span>
-          </div>
-          <div className="flex space-x-6">
+    const mainContent = (
+      <>
+        {/* Two-column: Customer (left) | Agreement & Date (right) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+          <div className="space-y-2">
             <div>
-              <span className="text-sm font-semibold text-gray-700">Agreement:</span>
-              <span className="ml-2 text-sm text-gray-900">{agreementInfo.agreementNo || 'TBD'}</span>
+              <span className="text-sm font-semibold text-gray-700">Customer: </span>
+              <span className="text-sm text-gray-900">{agreementInfo.customerName}</span>
             </div>
             <div>
-              <span className="text-sm font-semibold text-gray-700">Date of Issue:</span>
-              <span className="ml-2 text-sm text-gray-900">
-                {agreementInfo.startDate ? new Date(agreementInfo.startDate).toLocaleDateString('en-LK', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                }) : 'TBD'}
-              </span>
+              <span className="text-sm font-semibold text-gray-700">Address: </span>
+              <span className="text-sm text-gray-900">{agreementInfo.customerAddress || 'N/A'}</span>
             </div>
-            {agreementInfo.purchaseRequestNumber && (
-              <div>
-                <span className="text-sm font-semibold text-gray-700">Purchase Request:</span>
-                <span className="ml-2 text-sm text-gray-900">{agreementInfo.purchaseRequestNumber}</span>
-              </div>
-            )}
+          </div>
+          <div className="space-y-2 text-left sm:text-right">
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Agreement: </span>
+              <span className="text-sm text-gray-900">-{agreementInfo.agreementNo || 'TBD'}</span>
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Date of Issue: </span>
+              <span className="text-sm text-gray-900">-{dateOfIssue}</span>
+            </div>
           </div>
         </div>
 
-        {/* Machines Table */}
-        <div className="mb-6">
+        {/* Machine details table - Model/Description, Serial No, Motor/Box No, Monthly Res */}
+        <div className="mb-4">
           <table className="w-full border-collapse border border-gray-800">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900">
+                <th className="border border-gray-800 px-3 py-2 text-left text-sm font-semibold text-gray-900">
                   Model - Description
                 </th>
-                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
                   Serial No
                 </th>
-                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
                   Motor / Box No
                 </th>
-                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
-                  Monthly Rent
-                </th>
-                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
-                  Total
+                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                  Monthly Res
                 </th>
               </tr>
             </thead>
             <tbody>
               {agreementInfo.machines.map((machine, index) => (
                 <tr key={index}>
-                  <td className="border border-gray-800 px-4 py-2 text-sm text-gray-900">
+                  <td className="border border-gray-800 px-3 py-2 text-sm text-gray-900">
                     {machine.machineDescription}
                   </td>
-                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
                     {machine.serialNo}
                   </td>
-                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
                     {machine.motorBoxNo || 'N/A'}
                   </td>
-                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
-                    Rs. {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
-                    Rs. {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                    {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </td>
                 </tr>
               ))}
-              {/* Total Row */}
-              <tr className="bg-gray-50 font-semibold">
-                <td colSpan={3} className="border border-gray-800 px-4 py-2 text-right text-sm text-gray-900">
-                  Total Monthly Rent:
-                </td>
-                <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
-                  Rs. {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-                <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
-                  Rs. {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-              </tr>
             </tbody>
           </table>
-
-          {agreementInfo.additionalParts && (
-            <div className="mt-4">
-              <div className="text-sm font-semibold text-gray-700 mb-1">Additional Parts:</div>
-              <div className="text-sm text-gray-900">{agreementInfo.additionalParts}</div>
-            </div>
-          )}
+          <div className="mt-2 text-sm font-semibold text-gray-900">
+            Total: {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </div>
         </div>
+
+        {/* Additional Parts */}
+        {agreementInfo.additionalParts && (
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-gray-700 mb-1">Additional Parts</div>
+            <div className="text-sm text-gray-900">- {agreementInfo.additionalParts}</div>
+          </div>
+        )}
 
         {/* Terms & Conditions */}
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Terms & Conditions</h3>
-          <div className="space-y-3 text-sm text-gray-900">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">Terms & Conditions</h3>
+          <div className="space-y-2 text-sm text-gray-900">
             <p>
               <span className="font-semibold">(01)</span> You have to be paid in cash double monthly rental fee on the date of rent machine issues.
               The excess payment would be immediately return to you as and when you returned the hired
@@ -1709,49 +1689,47 @@ const typeOptions = useMemo(() => {
             </p>
           </div>
         </div>
+      </>
+    );
 
-        {/* Customer Signature Section */}
-        <div className="mb-6">
-          <div className="mb-4">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Customer Signature:</div>
-            <div className="border-b border-gray-800 pb-2 min-h-[50px]">
-              {agreementInfo.customerSignature && (
-                <div className="text-sm text-gray-900">{agreementInfo.customerSignature}</div>
-              )}
-            </div>
-            <div className="text-xs text-gray-600 mt-1">(Agreed upon the terms & Conditions)</div>
+    const signatureBlock = (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+        <div>
+          <div className="text-sm font-semibold text-gray-700 mb-2">Customer Signature</div>
+          <div className="border-b border-gray-800 pb-2 min-h-[44px]">
+            {agreementInfo.customerSignature && (
+              <div className="text-sm text-gray-900">{agreementInfo.customerSignature}</div>
+            )}
           </div>
-
-          <div className="grid grid-cols-3 gap-4 mt-4">
-            <div>
-              <div className="text-sm font-semibold text-gray-700 mb-1">ID NO:</div>
-              <div className="text-sm text-gray-900">{agreementInfo.customerIdNo || 'N/A'}</div>
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-gray-700 mb-1">Full Name:</div>
-              <div className="text-sm text-gray-900">{agreementInfo.customerFullName || 'N/A'}</div>
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-gray-700 mb-1">Date:</div>
-              <div className="text-sm text-gray-900">
-                {agreementInfo.customerSignatureDate
-                  ? new Date(agreementInfo.customerSignatureDate).toLocaleDateString('en-LK', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                  })
-                  : 'N/A'}
-              </div>
-            </div>
+          <div className="text-xs text-gray-600 mt-1">(Agreed upon the terms & Conditions)</div>
+        </div>
+        <div className="space-y-2">
+          <div>
+            <span className="text-sm font-semibold text-gray-700">ID NO: </span>
+            <span className="text-sm text-gray-900">{agreementInfo.customerIdNo || 'N/A'}</span>
+          </div>
+          <div>
+            <span className="text-sm font-semibold text-gray-700">Full Name: </span>
+            <span className="text-sm text-gray-900">{agreementInfo.customerFullName || 'N/A'}</span>
+          </div>
+          <div>
+            <span className="text-sm font-semibold text-gray-700">Date: </span>
+            <span className="text-sm text-gray-900">{signatureDate}</span>
           </div>
         </div>
+      </div>
+    );
 
-        {/* Footer */}
-        <div className="border-t border-gray-300 pt-4 mt-6">
-          <div className="text-xs text-gray-700 text-center">
-            No. 137M, Colombo Road, Biyagama, Tel: 0112488735, 011-5737712 Fax: 2487623, Email: needletec@sitnet.lk
-          </div>
-        </div>
+    return (
+      <div className="bg-white p-6 sm:p-8 max-w-[210mm] mx-auto print:p-8" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+        <LetterheadDocument
+          documentTitle="HIRING MACHINE AGREEMENT"
+          footerStyle="simple"
+          footerContent={signatureBlock}
+          className="print:p-0"
+        >
+          {mainContent}
+        </LetterheadDocument>
       </div>
     );
   };
