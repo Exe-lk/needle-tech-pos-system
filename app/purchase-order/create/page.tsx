@@ -1239,11 +1239,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 </div>
             </main>
 
-            {/* Register New Customer Modal */}
+            {/* Register New Customer Modal - styled to match Customers page Create Customer popup */}
             {isRegisterModalOpen && (
                 <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                        {/* Modal Header */}
+                        {/* Modal Header - same as customer page */}
                         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                                 Register New Customer
@@ -1258,64 +1258,61 @@ const CreatePurchaseRequestPage: React.FC = () => {
                             </Tooltip>
                         </div>
 
-                        {/* Modal Content - Scrollable */}
-                        <div className="flex-1 overflow-y-auto p-6">
-                            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-                                {/* Tabs for Business/Customer */}
-                                <div className="border-b border-gray-200 dark:border-slate-700 mb-4">
-                                    <div className="flex space-x-4">
-                                        <Tooltip content="Business">
-                                            <button
-                                                onClick={() => setActiveCreateTab('company')}
-                                                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'company'
-                                                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                                                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                                                    }`}
-                                            >
-                                                Business
-                                            </button>
-                                        </Tooltip>
-                                        <Tooltip content="Customer">
-                                            <button
-                                                onClick={() => setActiveCreateTab('individual')}
-                                                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'individual'
-                                                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                                                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                                                    }`}
-                                            >
-                                                Customer
-                                            </button>
-                                        </Tooltip>
-                                    </div>
-                                </div>
-
-                                {/* Form Content */}
-                                {activeCreateTab === 'company' ? (
-                                    <CreateForm
-                                        title="Business Details"
-                                        fields={companyFields}
-                                        onSubmit={handleCompanySubmit}
-                                        onClear={handleClear}
-                                        submitButtonLabel="Register Business"
-                                        clearButtonLabel="Clear"
-                                        loading={isSubmitting}
-                                        enableDynamicSpecs={false}
-                                        className="shadow-none border-0 p-0"
-                                    />
-                                ) : (
-                                    <CreateForm
-                                        title="Customer Details"
-                                        fields={individualFields}
-                                        onSubmit={handleIndividualSubmit}
-                                        onClear={handleClear}
-                                        submitButtonLabel="Register Customer"
-                                        clearButtonLabel="Clear"
-                                        loading={isSubmitting}
-                                        enableDynamicSpecs={false}
-                                        className="shadow-none border-0 p-0"
-                                    />
-                                )}
+                        {/* Tabs - same position and style as customer page Create Customer modal */}
+                        <div className="border-b border-gray-200 dark:border-slate-700 px-6">
+                            <div className="flex space-x-4">
+                                <Tooltip content="Business">
+                                    <button
+                                        onClick={() => setActiveCreateTab('company')}
+                                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'company'
+                                                ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                            }`}
+                                    >
+                                        Business
+                                    </button>
+                                </Tooltip>
+                                <Tooltip content="Customer">
+                                    <button
+                                        onClick={() => setActiveCreateTab('individual')}
+                                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'individual'
+                                                ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                            }`}
+                                    >
+                                        Customer
+                                    </button>
+                                </Tooltip>
                             </div>
+                        </div>
+
+                        {/* Modal Content - Scrollable (no extra wrapper, same as customer page) */}
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {activeCreateTab === 'company' ? (
+                                <CreateForm
+                                    title="Business Details"
+                                    fields={companyFields}
+                                    onSubmit={handleCompanySubmit}
+                                    onClear={handleClear}
+                                    submitButtonLabel="Register Business"
+                                    clearButtonLabel="Clear"
+                                    loading={isSubmitting}
+                                    enableDynamicSpecs={false}
+                                    className="shadow-none border-0 p-0"
+                                />
+                            ) : (
+                                <CreateForm
+                                    title="Customer Details"
+                                    fields={individualFields}
+                                    onSubmit={handleIndividualSubmit}
+                                    onClear={handleClear}
+                                    submitButtonLabel="Register Customer"
+                                    clearButtonLabel="Clear"
+                                    loading={isSubmitting}
+                                    enableDynamicSpecs={false}
+                                    className="shadow-none border-0 p-0"
+                                />
+                            )}
                         </div>
                     </div>
                 </div>

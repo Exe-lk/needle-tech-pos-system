@@ -647,9 +647,7 @@ const OutstandingAlertsPage: React.FC = () => {
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                   Alert Details
                 </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Complete information about the outstanding alert
-                </p>
+                
               </div>
               <button
                 onClick={handleCloseViewModal}
@@ -662,7 +660,7 @@ const OutstandingAlertsPage: React.FC = () => {
             {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-6">
-                {/* Alert Type & Severity Badge */}
+                {/* Alert Type & Severity / Status */}
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -672,29 +670,39 @@ const OutstandingAlertsPage: React.FC = () => {
                       {selectedAlert.description}
                     </p>
                   </div>
-                  <div className="flex flex-col items-end space-y-2">
-                    <span
-                      className={`px-3 py-1.5 rounded-full text-sm font-semibold inline-flex items-center ${
-                        selectedAlert.severity === 'Critical'
-                          ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                          : selectedAlert.severity === 'High'
-                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
-                          : selectedAlert.severity === 'Medium'
-                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                          : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                      }`}
-                    >
-                      {selectedAlert.severity} Severity
-                    </span>
-                    <span
-                      className={`px-3 py-1.5 rounded-full text-sm font-semibold inline-flex items-center ${
-                        selectedAlert.status === 'Resolved'
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                      }`}
-                    >
-                      {selectedAlert.status}
-                    </span>
+                  <div className="flex flex-col items-end gap-1.5 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-500 dark:text-gray-400 font-medium">
+                        Severity :
+                      </span>
+                      <span
+                        className={`font-semibold ${
+                          selectedAlert.severity === 'Critical'
+                            ? 'text-red-700 dark:text-red-300'
+                            : selectedAlert.severity === 'High'
+                            ? 'text-orange-700 dark:text-orange-300'
+                            : selectedAlert.severity === 'Medium'
+                            ? 'text-yellow-700 dark:text-yellow-300'
+                            : 'text-blue-700 dark:text-blue-300'
+                        }`}
+                      >
+                        {selectedAlert.severity}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-500 dark:text-gray-400 font-medium">
+                        Status:
+                      </span>
+                      <span
+                        className={`font-semibold ${
+                          selectedAlert.status === 'Resolved'
+                            ? 'text-green-700 dark:text-green-300'
+                            : 'text-yellow-700 dark:text-yellow-300'
+                        }`}
+                      >
+                        {selectedAlert.status}
+                      </span>
+                    </div>
                   </div>
                 </div>
 

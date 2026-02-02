@@ -336,7 +336,6 @@ const CustomerListPage: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<'overview' | 'rental-history' | 'payments' | 'damage-records'>('overview');
   const [activeCreateTab, setActiveCreateTab] = useState<'company' | 'individual'>('company');
-  const [activeUpdateTab, setActiveUpdateTab] = useState<'company' | 'individual'>('company');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleMenuClick = () => {
@@ -375,7 +374,6 @@ const CustomerListPage: React.FC = () => {
 
   const handleUpdateCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
-    setActiveUpdateTab(customer.type === 'Business' ? 'company' : 'individual');
     setIsUpdateModalOpen(true);
   };
 
@@ -461,18 +459,7 @@ const CustomerListPage: React.FC = () => {
       required: true,
       validation: validateEmail,
     },
-    {
-      name: 'status',
-      label: 'Status',
-      type: 'select',
-      placeholder: 'Select status',
-      required: true,
-      options: [
-        { label: 'Active', value: 'Active' },
-        { label: 'Inactive', value: 'Inactive' },
-        { label: 'Blocked', value: 'Blocked' },
-      ],
-    },
+    
   ];
 
   // Form fields for Customer
@@ -669,7 +656,7 @@ const CustomerListPage: React.FC = () => {
     // Overview Content
     const overviewContent = (
       <div className="space-y-6">
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Overview</h3>
+        
 
         <div className="space-y-4">
           {/* Customer Info */}
@@ -948,7 +935,7 @@ const CustomerListPage: React.FC = () => {
 
     const rentalHistoryContent = (
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Rental History</h3>
+        
         <Table
           data={rentalHistory}
           columns={rentalHistoryColumns}
@@ -962,7 +949,7 @@ const CustomerListPage: React.FC = () => {
 
     const paymentsContent = (
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Payments</h3>
+        
         <Table
           data={payments}
           columns={paymentsColumns}
@@ -976,7 +963,7 @@ const CustomerListPage: React.FC = () => {
 
     const damageRecordsContent = (
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Damage Records</h3>
+        
         <Table
           data={damageRecords}
           columns={damageRecordsColumns}
@@ -1124,14 +1111,14 @@ const CustomerListPage: React.FC = () => {
         </div>
       )}
 
-      {/* Update Customer Modal */}
+      {/* Update Customer Modal - Shows only the form for the selected customer type (Business or Customer) */}
       {isUpdateModalOpen && selectedCustomer && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Update Customer
+                {selectedCustomer.type === 'Business' ? 'Update Business' : 'Update Customer'}
               </h2>
               <Tooltip content="Close">
                 <button
@@ -1143,37 +1130,7 @@ const CustomerListPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Tabs */}
-            <div className="border-b border-gray-200 dark:border-slate-700 px-6">
-              <div className="flex space-x-4">
-                <Tooltip content="Business">
-                  <button
-                    onClick={() => setActiveUpdateTab('company')}
-                    disabled={selectedCustomer.type === 'Customer'}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeUpdateTab === 'company'
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      } ${selectedCustomer.type === 'Customer' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    Business
-                  </button>
-                </Tooltip>
-                <Tooltip content="Customer">
-                  <button
-                    onClick={() => setActiveUpdateTab('individual')}
-                    disabled={selectedCustomer.type === 'Business'}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeUpdateTab === 'individual'
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      } ${selectedCustomer.type === 'Business' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    Customer
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-
-            {/* Modal Content - Scrollable */}
+            {/* Modal Content - Single form based on customer type (no tabs) */}
             <div className="flex-1 overflow-y-auto p-6">
               {selectedCustomer.type === 'Business' ? (
                 <UpdateForm
@@ -1254,9 +1211,7 @@ const CustomerListPage: React.FC = () => {
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                   Customer Profile
                 </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  {selectedCustomer.name}
-                </p>
+                
               </div>
               <Tooltip content="Close">
                 <button

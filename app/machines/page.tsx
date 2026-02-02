@@ -7,8 +7,7 @@ import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import CreateForm, { FormField } from '@/src/components/form-popup/create';
 import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
-import { Eye, Pencil, Trash2, X, History, Image as ImageIcon, ChevronLeft, ChevronRight, QrCode, Download } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { Eye, Pencil, Trash2, X, History, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
@@ -268,12 +267,10 @@ const MachineListPage: React.FC = () => {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [activeCreateTab, setActiveCreateTab] = useState<'machine' | 'tool'>('machine');
-  const qrCodeRef = React.useRef<HTMLDivElement>(null);
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -329,16 +326,6 @@ const MachineListPage: React.FC = () => {
     setSelectedMachine(null);
   };
 
-  const handleGenerateQR = (machine: Machine) => {
-    setSelectedMachine(machine);
-    setIsQRModalOpen(true);
-  };
-
-  const handleCloseQRModal = () => {
-    setIsQRModalOpen(false);
-    setSelectedMachine(null);
-  };
-
   const handleConfirmDelete = async () => {
     if (!selectedMachine) return;
     
@@ -380,66 +367,6 @@ const MachineListPage: React.FC = () => {
     setCurrentPhotoIndex((prev) => (prev < photos.length - 1 ? prev + 1 : 0));
   };
 
-  // Generate QR code data with all machine details
-  const generateQRCodeData = (machine: Machine | null): string => {
-    if (!machine) return '';
-    
-    const machineInfo = getMachineProfileData(machine.id);
-    const qrData = {
-      id: machineInfo.id,
-      barcode: machineInfo.barcode,
-      serialNumber: machineInfo.serialNumber,
-      boxNo: machineInfo.boxNo,
-      brand: machineInfo.brand,
-      model: machineInfo.model,
-      type: machineInfo.type,
-      status: machineInfo.status,
-      currentCustomer: machineInfo.currentCustomer || null,
-      purchaseDate: machineInfo.purchaseDate || null,
-      warrantyExpiry: machineInfo.warrantyExpiry || null,
-      location: machineInfo.location || null,
-      manufactureYear: machineInfo.manufactureYear || null,
-      country: machineInfo.country || null,
-      conditionOnArrival: machineInfo.conditionOnArrival || null,
-      warrantyStatus: machineInfo.warrantyStatus || null,
-      registrationLocation: machineInfo.registrationLocation || null,
-      notes: machineInfo.notes || null,
-    };
-    
-    return JSON.stringify(qrData, null, 2);
-  };
-
-  // Download QR code as PNG
-  const handleDownloadQR = () => {
-    if (!qrCodeRef.current || !selectedMachine) return;
-
-    const svg = qrCodeRef.current.querySelector('svg');
-    if (!svg) return;
-
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx?.drawImage(img, 0, 0);
-      
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = `${selectedMachine.brand}-${selectedMachine.model}-${selectedMachine.serialNumber}-QR.png`;
-        link.href = url;
-        link.click();
-        URL.revokeObjectURL(url);
-      });
-    };
-
-    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
-  };
-
   // Form fields for Machine Registration
   const machineFields: FormField[] = [
     {
@@ -449,6 +376,7 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Search or select brand',
       required: true,
       searchable: true,
+      creatable: true,
       options: [
         { label: 'Brother', value: 'Brother' },
         { label: 'Singer', value: 'Singer' },
@@ -466,6 +394,7 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Search or select model',
       required: true,
       searchable: true,
+      creatable: true,
       options: [
         { label: 'XL2600i', value: 'XL2600i' },
         { label: 'Heavy Duty 4423', value: 'Heavy Duty 4423' },
@@ -485,6 +414,7 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Search or select machine type',
       required: true,
       searchable: true,
+      creatable: true,
       options: [
         { label: 'Industrial', value: 'Industrial' },
         { label: 'Domestic', value: 'Domestic' },
@@ -546,19 +476,6 @@ const MachineListPage: React.FC = () => {
       ],
     },
     {
-      name: 'registrationLocation',
-      label: 'Registration Location',
-      type: 'select',
-      placeholder: 'Select location',
-      required: true,
-      options: [
-        { label: 'Main Warehouse', value: 'Main Warehouse' },
-        { label: 'Branch Office 1', value: 'Branch Office 1' },
-        { label: 'Branch Office 2', value: 'Branch Office 2' },
-        { label: 'Storage Facility', value: 'Storage Facility' },
-      ],
-    },
-    {
       name: 'warrantyExpiryDate',
       label: 'Warranty Expires Date',
       type: 'date',
@@ -601,6 +518,7 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Search or select tool name',
       required: true,
       searchable: true,
+      creatable: true,
       options: [
         { label: 'Thread Stand', value: 'Thread Stand' },
         { label: 'Extension Table', value: 'Extension Table' },
@@ -625,6 +543,7 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Search or select tool type',
       required: true,
       searchable: true,
+      creatable: true,
       options: [
         { label: 'Thread Stand', value: 'Thread Stand' },
         { label: 'Extension Table', value: 'Extension Table' },
@@ -645,6 +564,7 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Search or select brand',
       required: false,
       searchable: true,
+      creatable: true,
       options: [
         { label: 'Brother', value: 'Brother' },
         { label: 'Singer', value: 'Singer' },
@@ -663,6 +583,7 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Search or select model',
       required: false,
       searchable: true,
+      creatable: true,
       options: [
         { label: 'Standard', value: 'Standard' },
         { label: 'Heavy Duty', value: 'Heavy Duty' },
@@ -757,7 +678,7 @@ const MachineListPage: React.FC = () => {
     },
   ];
 
-  // Auto-generate QR/Barcode from Brand + Model + unique suffix (serial/box removed from form)
+  // Auto-generate barcode from Brand + Model + unique suffix (serial/box removed from form)
   const generateBarcode = (brand: string, model: string): string => {
     if (!brand || !model) return '';
     const suffix = Date.now().toString(36).toUpperCase();
@@ -855,14 +776,6 @@ const MachineListPage: React.FC = () => {
         onClick: handleUpdateMachine,
         tooltip: 'Update Machine',
         className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
-      },
-      {
-        label: '',
-        icon: <QrCode className="w-4 h-4" />,
-        variant: 'secondary',
-        onClick: handleGenerateQR,
-        tooltip: 'Generate QR Code',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
       },
       {
         label: '',
@@ -1304,7 +1217,7 @@ const MachineListPage: React.FC = () => {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Update Machine
+                Update Machine Details
               </h2>
               <button
                 onClick={handleCloseUpdateModal}
@@ -1317,7 +1230,7 @@ const MachineListPage: React.FC = () => {
             {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               <UpdateForm
-                title="Update Machine Details"
+                title=""
                 fields={machineFields}
                 onSubmit={handleMachineUpdate}
                 onClear={handleClear}
@@ -1379,9 +1292,7 @@ const MachineListPage: React.FC = () => {
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                   Machine Profile
                 </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  {selectedMachine.brand} {selectedMachine.model}
-                </p>
+                
               </div>
               <button
                 onClick={handleCloseViewModal}
@@ -1432,102 +1343,6 @@ const MachineListPage: React.FC = () => {
                   filterable
                   emptyMessage="No rental history found for this machine."
                 />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* QR Code Generation Modal */}
-      {isQRModalOpen && selectedMachine && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <div>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  Machine QR Code
-                </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  {selectedMachine.brand} {selectedMachine.model} - {selectedMachine.serialNumber}
-                </p>
-              </div>
-              <button
-                onClick={handleCloseQRModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-6">
-                {/* QR Code Display */}
-                <div className="flex flex-col items-center justify-center space-y-4">
-                  <div 
-                    ref={qrCodeRef}
-                    className="bg-white dark:bg-white p-6 rounded-lg border-2 border-gray-200 dark:border-gray-300 shadow-lg"
-                  >
-                    <QRCodeSVG
-                      value={generateQRCodeData(selectedMachine)}
-                      size={300}
-                      level="H"
-                      includeMargin={true}
-                    />
-                  </div>
-                  
-                  {/* Machine Info Summary */}
-                  <div className="w-full bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-                      QR Code Contains
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">Brand:</span>
-                        <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                          {selectedMachine.brand}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">Model:</span>
-                        <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                          {selectedMachine.model}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">Serial No:</span>
-                        <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                          {selectedMachine.serialNumber}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">BOX No:</span>
-                        <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                          {selectedMachine.boxNo}
-                        </span>
-                      </div>
-                      <div className="md:col-span-2">
-                        <span className="text-gray-500 dark:text-gray-400">Barcode:</span>
-                        <span className="ml-2 text-gray-900 dark:text-white font-medium font-mono text-xs">
-                          {selectedMachine.barcode}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                      * This QR code contains complete machine details in JSON format
-                    </p>
-                  </div>
-
-                  {/* Download Button */}
-                  <button
-                    onClick={handleDownloadQR}
-                    className="inline-flex items-center px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download QR Code
-                  </button>
-                </div>
               </div>
             </div>
           </div>

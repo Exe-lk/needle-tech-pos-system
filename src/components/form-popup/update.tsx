@@ -25,6 +25,8 @@ export interface FormField {
   options?: { label: string; value: any }[];
   /** When true and type is 'select', renders a searchable dropdown instead of native select */
   searchable?: boolean;
+  /** When true with searchable, allows typing a new value not in options */
+  creatable?: boolean;
   validation?: (value: any) => string | null;
   disabled?: boolean;
   defaultValue?: any;
@@ -369,6 +371,7 @@ const UpdateForm: React.FC<UpdateFormProps> = ({
               options={selectOptions}
               placeholder={field.placeholder || `Select ${field.label}`}
               disabled={field.disabled}
+              creatable={field.creatable}
             />
           );
         }

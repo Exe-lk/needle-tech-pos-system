@@ -670,12 +670,10 @@ const ReturnsPage: React.FC = () => {
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center">
-                  <Package className="w-6 h-6 mr-2" />
+                 
                   Return Details
                 </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  {selectedReturn.returnNumber}
-                </p>
+                
               </div>
               <button
                 onClick={handleCloseViewModal}
@@ -692,7 +690,7 @@ const ReturnsPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
                     <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide flex items-center">
-                      <FileText className="w-4 h-4 mr-2" />
+                      
                       Return Information
                     </h4>
                     <div className="space-y-3 text-sm">
@@ -776,7 +774,7 @@ const ReturnsPage: React.FC = () => {
                   {/* Customer Information */}
                   <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
                     <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide flex items-center">
-                      <Building2 className="w-4 h-4 mr-2" />
+                      
                       Customer Information
                     </h4>
                     <div className="space-y-3 text-sm">
@@ -816,7 +814,7 @@ const ReturnsPage: React.FC = () => {
                 {selectedReturn.machineDetails && (
                   <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
                     <h4 className="text-lg font-semibold text-green-800 dark:text-green-300 mb-4 flex items-center">
-                      <Package className="w-5 h-5 mr-2" />
+                      
                       Machine Information
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
@@ -897,7 +895,7 @@ const ReturnsPage: React.FC = () => {
                 {selectedReturn.rentalDetails && (
                   <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                     <h4 className="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center">
-                      <FileText className="w-5 h-5 mr-2" />
+                      
                       Rental Information
                     </h4>
 
@@ -917,7 +915,7 @@ const ReturnsPage: React.FC = () => {
                       {/* Rental Period */}
                       <div className="pt-3 border-t border-blue-200 dark:border-blue-700">
                         <h5 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3 flex items-center">
-                          <Calendar className="w-4 h-4 mr-2" />
+                          
                           Rental Period
                         </h5>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
@@ -991,7 +989,7 @@ const ReturnsPage: React.FC = () => {
                       {/* Financial Details */}
                       <div className="pt-3 border-t border-blue-200 dark:border-blue-700">
                         <h5 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3 flex items-center">
-                          <DollarSign className="w-4 h-4 mr-2" />
+                          
                           Financial Details
                         </h5>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">

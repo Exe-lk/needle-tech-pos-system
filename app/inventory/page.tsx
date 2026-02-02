@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, Clock, X, QrCode, Printer } from 'lucide-react';
+import UpdateForm from '@/src/components/form-popup/update';
+import type { FormField } from '@/src/components/form-popup/update';
+import { Eye, Clock, Pencil, X, QrCode, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
@@ -191,11 +193,13 @@ const InventoryManagementPage: React.FC = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
   const [transactions, setTransactions] = useState<StockTransaction[]>(mockTransactions);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedMachineForQR, setSelectedMachineForQR] = useState<MachineUnit | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const qrCodeRef = useRef<HTMLDivElement>(null);
 
   /** All individual machine units (70 total from 5 inventory rows). */
@@ -286,6 +290,65 @@ const InventoryManagementPage: React.FC = () => {
   const handleCloseHistoryModal = () => {
     setIsHistoryModalOpen(false);
     setSelectedItem(null);
+  };
+
+  const handleUpdateItem = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setIsUpdateModalOpen(true);
+  };
+
+  const handleCloseUpdateModal = () => {
+    setIsUpdateModalOpen(false);
+    setSelectedItem(null);
+  };
+
+  const getUpdateInitialData = (item: InventoryItem | null): Record<string, any> => {
+    if (!item) return {};
+    return {
+      brand: item.brand,
+      model: item.model,
+      type: item.type,
+      totalStock: item.totalStock,
+      availableStock: item.availableStock,
+      rentedStock: item.rentedStock,
+      maintenanceStock: item.maintenanceStock,
+      retiredStock: item.retiredStock,
+    };
+  };
+
+  const handleInventoryUpdate = async (data: Record<string, any>) => {
+    if (!selectedItem) return;
+    const available = Number(data.availableStock) ?? 0;
+    const rented = Number(data.rentedStock) ?? 0;
+    const maintenance = Number(data.maintenanceStock) ?? 0;
+    const retired = Number(data.retiredStock) ?? 0;
+    const sum = available + rented + maintenance + retired;
+    if (sum !== selectedItem.totalStock) {
+      alert(
+        `Stock breakdown must equal total stock (${selectedItem.totalStock}). Current sum: ${sum}. Please ensure Available + Rented + Maintenance + Retired = ${selectedItem.totalStock}.`
+      );
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      setInventory((prev) =>
+        prev.map((it) =>
+          it.id === selectedItem.id
+            ? {
+                ...it,
+                availableStock: available,
+                rentedStock: rented,
+                maintenanceStock: maintenance,
+                retiredStock: retired,
+                lastUpdated: new Date().toISOString().slice(0, 10),
+              }
+            : it
+        )
+      );
+      handleCloseUpdateModal();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Get filtered transactions for selected item
@@ -398,6 +461,68 @@ const InventoryManagementPage: React.FC = () => {
     },
   ];
 
+  // Update form fields: read-only brand, model, type, totalStock; editable available, rented, maintenance, retired
+  const inventoryUpdateFields: FormField[] = [
+    { name: 'brand', label: 'Brand', type: 'text', disabled: true },
+    { name: 'model', label: 'Model', type: 'text', disabled: true },
+    {
+      name: 'type',
+      label: 'Type',
+      type: 'text',
+      disabled: true,
+    },
+    {
+      name: 'totalStock',
+      label: 'Total Stock',
+      type: 'number',
+      disabled: true,
+    },
+    {
+      name: 'availableStock',
+      label: 'Available',
+      type: 'number',
+      required: true,
+      validation: (value) => {
+        const n = Number(value);
+        if (isNaN(n) || n < 0) return 'Must be a non-negative number';
+        return null;
+      },
+    },
+    {
+      name: 'rentedStock',
+      label: 'Rented',
+      type: 'number',
+      required: true,
+      validation: (value) => {
+        const n = Number(value);
+        if (isNaN(n) || n < 0) return 'Must be a non-negative number';
+        return null;
+      },
+    },
+    {
+      name: 'maintenanceStock',
+      label: 'Maintenance',
+      type: 'number',
+      required: true,
+      validation: (value) => {
+        const n = Number(value);
+        if (isNaN(n) || n < 0) return 'Must be a non-negative number';
+        return null;
+      },
+    },
+    {
+      name: 'retiredStock',
+      label: 'Retired',
+      type: 'number',
+      required: true,
+      validation: (value) => {
+        const n = Number(value);
+        if (isNaN(n) || n < 0) return 'Must be a non-negative number';
+        return null;
+      },
+    },
+  ];
+
   // Action buttons for inventory table
   const actions: ActionButton[] = [
     {
@@ -410,11 +535,19 @@ const InventoryManagementPage: React.FC = () => {
     },
     {
       label: '',
+      icon: <Pencil className="w-4 h-4" />,
+      variant: 'primary',
+      onClick: handleUpdateItem,
+      tooltip: 'Update',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+    },
+    {
+      label: '',
       icon: <Clock className="w-4 h-4" />,
       variant: 'primary',
       onClick: handleViewHistory,
       tooltip: 'View History',
-      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-green-600 dark:bg-green-600 text-white hover:bg-green-700 dark:hover:bg-green-700 focus:ring-green-500 dark:focus:ring-green-500',
     },
   ];
 
@@ -641,6 +774,40 @@ const InventoryManagementPage: React.FC = () => {
                 searchable
                 filterable
                 emptyMessage="No machines found."
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Inventory Modal */}
+      {isUpdateModalOpen && selectedItem && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                Update Stock
+              </h2>
+              <button
+                onClick={handleCloseUpdateModal}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                {selectedItem.brand} {selectedItem.model} &middot; Total stock must equal Available + Rented + Maintenance + Retired.
+              </p>
+              <UpdateForm
+                title=""
+                fields={inventoryUpdateFields}
+                onSubmit={handleInventoryUpdate}
+                submitButtonLabel="Update"
+                clearButtonLabel="Reset"
+                loading={isSubmitting}
+                initialData={getUpdateInitialData(selectedItem)}
+                className="shadow-none border-0 p-0"
               />
             </div>
           </div>

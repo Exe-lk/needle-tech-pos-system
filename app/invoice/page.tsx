@@ -6,7 +6,6 @@ import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Download, FileText, Trash2, Printer } from 'lucide-react';
-import Tooltip from '@/src/components/common/tooltip';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
@@ -706,31 +705,16 @@ const InvoicePage: React.FC = () => {
     );
   };
 
-  // View Invoice Content - Formatted like actual invoice
+  // View Invoice Content - Formatted like actual invoice (no duplicate title; Print is in modal header)
   const renderInvoiceDetails = () => {
     if (!selectedInvoice) return null;
 
     return (
       <div>
-        {/* Screen View */}
+        {/* Screen View - invoice document only; "Invoice Details" and Print are in modal header */}
         <div className="print:hidden">
-          <div className="space-y-6">
-            {/* Print Button */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Invoice Details</h3>
-              <button
-                onClick={handlePrint}
-                className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print</span>
-              </button>
-            </div>
-
-            {/* Invoice Document - Screen View (letterhead layout, matches print) */}
-            <div className="bg-white dark:bg-slate-800 rounded-lg p-8 border border-gray-200 dark:border-slate-700 overflow-auto">
-              {renderInvoiceWithLetterhead(selectedInvoice)}
-            </div>
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-8 border border-gray-200 dark:border-slate-700 overflow-auto">
+            {renderInvoiceWithLetterhead(selectedInvoice)}
           </div>
         </div>
       </div>
@@ -1378,14 +1362,6 @@ const InvoicePage: React.FC = () => {
                   Manage invoices, payments, and generate printable invoices for VAT and Non-VAT invoices.
                 </p>
               </div>
-              <Tooltip content="Create Invoice">
-                <button
-                  onClick={handleCreateInvoice}
-                  className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-                >
-                  Create Invoice
-                </button>
-              </Tooltip>
             </div>
 
             {/* Invoice table card */}
@@ -1396,6 +1372,8 @@ const InvoicePage: React.FC = () => {
               itemsPerPage={10}
               searchable
               filterable
+              onCreateClick={handleCreateInvoice}
+              createButtonLabel="Create Invoice"
               emptyMessage="No invoices found."
             />
           </div>
@@ -1492,27 +1470,31 @@ const InvoicePage: React.FC = () => {
           </div>
         )}
 
-        {/* View Invoice Modal */}
+        {/* View Invoice Modal - Header fixed (sticky); Print button stays visible when scrolling */}
         {isViewModalOpen && selectedInvoice && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Modal Header - Hidden when printing */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-                <div>
-                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Invoice Details</h2>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                    {selectedInvoice.invoiceNumber}
-                  </p>
+              {/* Modal Header - Fixed; "Invoice Details" + Print + Close (stays visible when content scrolls) */}
+              <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Invoice Details</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePrint}
+                    className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print</span>
+                  </button>
+                  <button
+                    onClick={handleCloseViewModal}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
-                <button
-                  onClick={handleCloseViewModal}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
               </div>
 
-              {/* Modal Content - Scrollable */}
+              {/* Modal Content - Scrollable invoice; header and Print stay fixed above */}
               <div className="flex-1 overflow-y-auto p-6">
                 {renderInvoiceDetails()}
               </div>

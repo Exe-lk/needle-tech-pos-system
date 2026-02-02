@@ -1984,22 +1984,12 @@ const typeOptions = useMemo(() => {
           }`}>
           <div className="max-w-7xl mx-auto space-y-4">
             {/* Page header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Hiring Machine Agreement</h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Overview of all rental agreements with their details, customer information, and
-                  outstanding balances. Rental agreements can be created from purchase requests.
-                </p>
-              </div>
-              <Tooltip content="Create Rental Agreement">
-                <button
-                  onClick={handleCreateAgreement}
-                  className="px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-                >
-                  Create Rental Agreement
-                </button>
-              </Tooltip>
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Hiring Machine Agreement</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Overview of all rental agreements with their details, customer information, and
+                outstanding balances. Rental agreements can be created from purchase requests.
+              </p>
             </div>
 
             {/* Rental Agreement table card */}
@@ -2010,6 +2000,8 @@ const typeOptions = useMemo(() => {
               itemsPerPage={10}
               searchable
               filterable
+              onCreateClick={handleCreateAgreement}
+              createButtonLabel="Create Hiring Machine Agreement"
               getRowClassName={getRowClassName}
               emptyMessage="No rental agreements found."
             />
@@ -2023,11 +2015,9 @@ const typeOptions = useMemo(() => {
               <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                 <div>
                   <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                    Rental Agreement Details
+                    Hiring Machine Agreement Details
                   </h2>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                    {selectedAgreement.agreementNo}
-                  </p>
+                  
                 </div>
                 <div className="flex items-center space-x-2">
                   <button

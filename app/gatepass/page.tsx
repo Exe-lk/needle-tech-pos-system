@@ -989,12 +989,12 @@ const GatePassPage: React.FC = () => {
     </div>
   );
 
-  /** Full gatepass on letterhead - for both screen preview and print */
+  /** Full gatepass on letterhead - for both screen preview and print. Footer: address, telephone, fax, email only. */
   const renderGatePassOnLetterhead = (gatePass: GatePass) => (
     <div className="bg-white p-6 sm:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 rounded-lg print:shadow-none print:border-0 print:rounded-none print:p-8 print:max-w-none">
       <LetterheadDocument
         documentTitle="GATEPASS"
-        footerStyle="full"
+        footerStyle="simple"
         footerContent={renderGatePassSignatures(gatePass)}
         className="print:p-0"
       >
@@ -1012,12 +1012,12 @@ const GatePassPage: React.FC = () => {
         {/* Screen View - letterhead layout (matches print) */}
         <div className="print:hidden">{renderGatePassOnLetterhead(selectedGatePass)}</div>
 
-        {/* Print View - only visible when printing */}
-        <div className="hidden print:block print:fixed print:inset-0 print:z-50 print:bg-white print:p-0 print:m-0 print:overflow-auto">
-          <div className="min-h-full p-8 max-w-[210mm] mx-auto">
+        {/* Print View - only visible when printing; normal flow so footer prints (matches view mode) */}
+        <div className="hidden print:block print:bg-white print:min-h-0 print:p-0 print:m-0">
+          <div className="p-8 max-w-[210mm] mx-auto">
             <LetterheadDocument
               documentTitle="GATEPASS"
-              footerStyle="full"
+              footerStyle="simple"
               footerContent={renderGatePassSignatures(selectedGatePass)}
             >
               {renderGatePassLetterheadBody(selectedGatePass)}
@@ -1048,13 +1048,17 @@ const GatePassPage: React.FC = () => {
 
   return (
     <>
-      {/* Print-only gate pass on letterhead - hidden on screen, visible when printing */}
+      {/* Print-only gate pass on letterhead - hidden on screen, visible when printing; normal flow so footer prints */}
       {selectedGatePass && (
-        <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white print:overflow-auto">
-          <div className="min-h-full p-8 max-w-[210mm] mx-auto">
+        <div
+          id="gatepass-print-area"
+          className="hidden print:block print:bg-white print:min-h-0"
+          style={{ printColorAdjust: 'exact' } as React.CSSProperties}
+        >
+          <div className="p-8 max-w-[210mm] mx-auto">
             <LetterheadDocument
               documentTitle="GATEPASS"
-              footerStyle="full"
+              footerStyle="simple"
               footerContent={renderGatePassSignatures(selectedGatePass)}
             >
               {renderGatePassLetterheadBody(selectedGatePass)}
@@ -1082,26 +1086,14 @@ const GatePassPage: React.FC = () => {
         >
           <div className="max-w-7xl mx-auto space-y-4 sm:space-y-5">
             {/* Page header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-              <div className="min-w-0">
-                <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">
-                  Gate Pass
-                </h2>
-                <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400 max-w-2xl">
-                  Overview of all gate passes with agreement references, driver information, and dispatch
-                  details.
-                </p>
-              </div>
-              <div className="flex justify-start sm:justify-end">
-                <Tooltip content="Create Gate Pass">
-                  <button
-                    onClick={handleCreateGatePass}
-                    className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
-                  >
-                    Create Gate Pass
-                  </button>
-                </Tooltip>
-              </div>
+            <div className="max-w-2xl">
+              <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">
+                Gate Pass
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                Overview of all gate passes with agreement references, driver information, and dispatch
+                details.
+              </p>
             </div>
 
             {/* Gate Pass table card — horizontal scroll on small screens */}
@@ -1113,6 +1105,8 @@ const GatePassPage: React.FC = () => {
                 itemsPerPage={10}
                 searchable
                 filterable
+                onCreateClick={handleCreateGatePass}
+                createButtonLabel="Create Gate Pass"
                 emptyMessage="No gate passes found."
               />
             </div>
@@ -1457,9 +1451,7 @@ const GatePassPage: React.FC = () => {
                   <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 dark:text-white">
                     Gate Pass Details
                   </h2>
-                  <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">
-                    {selectedGatePass.gatepassNo}
-                  </p>
+                  
                 </div>
                 <div className="flex items-center space-x-2">
                   <button

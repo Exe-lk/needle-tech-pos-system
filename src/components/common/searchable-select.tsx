@@ -11,6 +11,8 @@ export interface SearchableSelectProps {
   disabled?: boolean;
   error?: string;
   className?: string;
+  /** When true, allows typing a new value not in options; value is accepted on blur or Enter */
+  creatable?: boolean;
 }
 
 const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -21,6 +23,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   disabled = false,
   error,
   className = '',
+  creatable = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,6 +33,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
+  const displayLabel = selectedOption ? selectedOption.label : (value ? value : '');
 
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return options;
@@ -37,9 +41,17 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     return options.filter((opt) => opt.label.toLowerCase().includes(term));
   }, [options, searchTerm]);
 
+  const acceptCustomValue = () => {
+    const trimmed = searchTerm.trim();
+    if (creatable && trimmed) {
+      onChange(trimmed);
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        acceptCustomValue();
         setIsOpen(false);
         setSearchTerm('');
         setHighlightedIndex(0);
@@ -47,11 +59,23 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     };
     if (isOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, creatable, searchTerm]);
 
   useEffect(() => {
-    if (isOpen && inputRef.current) inputRef.current.focus();
+    if (isOpen) {
+      if (inputRef.current) inputRef.current.focus();
+      if (creatable && value && !selectedOption) setSearchTerm(value);
+    }
   }, [isOpen]);
+
+  const handleInputBlur = () => {
+    if (creatable && searchTerm.trim()) {
+      onChange(searchTerm.trim());
+    }
+    setIsOpen(false);
+    setSearchTerm('');
+    setHighlightedIndex(0);
+  };
 
   useEffect(() => {
     if (isOpen && dropdownRef.current && highlightedIndex >= 0) {
@@ -72,7 +96,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     switch (e.key) {
       case 'Enter':
         e.preventDefault();
-        if (filteredOptions[highlightedIndex]) handleSelect(filteredOptions[highlightedIndex].value);
+        if (filteredOptions[highlightedIndex]) {
+          handleSelect(filteredOptions[highlightedIndex].value);
+        } else if (creatable && searchTerm.trim()) {
+          onChange(searchTerm.trim());
+          setIsOpen(false);
+          setSearchTerm('');
+          setHighlightedIndex(0);
+        }
         break;
       case 'ArrowDown':
         e.preventDefault();
@@ -111,19 +142,20 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
               setSearchTerm(e.target.value);
               setHighlightedIndex(0);
             }}
+            onBlur={handleInputBlur}
             onKeyDown={handleKeyDown}
             onClick={(e) => e.stopPropagation()}
             className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-            placeholder={placeholder}
+            placeholder={creatable ? `${placeholder} or type new` : placeholder}
             disabled={disabled}
           />
         ) : (
           <span
             className={`flex-1 truncate ${
-              !selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'
+              !displayLabel ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'
             }`}
           >
-            {selectedOption ? selectedOption.label : placeholder}
+            {displayLabel || placeholder}
           </span>
         )}
         <ChevronDown
