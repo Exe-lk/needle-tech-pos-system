@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import CreateForm, { FormField } from '@/src/components/form-popup/create';
+import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 import { X, Plus, Trash2, ChevronDown, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
@@ -872,9 +873,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                                     Create Purchase Order
                                 </h2>
-                                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                    Create a new purchase request for sewing machines and related tools.
-                                </p>
+                                
                             </div>
                         </div>
                         <Tooltip content="Back to Purchase Orders">
@@ -887,25 +886,26 @@ const CreatePurchaseRequestPage: React.FC = () => {
                         </Tooltip>
                     </div>
 
-                    {/* Form Card */}
-                    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                        <div className="space-y-6">
-                            {/* Customer Details Section */}
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                        Customer Details
-                                    </h3>
-                                    <Tooltip content="Register New Customer">
-                                        <button
-                                            type="button"
-                                            onClick={handleOpenRegisterModal}
-                                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                                        >
-                                            Register New Customer
-                                        </button>
-                                    </Tooltip>
-                                </div>
+                    {/* Form Card - Letterhead-style document (matches official PO / letterhead) */}
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden max-w-[210mm] mx-auto">
+                        <LetterheadDocument documentTitle="PURCHASE ORDER" footerStyle="simple" className="p-6 sm:p-8">
+                            <div className="min-h-[120mm] space-y-6 border-2 border-dashed border-gray-200 dark:border-slate-600 rounded-lg p-6 bg-gray-50/50 dark:bg-slate-800/30">
+                                {/* Customer Details Section */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                            Customer Details
+                                        </h3>
+                                        <Tooltip content="Register New Customer">
+                                            <button
+                                                type="button"
+                                                onClick={handleOpenRegisterModal}
+                                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
+                                            >
+                                                Register New Customer
+                                            </button>
+                                        </Tooltip>
+                                    </div>
 
                                 {/* Customer Selection */}
                                 <div>
@@ -1234,7 +1234,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     </button>
                                 </Tooltip>
                             </div>
-                        </div>
+                            </div>
+                        </LetterheadDocument>
                     </div>
                 </div>
             </main>

@@ -79,7 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         },
         {
             icon: Wrench,
-            label: 'Machine Management',
+            label: 'Machine & Tools Management',
             href: '/machines',
         },
         {
@@ -121,11 +121,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             icon: Clipboard,
             label: 'Bincard',
             href: '/bincard',
-        },
-        {
-            icon: BarChart3,
-            label: 'Analytics',
-            href: '/analytics'
         },
         {
             icon: Shield,

@@ -721,483 +721,353 @@ const InvoicePage: React.FC = () => {
     );
   };
 
-  // Shared form content for create modal
+  // Create form content — layout matches printed TAX INVOICE for familiar UX
   const renderInvoiceForm = () => {
     const { subtotal, vatAmount, totalAmount } = calculateTotals();
     const selectedCustomer = mockCustomers.find((c) => c.id === customerId);
 
     return (
-      <div className="space-y-6">
-        {/* Customer Information */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Company/Individual Name <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={customerId}
-              onChange={(e) => handleCustomerChange(e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                formErrors.customerId
-                  ? 'border-red-500'
-                  : 'border-gray-300 dark:border-slate-600'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-            >
-              <option value="">Select Customer</option>
-              {mockCustomers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name} ({customer.type})
-                </option>
-              ))}
-            </select>
-            {formErrors.customerId && (
-              <p className="mt-1 text-sm text-red-500">{formErrors.customerId}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Customer Address
-            </label>
-            <input
-              type="text"
-              value={selectedCustomer?.address || ''}
-              disabled
-              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              VAT/TIN/NIC Number
-            </label>
-            <input
-              type="text"
-              value={selectedCustomer?.vatTinNic || ''}
-              disabled
-              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Invoice Type
-            </label>
-            <input
-              type="text"
-              value={invoiceType}
-              disabled
-              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Invoice Date <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              value={invoiceDate}
-              onChange={(e) => setInvoiceDate(e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                formErrors.invoiceDate
-                  ? 'border-red-500'
-                  : 'border-gray-300 dark:border-slate-600'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-            />
-            {formErrors.invoiceDate && (
-              <p className="mt-1 text-sm text-red-500">{formErrors.invoiceDate}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Period From <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              value={periodFrom}
-              onChange={(e) => setPeriodFrom(e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                formErrors.periodFrom
-                  ? 'border-red-500'
-                  : 'border-gray-300 dark:border-slate-600'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-            />
-            {formErrors.periodFrom && (
-              <p className="mt-1 text-sm text-red-500">{formErrors.periodFrom}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Period To <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              value={periodTo}
-              onChange={(e) => setPeriodTo(e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                formErrors.periodTo
-                  ? 'border-red-500'
-                  : 'border-gray-300 dark:border-slate-600'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-            />
-            {formErrors.periodTo && (
-              <p className="mt-1 text-sm text-red-500">{formErrors.periodTo}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Items Section */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Items</h3>
-            <button
-              type="button"
-              onClick={addItem}
-              className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Item</span>
-            </button>
-          </div>
-          {formErrors.items && (
-            <p className="mb-2 text-sm text-red-500">{formErrors.items}</p>
-          )}
-
-          {items.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              No items added. Click "Add Item" to add items to the invoice.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {items.map((item, index) => (
-                <div
-                  key={index}
-                  className="border border-gray-200 dark:border-slate-600 rounded-lg p-4 bg-gray-50 dark:bg-slate-700/50"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-                      Item {index + 1}
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(index)}
-                      className="p-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Item Code
-                      </label>
-                      <input
-                        type="text"
-                        value={item.itemCode}
-                        disabled
-                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Brand <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={item.brand}
-                        onChange={(e) => updateItem(index, 'brand', e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                          formErrors[`item_${index}_brand`]
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      >
-                        <option value="">Select Brand</option>
-                        {mockBrands.map((brand) => (
-                          <option key={brand} value={brand}>
-                            {brand}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors[`item_${index}_brand`] && (
-                        <p className="mt-1 text-xs text-red-500">
-                          {formErrors[`item_${index}_brand`]}
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Model <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={item.model}
-                        onChange={(e) => updateItem(index, 'model', e.target.value)}
-                        disabled={!item.brand}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                          !item.brand
-                            ? 'bg-gray-100 dark:bg-slate-600 cursor-not-allowed'
-                            : ''
-                        } ${
-                          formErrors[`item_${index}_model`]
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      >
-                        <option value="">Select Model</option>
-                        {item.brand && getAvailableModels(item.brand).map((model) => (
-                          <option key={model} value={model}>
-                            {model}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors[`item_${index}_model`] && (
-                        <p className="mt-1 text-xs text-red-500">
-                          {formErrors[`item_${index}_model`]}
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Type <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={item.type}
-                        onChange={(e) => updateItem(index, 'type', e.target.value as MachineType)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                          formErrors[`item_${index}_type`]
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      >
-                        {mockTypes.map((type) => (
-                          <option key={type.value} value={type.value}>
-                            {type.label}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors[`item_${index}_type`] && (
-                        <p className="mt-1 text-xs text-red-500">
-                          {formErrors[`item_${index}_type`]}
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Description
-                      </label>
-                      <input
-                        type="text"
-                        value={item.description}
-                        disabled
-                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm"
-                      />
-                    </div>
-
-                    {invoiceType === 'Non-VAT' && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Serial Number
-                        </label>
-                        <input
-                          type="text"
-                          value={item.serialNumber || ''}
-                          onChange={(e) => updateItem(index, 'serialNumber', e.target.value)}
-                          placeholder="Enter serial number"
-                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                        />
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Quantity (No. of Machines) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.numberOfMachines}
-                        onChange={(e) => updateItem(index, 'numberOfMachines', parseInt(e.target.value) || 0)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                          formErrors[`item_${index}_machines`]
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors[`item_${index}_machines`] && (
-                        <p className="mt-1 text-xs text-red-500">
-                          {formErrors[`item_${index}_machines`]}
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Rate (Monthly Rent per Machine) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.monthlyRentPerMachine}
-                        onChange={(e) => updateItem(index, 'monthlyRentPerMachine', parseFloat(e.target.value) || 0)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm ${
-                          formErrors[`item_${index}_rent`]
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors[`item_${index}_rent`] && (
-                        <p className="mt-1 text-xs text-red-500">
-                          {formErrors[`item_${index}_rent`]}
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Amount (Subtotal)
-                      </label>
-                      <input
-                        type="text"
-                        value={`LKR ${calculateItemSubtotal(item).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
-                        disabled
-                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed text-sm font-medium"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Payment & Billing Details */}
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Payment & Billing Details
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="bg-white text-gray-900 max-w-[210mm] mx-auto" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+        <LetterheadDocument
+          documentTitle={invoiceType === 'VAT' ? 'TAX INVOICE' : 'INVOICE'}
+          footerStyle="full"
+        >
+          {/* Invoice number and date — right-aligned (matches print) */}
+          <div className="text-right text-sm text-gray-700 mb-1">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Payment Method <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                  formErrors.paymentMethod
-                    ? 'border-red-500'
-                    : 'border-gray-300 dark:border-slate-600'
-                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-              >
-                <option value="">Select Payment Method</option>
-                <option value="Cash">Cash</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Cheque">Cheque</option>
-                <option value="Credit Card">Credit Card</option>
-              </select>
-              {formErrors.paymentMethod && (
-                <p className="mt-1 text-sm text-red-500">{formErrors.paymentMethod}</p>
-              )}
+              <span className="text-gray-600 font-medium">Invoice: </span>
+              <span className="font-medium text-gray-900">(Auto-generated on save)</span>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Payment Date <span className="text-red-500">*</span>
-              </label>
+            <div className="mt-1">
+              <span className="text-gray-600 font-medium">Date of Issue: </span>
               <input
                 type="date"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                  formErrors.paymentDate
-                    ? 'border-red-500'
-                    : 'border-gray-300 dark:border-slate-600'
-                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-              />
-              {formErrors.paymentDate && (
-                <p className="mt-1 text-sm text-red-500">{formErrors.paymentDate}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Receipt Number
-              </label>
-              <input
-                type="text"
-                value={receiptNumber}
-                onChange={(e) => setReceiptNumber(e.target.value)}
-                placeholder="Enter receipt number"
-                className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+                className={`inline-block ml-1 px-2 py-1 border rounded text-gray-900 ${
+                  formErrors.invoiceDate ? 'border-red-500' : 'border-gray-300'
+                } focus:outline-none focus:ring-1 focus:ring-blue-500`}
               />
             </div>
+            {formErrors.invoiceDate && (
+              <p className="text-right text-xs text-red-500 mt-0.5">{formErrors.invoiceDate}</p>
+            )}
+          </div>
+          <div className="border-b border-gray-800 my-3" />
 
+          {/* Customer block — left-aligned (matches print) */}
+          <div className="text-sm text-gray-900 space-y-1">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Payment Receipt (File) <span className="text-red-500">*</span>
-              </label>
+              <span className="text-gray-600 font-medium">Customer: </span>
+              <select
+                value={customerId}
+                onChange={(e) => handleCustomerChange(e.target.value)}
+                className={`inline-block min-w-[200px] px-2 py-1 border rounded text-gray-900 ${
+                  formErrors.customerId ? 'border-red-500' : 'border-gray-300'
+                } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+              >
+                <option value="">Select Customer</option>
+                {mockCustomers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} ({customer.type})
+                  </option>
+                ))}
+              </select>
+              {formErrors.customerId && (
+                <span className="ml-2 text-xs text-red-500">{formErrors.customerId}</span>
+              )}
+            </div>
+            <div>
+              <span className="text-gray-600 font-medium">Address: </span>
+              <span className="text-gray-900">{selectedCustomer?.address || '—'}</span>
+            </div>
+            <div>
+              <span className="text-gray-600 font-medium">Period: </span>
               <input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
-                  formErrors.receipt
-                    ? 'border-red-500'
-                    : 'border-gray-300 dark:border-slate-600'
-                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                type="date"
+                value={periodFrom}
+                onChange={(e) => setPeriodFrom(e.target.value)}
+                className={`inline-block w-32 px-2 py-1 border rounded text-gray-900 ${
+                  formErrors.periodFrom ? 'border-red-500' : 'border-gray-300'
+                } focus:outline-none focus:ring-1 focus:ring-blue-500`}
               />
-              {receiptFile && (
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Selected: {receiptFile.name}
-                </p>
+              <span className="mx-1 text-gray-600"> to </span>
+              <input
+                type="date"
+                value={periodTo}
+                onChange={(e) => setPeriodTo(e.target.value)}
+                className={`inline-block w-32 px-2 py-1 border rounded text-gray-900 ${
+                  formErrors.periodTo ? 'border-red-500' : 'border-gray-300'
+                } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+              />
+              {formErrors.periodFrom && (
+                <span className="ml-2 text-xs text-red-500">{formErrors.periodFrom}</span>
               )}
-              {formErrors.receipt && (
-                <p className="mt-1 text-sm text-red-500">{formErrors.receipt}</p>
+              {formErrors.periodTo && (
+                <span className="ml-2 text-xs text-red-500">{formErrors.periodTo}</span>
               )}
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Payment receipt is required before dispatch (PDF, JPG, or PNG)
-              </p>
+            </div>
+            <div>
+              <span className="text-gray-600 font-medium">Customer VAT No: </span>
+              <span className="text-gray-900">{selectedCustomer?.vatTinNic || '—'}</span>
             </div>
           </div>
-        </div>
+          <div className="border-b border-gray-800 my-3" />
 
-        {/* Totals Summary */}
-        <div className="bg-blue-50 dark:bg-indigo-900/20 rounded-lg p-4 border border-blue-200 dark:border-indigo-800">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Invoice Summary
-          </h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-700 dark:text-gray-300">Sub Amount:</span>
-              <span className="text-gray-900 dark:text-white font-medium">
-                LKR {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-              </span>
+          {/* Itemized table — matches print: Item | Description | Rate | Qty | Amount */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-gray-700">Itemised details</span>
+              <button
+                type="button"
+                onClick={addItem}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded border border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <Plus className="w-4 h-4" />
+                Add Item
+              </button>
             </div>
-            {vatAmount > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-700 dark:text-gray-300">VAT (18%):</span>
-                <span className="text-gray-900 dark:text-white font-medium">
-                  LKR {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                </span>
+            {formErrors.items && (
+              <p className="mb-2 text-sm text-red-500">{formErrors.items}</p>
+            )}
+
+            {items.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 border border-dashed border-gray-300 rounded">
+                No items added. Click &quot;Add Item&quot; to add items to the invoice.
+              </div>
+            ) : (
+              <table className="w-full border-collapse border border-gray-300 text-sm">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">Item</th>
+                    <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">Description</th>
+                    <th className="border border-gray-300 px-2 py-2 text-right font-semibold text-gray-700">Rate</th>
+                    <th className="border border-gray-300 px-2 py-2 text-center font-semibold text-gray-700">Qty</th>
+                    <th className="border border-gray-300 px-2 py-2 text-right font-semibold text-gray-700">Amount</th>
+                    <th className="border border-gray-300 px-2 py-2 w-10" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <React.Fragment key={index}>
+                      <tr className="border-b border-gray-200">
+                        <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">
+                          <input
+                            type="text"
+                            value={item.itemCode}
+                            readOnly
+                            className="w-full bg-gray-50 border-0 p-0 text-gray-900 text-sm"
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1.5 align-top">
+                          <input
+                            type="text"
+                            value={item.description}
+                            readOnly
+                            className="w-full bg-gray-50 border-0 p-0 text-gray-900 text-sm"
+                          />
+                          <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                            <select
+                              value={item.brand}
+                              onChange={(e) => updateItem(index, 'brand', e.target.value)}
+                              className={`px-1.5 py-0.5 border rounded ${
+                                formErrors[`item_${index}_brand`] ? 'border-red-500' : 'border-gray-300'
+                              } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                            >
+                              <option value="">Brand</option>
+                              {mockBrands.map((b) => (
+                                <option key={b} value={b}>{b}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={item.model}
+                              onChange={(e) => updateItem(index, 'model', e.target.value)}
+                              disabled={!item.brand}
+                              className="px-1.5 py-0.5 border rounded border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                            >
+                              <option value="">Model</option>
+                              {item.brand && getAvailableModels(item.brand).map((m) => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={item.type}
+                              onChange={(e) => updateItem(index, 'type', e.target.value as MachineType)}
+                              className={`px-1.5 py-0.5 border rounded ${
+                                formErrors[`item_${index}_type`] ? 'border-red-500' : 'border-gray-300'
+                              } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                            >
+                              {mockTypes.map((t) => (
+                                <option key={t.value} value={t.value}>{t.label}</option>
+                              ))}
+                            </select>
+                            {invoiceType === 'Non-VAT' && (
+                              <input
+                                type="text"
+                                value={item.serialNumber || ''}
+                                onChange={(e) => updateItem(index, 'serialNumber', e.target.value)}
+                                placeholder="Serial"
+                                className="w-20 px-1.5 py-0.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            )}
+                          </div>
+                          {(formErrors[`item_${index}_brand`] || formErrors[`item_${index}_model`] || formErrors[`item_${index}_type`]) && (
+                            <p className="text-xs text-red-500 mt-0.5">
+                              {formErrors[`item_${index}_brand`] || formErrors[`item_${index}_model`] || formErrors[`item_${index}_type`]}
+                            </p>
+                          )}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1.5 text-right align-top">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.monthlyRentPerMachine || ''}
+                            onChange={(e) => updateItem(index, 'monthlyRentPerMachine', parseFloat(e.target.value) || 0)}
+                            className={`w-20 text-right px-1.5 py-0.5 border rounded ${
+                              formErrors[`item_${index}_rent`] ? 'border-red-500' : 'border-gray-300'
+                            } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                          />
+                          {formErrors[`item_${index}_rent`] && (
+                            <p className="text-xs text-red-500 mt-0.5">{formErrors[`item_${index}_rent`]}</p>
+                          )}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1.5 text-center align-top">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.numberOfMachines}
+                            onChange={(e) => updateItem(index, 'numberOfMachines', parseInt(e.target.value) || 0)}
+                            className={`w-14 text-center px-1.5 py-0.5 border rounded ${
+                              formErrors[`item_${index}_machines`] ? 'border-red-500' : 'border-gray-300'
+                            } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                          />
+                          {formErrors[`item_${index}_machines`] && (
+                            <p className="text-xs text-red-500 mt-0.5">{formErrors[`item_${index}_machines`]}</p>
+                          )}
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1.5 text-right font-medium text-gray-900 align-top">
+                          {calculateItemSubtotal(item).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="border border-gray-300 px-1 py-1.5 align-top">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(index)}
+                            className="p-1 text-red-600 hover:text-red-700 focus:outline-none focus:ring-1 focus:ring-red-400 rounded"
+                            aria-label="Remove item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* Totals — matches print: Total Amount left label, value right */}
+            {items.length > 0 && (
+              <div className="mt-3 space-y-1">
+                <div className="flex justify-between items-baseline">
+                  <span className="font-bold text-gray-900">Total Amount</span>
+                  <span className="font-bold text-gray-900 text-lg">
+                    {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {invoiceType === 'VAT' && vatAmount > 0 && (
+                  <>
+                    <div className="flex justify-end text-sm text-gray-700">
+                      Sub Amount: Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="flex justify-end text-sm text-gray-700">
+                      VAT (18%): Rs. {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
-            <div className="flex justify-between pt-2 border-t border-blue-200 dark:border-indigo-800">
-              <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                Total Amount:
-              </span>
-              <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                LKR {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-              </span>
+          </div>
+          <div className="border-b border-gray-800 my-3" />
+
+          {/* Authorized By / Received By — matches print */}
+          <div className="flex justify-between text-xs text-gray-600 my-4">
+            <div className="w-40">
+              <div className="border-b border-gray-400 pt-6">Authorized By</div>
+            </div>
+            <div className="w-40">
+              <div className="border-b border-gray-400 pt-6">Received By</div>
             </div>
           </div>
-        </div>
+          <div className="border-b border-gray-300 my-2" />
+
+          {/* Payment & Billing — compact section (required for validation) */}
+          <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200">
+            <p className="text-xs font-semibold text-gray-700 mb-2">Payment & Billing Details</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Method <span className="text-red-500">*</span></label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className={`w-full px-2 py-1.5 border rounded text-gray-900 ${
+                    formErrors.paymentMethod ? 'border-red-500' : 'border-gray-300'
+                  } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                >
+                  <option value="">Select</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Credit Card">Credit Card</option>
+                </select>
+                {formErrors.paymentMethod && (
+                  <p className="text-xs text-red-500 mt-0.5">{formErrors.paymentMethod}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Date <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className={`w-full px-2 py-1.5 border rounded text-gray-900 ${
+                    formErrors.paymentDate ? 'border-red-500' : 'border-gray-300'
+                  } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                />
+                {formErrors.paymentDate && (
+                  <p className="text-xs text-red-500 mt-0.5">{formErrors.paymentDate}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Receipt Number</label>
+                <input
+                  type="text"
+                  value={receiptNumber}
+                  onChange={(e) => setReceiptNumber(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Receipt (File) <span className="text-red-500">*</span></label>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                  className={`w-full px-2 py-1.5 border rounded text-gray-900 text-xs ${
+                    formErrors.receipt ? 'border-red-500' : 'border-gray-300'
+                  } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                />
+                {receiptFile && (
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">{receiptFile.name}</p>
+                )}
+                {formErrors.receipt && (
+                  <p className="text-xs text-red-500 mt-0.5">{formErrors.receipt}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </LetterheadDocument>
       </div>
     );
   };
@@ -1379,33 +1249,34 @@ const InvoicePage: React.FC = () => {
           </div>
         </main>
 
-        {/* Create Invoice Modal */}
+        {/* Create Invoice Modal — document-style layout matching printed TAX INVOICE */}
         {isCreateModalOpen && (
-          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Create Invoice</h2>
+          <div className="fixed inset-0 backdrop-blur-md bg-black/30 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-2xl w-full max-w-[210mm] max-h-[90vh] overflow-hidden flex flex-col border border-gray-200">
+              {/* Modal Header — minimal; title is inside letterhead */}
+              <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+                <h2 className="text-lg font-semibold text-gray-900">Create Invoice</h2>
                 <button
                   onClick={handleCloseCreateModal}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
+                  aria-label="Close"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Modal Content - Scrollable */}
-              <div className="flex-1 overflow-y-auto p-6">
+              {/* Modal Content — scrollable invoice-style form */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-100/50">
                 {renderInvoiceForm()}
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
+              {/* Modal Footer — actions */}
+              <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-200 bg-white">
                 <button
                   type="button"
                   onClick={handleCloseCreateModal}
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
@@ -1413,7 +1284,7 @@ const InvoicePage: React.FC = () => {
                   type="button"
                   onClick={handleSubmitCreate}
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? 'Creating...' : 'Create Invoice'}
                 </button>

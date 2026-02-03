@@ -80,6 +80,43 @@ const mockRentalAgreements = [
   },
 ];
 
+/** Machines (items) per agreement – used to auto-populate items when an agreement is selected. */
+type AgreementMachineItem = Omit<GatePassItem, 'id'>;
+const mockAgreementMachines: Record<string, AgreementMachineItem[]> = {
+  'RA-2024-001': [
+    { description: 'JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE', status: 'GOOD', serialNo: '2LIDH01733', motorBoxNo: 'NMBDH01171' },
+    { description: 'JUKI DDL-8700 - HIGH-SPEED LOCKSTITCH MACHINE', status: 'GOOD', serialNo: '2LIDH01734', motorBoxNo: 'NMBDH01172' },
+    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'FAIR', serialNo: 'BR-2024-001', motorBoxNo: 'BOX-2024-001' },
+    { description: 'SINGER 4423 - HEAVY DUTY SEWING MACHINE', status: 'GOOD', serialNo: 'SG-2024-001', motorBoxNo: 'BOX-2024-002' },
+    { description: 'JUKI MO-2516 - OVERLOCK MACHINE', status: 'GOOD', serialNo: '2LIDH01735', motorBoxNo: 'NMBDH01173' },
+  ],
+  'RA-2024-002': [
+    { description: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE', status: 'GOOD', serialNo: 'BR-2024-002', motorBoxNo: 'BOX-2024-003' },
+    { description: 'JUKI DDL-5550N - INDUSTRIAL SEWING MACHINE', status: 'GOOD', serialNo: '2LIDH01736', motorBoxNo: 'NMBDH01174' },
+    { description: 'SINGER 9960 - QUANTUM STYLIST MACHINE', status: 'GOOD', serialNo: 'SG-2024-002', motorBoxNo: 'BOX-2024-004' },
+    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'FAIR', serialNo: 'BR-2024-003', motorBoxNo: 'BOX-2024-005' },
+    { description: 'JUKI MO-6700S - OVERLOCK MACHINE', status: 'GOOD', serialNo: '2LIDH01737', motorBoxNo: 'NMBDH01175' },
+  ],
+  'RA-2024-003': [
+    { description: 'JUKI DDL-8700 - HIGH-SPEED LOCKSTITCH MACHINE', status: 'GOOD', serialNo: '2LIDH01740', motorBoxNo: 'NMBDH01180' },
+    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'GOOD', serialNo: 'BR-2024-010', motorBoxNo: 'BOX-2024-010' },
+  ],
+  'RA-2024-004': [
+    { description: 'SINGER 4423 - HEAVY DUTY SEWING MACHINE', status: 'GOOD', serialNo: 'SG-2024-020', motorBoxNo: 'BOX-2024-020' },
+    { description: 'JUKI MO-2516 - OVERLOCK MACHINE', status: 'GOOD', serialNo: '2LIDH01741', motorBoxNo: 'NMBDH01181' },
+  ],
+  'RA-2024-005': [
+    { description: 'JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE', status: 'GOOD', serialNo: '2LIDH01742', motorBoxNo: 'NMBDH01182' },
+    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'FAIR', serialNo: 'BR-2024-030', motorBoxNo: 'BOX-2024-030' },
+    { description: 'SINGER 4423 - HEAVY DUTY SEWING MACHINE', status: 'GOOD', serialNo: 'SG-2024-030', motorBoxNo: 'BOX-2024-031' },
+  ],
+  'RA-2024-006': [
+    { description: 'JUKI DDL-8700 - HIGH-SPEED LOCKSTITCH MACHINE', status: 'GOOD', serialNo: '2LIDH01743', motorBoxNo: 'NMBDH01183' },
+    { description: 'JUKI MO-2516 - OVERLOCK MACHINE', status: 'GOOD', serialNo: '2LIDH01744', motorBoxNo: 'NMBDH01184' },
+    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'GOOD', serialNo: 'BR-2024-040', motorBoxNo: 'BOX-2024-040' },
+  ],
+};
+
 // Mock gate pass data with minimum 5 items each
 const mockGatePasses: GatePass[] = [
   {
@@ -393,8 +430,8 @@ const GatePassPage: React.FC = () => {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [driverName, setDriverName] = useState('');
   const [items, setItems] = useState<GatePassItem[]>(() => {
-    // Initialize with 5 empty items
-    return Array.from({ length: MIN_ITEMS }, (_, i) => ({
+    // Initialize with 1 empty item (user can add more; minimum MIN_ITEMS required on submit)
+    return Array.from({ length: 1 }, (_, i) => ({
       id: `item-${i + 1}`,
       description: '',
       status: 'GOOD',
@@ -408,7 +445,7 @@ const GatePassPage: React.FC = () => {
 
   const handleCreateGatePass = () => {
     setIsCreateModalOpen(true);
-    // Reset form with 5 items
+    // Reset form with 1 item row
     setAgreementReference('');
     setDateOfIssue(new Date().toISOString().split('T')[0]);
     setReturnable(true);
@@ -416,7 +453,7 @@ const GatePassPage: React.FC = () => {
     setVehicleNumber('');
     setDriverName('');
     setItems(
-      Array.from({ length: MIN_ITEMS }, (_, i) => ({
+      Array.from({ length: 1 }, (_, i) => ({
         id: `item-${Date.now()}-${i + 1}`,
         description: '',
         status: 'GOOD',
@@ -438,7 +475,7 @@ const GatePassPage: React.FC = () => {
     setVehicleNumber('');
     setDriverName('');
     setItems(
-      Array.from({ length: MIN_ITEMS }, (_, i) => ({
+      Array.from({ length: 1 }, (_, i) => ({
         id: `item-${Date.now()}-${i + 1}`,
         description: '',
         status: 'GOOD',
@@ -449,6 +486,30 @@ const GatePassPage: React.FC = () => {
     setIssuedBy('');
     setReceivedBy('');
     setFormErrors({});
+  };
+
+  /** When agreement is selected, auto-populate items from that agreement's machines. */
+  const handleAgreementChange = (agreementId: string) => {
+    setAgreementReference(agreementId);
+    const machines = agreementId ? (mockAgreementMachines[agreementId] ?? []) : [];
+    if (machines.length > 0) {
+      setItems(
+        machines.map((m, i) => ({
+          ...m,
+          id: `item-${Date.now()}-${i + 1}`,
+        }))
+      );
+    } else {
+      setItems([
+        {
+          id: `item-${Date.now()}-1`,
+          description: '',
+          status: 'GOOD',
+          serialNo: '',
+          motorBoxNo: '',
+        },
+      ]);
+    }
   };
 
   const handleAddItem = () => {
@@ -1113,312 +1174,269 @@ const GatePassPage: React.FC = () => {
           </div>
         </main>
 
-        {/* Create Gate Pass Modal */}
+        {/* Create Gate Pass Modal - Document-style form (matches print layout) */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleCloseCreateModal} />
             <div className="relative bg-white dark:bg-slate-800 rounded-lg sm:rounded-xl shadow-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-slate-700">
-                <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 dark:text-white">
-                  Gate Pass Form
+              {/* Modal Header - compact */}
+              <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-200 dark:border-slate-700 shrink-0">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                  Create Gate Pass
                 </h2>
                 <button
                   onClick={handleCloseCreateModal}
                   className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  aria-label="Close"
                 >
                   <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
 
-              {/* Modal Content - Scrollable */}
-              <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
-                <div className="space-y-5 sm:space-y-6">
-                  {/* Form Fields */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                    {/* Agreement Reference */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Agreement Reference <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={agreementReference}
-                        onChange={(e) => setAgreementReference(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.agreementReference
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      >
-                        <option value="">Select Agreement Reference</option>
-                        {mockRentalAgreements.map((agreement) => (
-                          <option key={agreement.id} value={agreement.id}>
-                            {agreement.id} - {agreement.customerName}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors.agreementReference && (
-                        <p className="mt-1 text-xs sm:text-sm text-red-500">
-                          {formErrors.agreementReference}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Date of Issue */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Date of Issue <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={dateOfIssue}
-                        onChange={(e) => setDateOfIssue(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.dateOfIssue
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors.dateOfIssue && (
-                        <p className="mt-1 text-xs sm:text-sm text-red-500">
-                          {formErrors.dateOfIssue}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Returnable */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Returnable <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={returnable ? 'true' : 'false'}
-                        onChange={(e) => setReturnable(e.target.value === 'true')}
-                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                      >
-                        <option value="true">YES</option>
-                        <option value="false">NO</option>
-                      </select>
-                    </div>
-
-                    {/* Entry */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Entry <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={entry}
-                        onChange={(e) => setEntry(e.target.value as 'IN' | 'OUT')}
-                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                      >
-                        <option value="OUT">OUT</option>
-                        <option value="IN">IN</option>
-                      </select>
-                    </div>
-
-                    {/* Vehicle Number */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Vehicle Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={vehicleNumber}
-                        onChange={(e) => setVehicleNumber(e.target.value)}
-                        placeholder="Enter vehicle number"
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.vehicleNumber
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors.vehicleNumber && (
-                        <p className="mt-1 text-xs sm:text-sm text-red-500">
-                          {formErrors.vehicleNumber}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Driver Name */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Driver Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={driverName}
-                        onChange={(e) => setDriverName(e.target.value)}
-                        placeholder="Enter driver name"
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.driverName
-                            ? 'border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                          } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                      />
-                      {formErrors.driverName && (
-                        <p className="mt-1 text-xs sm:text-sm text-red-500">
-                          {formErrors.driverName}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Issued By */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Issued By
-                      </label>
-                      <input
-                        type="text"
-                        value={issuedBy}
-                        onChange={(e) => setIssuedBy(e.target.value)}
-                        placeholder="Enter issuer name"
-                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    {/* Received By */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Received By
-                      </label>
-                      <input
-                        type="text"
-                        value={receivedBy}
-                        onChange={(e) => setReceivedBy(e.target.value)}
-                        placeholder="Enter receiver name"
-                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Items Section */}
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <div>
-                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                          Items
-                        </h3>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
-                          Minimum {MIN_ITEMS} items required
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleAddItem}
-                        className="inline-flex items-center justify-center px-3 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 transition-colors"
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Add Item
-                      </button>
-                    </div>
-                    {formErrors.items && (
-                      <p className="text-xs sm:text-sm text-red-500">{formErrors.items}</p>
-                    )}
-                    {items.map((item, index) => (
-                      <div
-                        key={item.id}
-                        className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-3 sm:p-4 space-y-3 sm:space-y-4"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 mb-1 sm:mb-2">
-                          <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Item {index + 1}
-                          </span>
-                          {items.length > MIN_ITEMS && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItem(item.id)}
-                              className="self-start sm:self-auto text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-xs sm:text-sm"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                          {items.length === MIN_ITEMS && (
-                            <span className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
-                              Minimum {MIN_ITEMS} items required
-                            </span>
-                          )}
+              {/* Modal Content - Scrollable document-style form */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="p-4 sm:p-6 md:p-8">
+                  <LetterheadDocument
+                    documentTitle="GATEPASS"
+                    footerStyle="simple"
+                    footerContent={
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                        <div>
+                          <input
+                            type="text"
+                            value={issuedBy}
+                            onChange={(e) => setIssuedBy(e.target.value)}
+                            placeholder="Name"
+                            className="w-full border-0 border-b border-gray-800 bg-transparent py-1 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-0"
+                          />
+                          <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-1">Issued By</div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                          <div className="md:col-span-2">
-                            <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Description <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={item.description}
-                              onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
-                              placeholder="e.g., JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE"
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${formErrors[`item_description_${index}`]
-                                  ? 'border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                            />
-                            {formErrors[`item_description_${index}`] && (
-                              <p className="mt-1 text-xs sm:text-sm text-red-500">
-                                {formErrors[`item_description_${index}`]}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Status <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={item.status}
-                              onChange={(e) => handleItemChange(item.id, 'status', e.target.value)}
-                              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                            >
-                              <option value="GOOD">GOOD</option>
-                              <option value="FAIR">FAIR</option>
-                              <option value="POOR">POOR</option>
-                              <option value="DAMAGED">DAMAGED</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Serial No <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={item.serialNo}
-                              onChange={(e) => handleItemChange(item.id, 'serialNo', e.target.value)}
-                              placeholder="Enter serial number"
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${formErrors[`item_serialNo_${index}`]
-                                  ? 'border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                            />
-                            {formErrors[`item_serialNo_${index}`] && (
-                              <p className="mt-1 text-xs sm:text-sm text-red-500">
-                                {formErrors[`item_serialNo_${index}`]}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Motor / Box No <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={item.motorBoxNo}
-                              onChange={(e) => handleItemChange(item.id, 'motorBoxNo', e.target.value)}
-                              placeholder="Enter motor/box number"
-                              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-xs sm:text-sm text-gray-900 dark:text-white ${formErrors[`item_motorBoxNo_${index}`]
-                                  ? 'border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                            />
-                            {formErrors[`item_motorBoxNo_${index}`] && (
-                              <p className="mt-1 text-xs sm:text-sm text-red-500">
-                                {formErrors[`item_motorBoxNo_${index}`]}
-                              </p>
-                            )}
-                          </div>
+                        <div className="hidden md:block" />
+                        <div>
+                          <input
+                            type="text"
+                            value={receivedBy}
+                            onChange={(e) => setReceivedBy(e.target.value)}
+                            placeholder="Name"
+                            className="w-full border-0 border-b border-gray-800 bg-transparent py-1 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-0"
+                          />
+                          <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-1">Received By</div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    }
+                    className="print:p-0"
+                  >
+                    {/* Two-column layout: FROM/TO/Vehicle/Driver | Gatepass/Date/Returnable/Entry (matches print) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                      <div className="space-y-3 sm:space-y-4">
+                        <div>
+                          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">FROM:</div>
+                          <div className="text-xs sm:text-sm text-gray-900 dark:text-white font-medium">Needle Technologies</div>
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Agreement <span className="text-red-500">*</span>
+                          </div>
+                          <select
+                            value={agreementReference}
+                            onChange={(e) => handleAgreementChange(e.target.value)}
+                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.agreementReference ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          >
+                            <option value="">Select Agreement</option>
+                            {mockRentalAgreements.map((agreement) => (
+                              <option key={agreement.id} value={agreement.id}>
+                                {agreement.id} - {agreement.customerName}
+                              </option>
+                            ))}
+                          </select>
+                          {formErrors.agreementReference && (
+                            <p className="mt-1 text-xs text-red-500">{formErrors.agreementReference}</p>
+                          )}
+                        </div>
+                        {agreementReference && (() => {
+                          const agreement = mockRentalAgreements.find((a) => a.id === agreementReference);
+                          return agreement ? (
+                            <>
+                              <div>
+                                <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">TO:</div>
+                                <div className="text-xs sm:text-sm text-gray-900 dark:text-white font-medium">{agreement.customerName}</div>
+                                <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-0.5">{agreement.customerAddress}</div>
+                              </div>
+                            </>
+                          ) : null;
+                        })()}
+                        <div>
+                          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Vehicle: <span className="text-red-500">*</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={vehicleNumber}
+                            onChange={(e) => setVehicleNumber(e.target.value)}
+                            placeholder="e.g. ABC-1234"
+                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.vehicleNumber ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          />
+                          {formErrors.vehicleNumber && <p className="mt-1 text-xs text-red-500">{formErrors.vehicleNumber}</p>}
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Driver: <span className="text-red-500">*</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={driverName}
+                            onChange={(e) => setDriverName(e.target.value)}
+                            placeholder="e.g. Nimal Perera"
+                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.driverName ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          />
+                          {formErrors.driverName && <p className="mt-1 text-xs text-red-500">{formErrors.driverName}</p>}
+                        </div>
+                      </div>
+                      <div className="space-y-3 sm:space-y-4 md:text-right">
+                        <div>
+                          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Gatepass:</div>
+                          <div className="text-base sm:text-lg font-bold text-gray-500 dark:text-gray-400">—</div>
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Date of Issue: <span className="text-red-500">*</span>
+                          </div>
+                          <input
+                            type="date"
+                            value={dateOfIssue}
+                            onChange={(e) => setDateOfIssue(e.target.value)}
+                            className={`w-full md:w-auto min-w-[140px] px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.dateOfIssue ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                          />
+                          {formErrors.dateOfIssue && <p className="mt-1 text-xs text-red-500">{formErrors.dateOfIssue}</p>}
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Returnable:</div>
+                          <select
+                            value={returnable ? 'true' : 'false'}
+                            onChange={(e) => setReturnable(e.target.value === 'true')}
+                            className="w-full md:w-auto min-w-[80px] px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                          >
+                            <option value="true">YES</option>
+                            <option value="false">NO</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Entry:</div>
+                          <select
+                            value={entry}
+                            onChange={(e) => setEntry(e.target.value as 'IN' | 'OUT')}
+                            className="w-full md:w-auto min-w-[80px] px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                          >
+                            <option value="OUT">OUT</option>
+                            <option value="IN">IN</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Items table - matches print layout (Description, Status, Serial No, Motor/Box No) */}
+                    <div className="mb-4 sm:mb-6">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <span className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          Items (minimum {MIN_ITEMS} required)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleAddItem}
+                          disabled={!!agreementReference}
+                          className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-blue-600 dark:text-indigo-400 hover:text-blue-700 dark:hover:text-indigo-300 bg-blue-50 dark:bg-indigo-900/20 rounded border border-blue-200 dark:border-indigo-700 hover:border-blue-300 dark:hover:border-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-blue-600 dark:disabled:hover:text-indigo-400"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Add Item
+                        </button>
+                      </div>
+                      {formErrors.items && <p className="text-xs text-red-500 mb-2">{formErrors.items}</p>}
+                      <div className="overflow-x-auto border border-gray-200 dark:border-slate-600 rounded-lg">
+                        <table className="w-full border-collapse text-xs sm:text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-800 bg-gray-50 dark:bg-slate-700/50">
+                              <th className="text-left py-2 px-2 font-semibold text-gray-900 dark:text-white">Description</th>
+                              <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-white w-24">Status</th>
+                              <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-white">Serial No</th>
+                              <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-white">Motor / Box No</th>
+                              <th className="w-10 py-2" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((item, index) => (
+                              <tr key={item.id} className="border-b border-gray-200 dark:border-slate-600 last:border-b-0">
+                                <td className="py-1.5 px-2 align-top">
+                                  <input
+                                    type="text"
+                                    value={item.description}
+                                    onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
+                                    placeholder="e.g. JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE"
+                                    className={`w-full min-w-[180px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 ${formErrors[`item_description_${index}`] ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                                  />
+                                  {formErrors[`item_description_${index}`] && (
+                                    <p className="text-red-500 text-[10px] mt-0.5">{formErrors[`item_description_${index}`]}</p>
+                                  )}
+                                </td>
+                                <td className="py-1.5 px-2 align-top">
+                                  <select
+                                    value={item.status}
+                                    onChange={(e) => handleItemChange(item.id, 'status', e.target.value)}
+                                    className="w-full px-2 py-1 border rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    <option value="GOOD">GOOD</option>
+                                    <option value="FAIR">FAIR</option>
+                                    <option value="POOR">POOR</option>
+                                    <option value="DAMAGED">DAMAGED</option>
+                                  </select>
+                                </td>
+                                <td className="py-1.5 px-2 align-top">
+                                  <input
+                                    type="text"
+                                    value={item.serialNo}
+                                    onChange={(e) => handleItemChange(item.id, 'serialNo', e.target.value)}
+                                    placeholder="Serial No"
+                                    className={`w-full min-w-[100px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 ${formErrors[`item_serialNo_${index}`] ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                                  />
+                                  {formErrors[`item_serialNo_${index}`] && (
+                                    <p className="text-red-500 text-[10px] mt-0.5">{formErrors[`item_serialNo_${index}`]}</p>
+                                  )}
+                                </td>
+                                <td className="py-1.5 px-2 align-top">
+                                  <input
+                                    type="text"
+                                    value={item.motorBoxNo}
+                                    onChange={(e) => handleItemChange(item.id, 'motorBoxNo', e.target.value)}
+                                    placeholder="Motor/Box No"
+                                    className={`w-full min-w-[90px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 ${formErrors[`item_motorBoxNo_${index}`] ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                                  />
+                                  {formErrors[`item_motorBoxNo_${index}`] && (
+                                    <p className="text-red-500 text-[10px] mt-0.5">{formErrors[`item_motorBoxNo_${index}`]}</p>
+                                  )}
+                                </td>
+                                <td className="py-1.5 pl-2 align-top">
+                                  {items.length > MIN_ITEMS && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveItem(item.id)}
+                                      className="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                                      aria-label="Remove item"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </LetterheadDocument>
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3 px-3 sm:px-6 py-3 sm:py-4 border-t border-gray-200 dark:border-slate-700">
+              {/* Modal Footer - actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3 px-3 sm:px-6 py-3 sm:py-4 border-t border-gray-200 dark:border-slate-700 shrink-0">
                 <button
                   type="button"
                   onClick={handleCloseCreateModal}

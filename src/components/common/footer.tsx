@@ -15,7 +15,7 @@ const Footer: React.FC<FooterProps> = ({ className = '' }) => {
 
   return (
     <footer
-      className={`bg-white dark:bg-slate-950 border-t border-gray-200/80 dark:border-slate-800/80 transition-all duration-300 ${footerLeftMargin} ${className}`}
+      className={`bg-white dark:bg-slate-950 border-t border-gray-200/80 dark:border-slate-800/80 transition-all duration-300 print:hidden ${footerLeftMargin} ${className}`}
     >
       <div className="px-4 py-4 max-w-7xl mx-auto">
         <div className="flex justify-between items-center text-sm text-gray-600 dark:text-slate-400">

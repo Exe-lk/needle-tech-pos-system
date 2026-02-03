@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
@@ -8,7 +9,7 @@ import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Trash2, Printer, FileText, ExternalLink, QrCode, Truck, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, ArrowLeft } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
-import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
+import { LetterheadDocument, LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
 
 type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
 
@@ -105,7 +106,7 @@ interface GatePass {
   receivedBy?: string;
 }
 
-// Machine interface for create form
+// Machine interface for create form (matches print: one row per machine with serial/box/monthly rent)
 interface MachineItem {
   id: string;
   brand: string;
@@ -113,12 +114,13 @@ interface MachineItem {
   type: string;
   quantity: number;
   standardPrice: number;
+  serialNo: string;
+  motorBoxNo: string;
 }
 
-// Add-on interface for create form
+// Add-on interface for create form (add-ons are not associated with machines)
 interface AddOnItem {
   id: string;
-  machineId: string;
   addOnId: string;
   quantity: number;
   price: number;
@@ -174,6 +176,10 @@ interface SearchableSelectProps {
   disabled?: boolean;
   error?: string;
   className?: string;
+  /** Optional class for the dropdown list (e.g. z-[100] when inside overflow container) */
+  dropdownClassName?: string;
+  /** When true, render dropdown in a portal so it is not clipped by overflow (e.g. in modals/tables) */
+  usePortal?: boolean;
 }
 
 const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -184,10 +190,13 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   disabled = false,
   error,
   className = '',
+  dropdownClassName = '',
+  usePortal = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -202,7 +211,10 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const inContainer = containerRef.current?.contains(target);
+      const inDropdown = usePortal && dropdownRef.current?.contains(target);
+      if (!inContainer && !inDropdown) {
         setIsOpen(false);
         setSearchTerm('');
         setHighlightedIndex(0);
@@ -210,7 +222,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     };
     if (isOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, usePortal]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) inputRef.current.focus();
@@ -222,6 +234,30 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
       if (el) el.scrollIntoView({ block: 'nearest' });
     }
   }, [highlightedIndex, isOpen]);
+
+  const updateDropdownPosition = () => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom,
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+  };
+
+  useLayoutEffect(() => {
+    if (usePortal && isOpen && containerRef.current) {
+      updateDropdownPosition();
+      const onScrollOrResize = () => updateDropdownPosition();
+      window.addEventListener('scroll', onScrollOrResize, true);
+      window.addEventListener('resize', onScrollOrResize);
+      return () => {
+        window.removeEventListener('scroll', onScrollOrResize, true);
+        window.removeEventListener('resize', onScrollOrResize);
+      };
+    }
+  }, [isOpen, usePortal]);
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue);
@@ -280,30 +316,42 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         )}
         <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${isOpen ? 'transform rotate-180' : ''}`} />
       </div>
-      {isOpen && (
-        <div
-          ref={dropdownRef}
-          className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg max-h-60 overflow-auto"
-        >
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((option, index) => (
-              <div
-                key={option.value}
-                onClick={() => handleSelect(option.value)}
-                onMouseEnter={() => setHighlightedIndex(index)}
-                className={`px-3 py-2 cursor-pointer flex items-center justify-between ${
-                  index === highlightedIndex ? 'bg-blue-50 dark:bg-indigo-900/30' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
-                } ${option.value === value ? 'bg-blue-100 dark:bg-indigo-900/50' : ''}`}
-              >
-                <span className="text-gray-900 dark:text-white">{option.label}</span>
-                {option.value === value && <Check className="w-4 h-4 text-blue-600 dark:text-indigo-400" />}
-              </div>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">No options found</div>
-          )}
-        </div>
-      )}
+      {isOpen && (!usePortal || dropdownPosition.width > 0) && (() => {
+        const dropdownContent = (
+          <div
+            ref={dropdownRef}
+            className={`z-[100] w-full mt-1 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg max-h-60 overflow-auto ${dropdownClassName}`}
+            style={usePortal ? {
+              position: 'fixed',
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              width: dropdownPosition.width,
+              minWidth: 120,
+            } : { position: 'absolute' as const }}
+          >
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option, index) => (
+                <div
+                  key={option.value}
+                  onClick={() => handleSelect(option.value)}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  className={`px-3 py-2 cursor-pointer flex items-center justify-between ${
+                    index === highlightedIndex ? 'bg-blue-50 dark:bg-indigo-900/30' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
+                  } ${option.value === value ? 'bg-blue-100 dark:bg-indigo-900/50' : ''}`}
+                >
+                  <span className="text-gray-900 dark:text-white">{option.label}</span>
+                  {option.value === value && <Check className="w-4 h-4 text-blue-600 dark:text-indigo-400" />}
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">No options found</div>
+            )}
+          </div>
+        );
+        return usePortal && typeof document !== 'undefined'
+          ? createPortal(dropdownContent, document.body)
+          : dropdownContent;
+      })()}
       {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
     </div>
   );
@@ -753,7 +801,7 @@ const RentalAgreementPage: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [machines, setMachines] = useState<MachineItem[]>([
-    { id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0 },
+    { id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0, serialNo: '', motorBoxNo: '' },
   ]);
   const [addOns, setAddOns] = useState<AddOnItem[]>([]);
   const [signature, setSignature] = useState('');
@@ -761,6 +809,8 @@ const RentalAgreementPage: React.FC = () => {
   const [customerIdNo, setCustomerIdNo] = useState('');
   const [customerFullName, setCustomerFullName] = useState('');
   const [customerSignatureDate, setCustomerSignatureDate] = useState('');
+  const [agreementNo, setAgreementNo] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Machine management state for update form
@@ -779,9 +829,10 @@ const RentalAgreementPage: React.FC = () => {
   const pricing = useMemo(() => {
     let totalMachinePrice = 0;
     machines.forEach((machine) => {
-      if (machine.type && machine.quantity > 0) {
-        const pricePerMachine = standardPrices[machine.type] || 0;
-        machine.standardPrice = pricePerMachine;
+      if (machine.quantity > 0) {
+        const pricePerMachine = machine.standardPrice > 0
+          ? machine.standardPrice
+          : (machine.type ? standardPrices[machine.type] || 0 : 0);
         totalMachinePrice += pricePerMachine * machine.quantity;
       }
     });
@@ -863,47 +914,73 @@ const typeOptions = useMemo(() => {
     console.log('Logout clicked');
   };
 
+  // Generate agreement number (e.g. RA24010001)
+  const generateAgreementNo = () => {
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const seq = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    return `RA${yy}${mm}${seq}`;
+  };
+
   const handleCreateAgreement = () => {
     setIsCreateModalOpen(true);
+    setAgreementNo(generateAgreementNo());
     setCustomerId('');
     setStartDate('');
     setEndDate('');
-    setMachines([{ id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0 }]);
+    setMachines([{ id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0, serialNo: '', motorBoxNo: '' }]);
     setAddOns([]);
     setSignature('');
-    setAgreementDate('');
+    setAgreementDate(new Date().toISOString().split('T')[0]);
     setCustomerIdNo('');
     setCustomerFullName('');
-    setCustomerSignatureDate('');
+    setCustomerSignatureDate(new Date().toISOString().split('T')[0]);
+    setCustomerAddress('');
     setFormErrors({});
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
+    setAgreementNo('');
     setCustomerId('');
     setStartDate('');
     setEndDate('');
-    setMachines([{ id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0 }]);
+    setMachines([{ id: '1', brand: '', model: '', type: '', quantity: 1, standardPrice: 0, serialNo: '', motorBoxNo: '' }]);
     setAddOns([]);
     setSignature('');
     setAgreementDate('');
     setCustomerIdNo('');
     setCustomerFullName('');
     setCustomerSignatureDate('');
+    setCustomerAddress('');
     setFormErrors({});
   };
+
+  // Auto-fill customer full name and address when customer is selected (signature stays empty for user to enter/print)
+  useEffect(() => {
+    if (!customerId) {
+      setCustomerFullName('');
+      setCustomerAddress('');
+      return;
+    }
+    const customer = mockCustomers.find((c) => c.id === customerId);
+    if (customer) {
+      setCustomerFullName(customer.name);
+      setCustomerAddress(customer.address || '');
+    }
+  }, [customerId]);
 
   const handleAddMachine = () => {
     setMachines([
       ...machines,
-      { id: Date.now().toString(), brand: '', model: '', type: '', quantity: 1, standardPrice: 0 },
+      { id: Date.now().toString(), brand: '', model: '', type: '', quantity: 1, standardPrice: 0, serialNo: '', motorBoxNo: '' },
     ]);
   };
 
   const handleRemoveMachine = (id: string) => {
     if (machines.length > 1) {
       setMachines(machines.filter((m) => m.id !== id));
-      setAddOns(addOns.filter((a) => a.machineId !== id));
     }
   };
 
@@ -924,11 +1001,17 @@ const typeOptions = useMemo(() => {
       })
     );
   };
+  // Build machine description for display (e.g. BROTHER XL2600i - DOMESTIC SEWING MACHINE)
+  const getMachineDescription = (m: MachineItem) => {
+    if (!m.brand && !m.model && !m.type) return '';
+    const typeLabel = m.type ? m.type.toUpperCase() : '';
+    return `${(m.brand || '').toUpperCase()} ${(m.model || '').toUpperCase()}${typeLabel ? ` - ${typeLabel}` : ''}`.trim();
+  };
 
   const handleAddAddOn = () => {
     setAddOns([
       ...addOns,
-      { id: Date.now().toString(), machineId: '', addOnId: '', quantity: 1, price: 0 },
+      { id: Date.now().toString(), addOnId: '', quantity: 1, price: 0 },
     ]);
   };
 
@@ -970,7 +1053,6 @@ const typeOptions = useMemo(() => {
     });
 
     addOns.forEach((addOn, index) => {
-      if (!addOn.machineId) errors[`addon_machine_${index}`] = 'Machine ID is required';
       if (!addOn.addOnId) errors[`addon_id_${index}`] = 'Add-on ID is required';
       if (addOn.quantity < 1) errors[`addon_quantity_${index}`] = 'Quantity must be at least 1';
     });
@@ -1591,8 +1673,8 @@ const typeOptions = useMemo(() => {
 
     const mainContent = (
       <>
-        {/* Two-column: Customer (left) | Agreement & Date (right) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+        {/* Two-column: Customer (left) | Agreement (right) same row; Address (left) | Date of Issue (right) same row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 mb-6">
           <div className="space-y-2">
             <div>
               <span className="text-sm font-semibold text-gray-700">Customer: </span>
@@ -1603,7 +1685,7 @@ const typeOptions = useMemo(() => {
               <span className="text-sm text-gray-900">{agreementInfo.customerAddress || 'N/A'}</span>
             </div>
           </div>
-          <div className="space-y-2 text-left sm:text-right">
+          <div className="space-y-2 text-left sm:text-right print:text-right">
             <div>
               <span className="text-sm font-semibold text-gray-700">Agreement: </span>
               <span className="text-sm text-gray-900">-{agreementInfo.agreementNo || 'TBD'}</span>
@@ -1693,7 +1775,7 @@ const typeOptions = useMemo(() => {
     );
 
     const signatureBlock = (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 print:break-inside-avoid">
         <div>
           <div className="text-sm font-semibold text-gray-700 mb-2">Customer Signature</div>
           <div className="border-b border-gray-800 pb-2 min-h-[44px]">
@@ -1721,7 +1803,7 @@ const typeOptions = useMemo(() => {
     );
 
     return (
-      <div className="bg-white p-6 sm:p-8 max-w-[210mm] mx-auto print:p-8" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="bg-white p-6 sm:p-8 max-w-[210mm] mx-auto print:p-8 print:overflow-visible" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
         <LetterheadDocument
           documentTitle="HIRING MACHINE AGREEMENT"
           footerStyle="simple"
@@ -1944,7 +2026,7 @@ const typeOptions = useMemo(() => {
           </div>
         </div>
 
-        <div className="hidden print:block print:fixed print:inset-0 print:z-50 print:bg-white print:p-0 print:m-0">
+        <div className="hidden print:block print:bg-white print:overflow-visible">
           {renderRentalAgreementDocument(agreementInfo)}
         </div>
       </div>
@@ -1953,9 +2035,12 @@ const typeOptions = useMemo(() => {
 
   return (
     <>
-      {/* Print-only rental agreement document */}
+      {/* Print-only rental agreement document - normal flow so signature block and footer print (no fixed clipping) */}
       {selectedAgreement && (
-        <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white">
+        <div
+          id="rental-agreement-print"
+          className="hidden print:block print:bg-white print:z-[9999] print:overflow-visible"
+        >
           {renderRentalAgreementDocument(getRentalAgreementInfo(selectedAgreement.id, agreements))}
         </div>
       )}
@@ -2044,459 +2129,378 @@ const typeOptions = useMemo(() => {
 
 
 
-        {/* Create Rental Agreement Modal */}
+        {/* Create Rental Agreement Modal - Document-style (matches print Hiring Machine Agreement) */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  Create Rental Agreement
-                </h2>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-slate-700 dark:border-slate-600" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+              {/* Modal header bar - close only */}
+              <div className="flex-shrink-0 flex items-center justify-end px-4 py-2 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80">
                 <button
                   onClick={handleCloseCreateModal}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 transition-colors"
+                  aria-label="Close"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6">
-                <form onSubmit={(e) => { e.preventDefault(); handleSubmitCreate(); }} className="space-y-6">
-                  {/* Customer Selection */}
-                                    {/* Customer Selection */}
-                                    <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Customer <span className="text-red-500">*</span>
-                    </label>
-                    <SearchableSelect
-                      value={customerId}
-                      onChange={setCustomerId}
-                      options={customerOptions}
-                      placeholder="Select a customer"
-                      error={formErrors.customerId}
-                    />
-                    {formErrors.customerId && (
-                      <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formErrors.customerId}</p>
-                    )}
+              <div className="flex-1 overflow-y-auto">
+                <form onSubmit={(e) => { e.preventDefault(); handleSubmitCreate(); }} className="p-6 sm:p-8">
+                  {/* Document-style header: NEEDLE / Supplier text / HIRING MACHINE AGREEMENT */}
+                  <div className="mb-6">
+                    <div className="flex flex-row items-center justify-between gap-4 mb-2">
+                      <div className="flex-shrink-0">
+                        <div className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white">NEEDLE</div>
+                        <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mt-0.5">TECHNOLOGIES CO.(PVT) LTD.</div>
+                      </div>
+                      <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-400 text-right flex-1">
+                        {LETTERHEAD_COMPANY_INFO.tagline}
+                      </p>
+                    </div>
+                    <div className="border-b-2 border-gray-800 dark:border-slate-600 mt-3 mb-4" />
+                    <h1 className="text-center text-xl sm:text-2xl font-bold uppercase text-gray-900 dark:text-white tracking-wide">
+                      Hiring Machine Agreement
+                    </h1>
                   </div>
 
-                  {/* Date Fields */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Start Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.startDate
-                          ? 'border-red-500 dark:border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
-                          } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                      />
-                      {formErrors.startDate && (
-                        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formErrors.startDate}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        End Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.endDate
-                          ? 'border-red-500 dark:border-red-500'
-                          : 'border-gray-300 dark:border-slate-600'
-                          } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                      />
-                      {formErrors.endDate && (
-                        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formErrors.endDate}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Machines Section */}
-                  <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machines</h3>
-                      <button
-                        type="button"
-                        onClick={handleAddMachine}
-                        className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Add Machine</span>
-                      </button>
-                    </div>
-
-                    <div className="space-y-4">
-                      {machines.map((machine, index) => (
-                        <div
-                          key={machine.id}
-                          className="p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-gray-50 dark:bg-slate-700/50"
-                        >
-                          <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                              Machine {index + 1}
-                            </h4>
-                            {machines.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveMachine(machine.id)}
-                                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Brand <span className="text-red-500">*</span>
-                              </label>
-                              <SearchableSelect
-                                value={machine.brand}
-                                onChange={(value) => handleMachineChange(machine.id, 'brand', value)}
-                                options={brandOptions}
-                                placeholder="Select brand"
-                                error={formErrors[`machine_brand_${index}`]}
-                              />
-                              {formErrors[`machine_brand_${index}`] && (
-                                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                                  {formErrors[`machine_brand_${index}`]}
-                                </p>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Model <span className="text-red-500">*</span>
-                              </label>
-                              <SearchableSelect
-                                value={machine.model}
-                                onChange={(value) => handleMachineChange(machine.id, 'model', value)}
-                                options={getModelOptions(machine.brand)}
-                                placeholder="Select model"
-                                disabled={!machine.brand}
-                                error={formErrors[`machine_model_${index}`]}
-                              />
-                              {formErrors[`machine_model_${index}`] && (
-                                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                                  {formErrors[`machine_model_${index}`]}
-                                </p>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Type <span className="text-red-500">*</span>
-                              </label>
-                              <SearchableSelect
-                                value={machine.type}
-                                onChange={(value) => handleMachineChange(machine.id, 'type', value)}
-                                options={typeOptions}
-                                placeholder="Select type"
-                                error={formErrors[`machine_type_${index}`]}
-                              />
-                              {formErrors[`machine_type_${index}`] && (
-                                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                                  {formErrors[`machine_type_${index}`]}
-                                </p>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Quantity <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                value={machine.quantity}
-                                onChange={(e) =>
-                                  handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
-                                }
-                                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors[`machine_quantity_${index}`]
-                                  ? 'border-red-500 dark:border-red-500'
-                                  : 'border-gray-300 dark:border-slate-600'
-                                  } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                              />
-                              {formErrors[`machine_quantity_${index}`] && (
-                                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                                  {formErrors[`machine_quantity_${index}`]}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {machine.type && (
-                            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                              <p className="text-sm text-gray-700 dark:text-gray-300">
-                                <span className="font-medium">Standard Price:</span> Rs.{' '}
-                                {machine.standardPrice.toLocaleString('en-LK', {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}{' '}
-                                per machine
-                              </p>
-                            </div>
+                  {/* Agreement details: Customer | Agreement No & Date of Issue */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Customer: </span>
+                        <div className="mt-1">
+                          <SearchableSelect
+                            value={customerId}
+                            onChange={setCustomerId}
+                            options={customerOptions}
+                            placeholder="Select a customer"
+                            error={formErrors.customerId}
+                            className="max-w-full"
+                          />
+                          {formErrors.customerId && (
+                            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.customerId}</p>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Add-ons Section (Optional) */}
-                  <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons (Optional)</h3>
-                      <button
-                        type="button"
-                        onClick={handleAddAddOn}
-                        className="px-4 py-2 bg-gray-600 dark:bg-slate-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 dark:hover:bg-slate-700 flex items-center space-x-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Add Add-on</span>
-                      </button>
-                    </div>
-
-                    {addOns.length > 0 && (
-                      <div className="space-y-4">
-                        {addOns.map((addOn, index) => (
-                          <div
-                            key={addOn.id}
-                            className="p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-gray-50 dark:bg-slate-700/50"
-                          >
-                            <div className="flex items-center justify-between mb-4">
-                              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Add-on {index + 1}
-                              </h4>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveAddOn(addOn.id)}
-                                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Machine
-                                </label>
-                                <select
-                                  value={addOn.machineId}
-                                  onChange={(e) => handleAddOnChange(addOn.id, 'machineId', e.target.value)}
-                                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                                >
-                                  <option value="">Select machine</option>
-                                  {getAvailableMachineIds().map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                      {m.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Add-on
-                                </label>
-                                <select
-                                  value={addOn.addOnId}
-                                  onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
-                                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                                >
-                                  <option value="">Select add-on</option>
-                                  {mockAddOns.map((ao) => (
-                                    <option key={ao.id} value={ao.id}>
-                                      {ao.name} - Rs. {ao.price.toLocaleString('en-LK')}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                  Quantity
-                                </label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={addOn.quantity}
-                                  onChange={(e) =>
-                                    handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)
-                                  }
-                                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
                       </div>
-                    )}
-                  </div>
-
-                  {/* Pricing Summary */}
-                  {pricing.totalPrice > 0 && (
-                    <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                        Pricing Summary
-                      </h3>
-                      <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-700 dark:text-gray-300">Total Machine Price:</span>
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            Rs. {pricing.totalMachinePrice.toLocaleString('en-LK', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
-                        </div>
-                        {pricing.totalAddOnPrice > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-700 dark:text-gray-300">Total Add-on Price:</span>
-                            <span className="font-medium text-gray-900 dark:text-white">
-                              Rs. {pricing.totalAddOnPrice.toLocaleString('en-LK', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between text-lg font-semibold pt-2 border-t border-gray-200 dark:border-slate-600">
-                          <span className="text-gray-900 dark:text-white">Total Price:</span>
-                          <span className="text-blue-600 dark:text-blue-400">
-                            Rs. {pricing.totalPrice.toLocaleString('en-LK', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Customer Signature Section */}
-                  <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Customer Signature Details
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Agreement Date <span className="text-red-500">*</span>
-                        </label>
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Address: </span>
+                        <input
+                          type="text"
+                          value={customerAddress}
+                          onChange={(e) => setCustomerAddress(e.target.value)}
+                          placeholder="Enter address"
+                          className="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-3 sm:text-right">
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Agreement: </span>
+                        <span className="text-sm text-gray-900 dark:text-white">-{agreementNo || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Date of Issue: </span>
                         <input
                           type="date"
                           value={agreementDate}
                           onChange={(e) => setAgreementDate(e.target.value)}
-                          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.agreementDate
-                            ? 'border-red-500 dark:border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                            } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
+                          className={`ml-1 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors.agreementDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
                         />
                         {formErrors.agreementDate && (
-                          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formErrors.agreementDate}</p>
+                          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.agreementDate}</p>
                         )}
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Customer Signature Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={customerSignatureDate}
-                          onChange={(e) => setCustomerSignatureDate(e.target.value)}
-                          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.customerSignatureDate
-                            ? 'border-red-500 dark:border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                            } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                        />
-                        {formErrors.customerSignatureDate && (
-                          <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                            {formErrors.customerSignatureDate}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Customer ID No <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={customerIdNo}
-                          onChange={(e) => setCustomerIdNo(e.target.value)}
-                          placeholder="e.g., 72348.961V"
-                          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.customerIdNo
-                            ? 'border-red-500 dark:border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                            } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                        />
-                        {formErrors.customerIdNo && (
-                          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formErrors.customerIdNo}</p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Customer Full Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={customerFullName}
-                          onChange={(e) => setCustomerFullName(e.target.value)}
-                          placeholder="Enter full name"
-                          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.customerFullName
-                            ? 'border-red-500 dark:border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                            } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                        />
-                        {formErrors.customerFullName && (
-                          <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                            {formErrors.customerFullName}
-                          </p>
-                        )}
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Customer Signature
-                        </label>
-                        <input
-                          type="text"
-                          value={signature}
-                          onChange={(e) => setSignature(e.target.value)}
-                          placeholder="Enter signature or name"
-                          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 ${formErrors.signature
-                            ? 'border-red-500 dark:border-red-500'
-                            : 'border-gray-300 dark:border-slate-600'
-                            } bg-white dark:bg-slate-700 text-gray-900 dark:text-white`}
-                        />
-                        {formErrors.signature && (
-                          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formErrors.signature}</p>
-                        )}
+                      <div className="grid grid-cols-2 gap-2 text-left sm:text-right">
+                        <div>
+                          <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Start: </span>
+                          <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className={`w-full mt-0.5 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors.startDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                          />
+                          {formErrors.startDate && <p className="text-xs text-red-600">{formErrors.startDate}</p>}
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">End: </span>
+                          <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className={`w-full mt-0.5 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors.endDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                          />
+                          {formErrors.endDate && <p className="text-xs text-red-600">{formErrors.endDate}</p>}
+                        </div>
                       </div>
                     </div>
                   </div>
 
+                  {/* Hired Machines table - matches print layout */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Hired Machines</h3>
+                      <button
+                        type="button"
+                        onClick={handleAddMachine}
+                        className="px-3 py-1.5 bg-blue-600 dark:bg-indigo-600 text-white text-xs font-medium rounded hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Machine
+                      </button>
+                    </div>
+                    <div className="border border-gray-800 dark:border-slate-600 rounded overflow-visible">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-gray-100 dark:bg-slate-700">
+                            <th className="border border-gray-800 dark:border-slate-600 px-2 py-2 text-left font-semibold text-gray-900 dark:text-white overflow-visible">
+                              Model - Description
+                            </th>
+                            <th className="border border-gray-800 dark:border-slate-600 px-2 py-2 text-center font-semibold text-gray-900 dark:text-white w-28">
+                              Serial No
+                            </th>
+                            <th className="border border-gray-800 dark:border-slate-600 px-2 py-2 text-center font-semibold text-gray-900 dark:text-white w-28">
+                              Motor / Box No
+                            </th>
+                            <th className="border border-gray-800 dark:border-slate-600 px-2 py-2 text-center font-semibold text-gray-900 dark:text-white w-24">
+                              Monthly Res
+                            </th>
+                            <th className="border border-gray-800 dark:border-slate-600 w-10" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {machines.map((machine, index) => (
+                            <tr key={machine.id} className="bg-white dark:bg-slate-800">
+                              <td className="border border-gray-800 dark:border-slate-600 px-2 py-1.5 align-top overflow-visible relative">
+                                <div className="flex flex-wrap gap-1">
+                                  <SearchableSelect
+                                    value={machine.brand}
+                                    onChange={(v) => handleMachineChange(machine.id, 'brand', v)}
+                                    options={brandOptions}
+                                    placeholder="Brand"
+                                    error={formErrors[`machine_brand_${index}`]}
+                                    className="min-w-[80px] flex-1"
+                                    dropdownClassName="z-[100]"
+                                    usePortal
+                                  />
+                                  <SearchableSelect
+                                    value={machine.model}
+                                    onChange={(v) => handleMachineChange(machine.id, 'model', v)}
+                                    options={getModelOptions(machine.brand)}
+                                    placeholder="Model"
+                                    disabled={!machine.brand}
+                                    error={formErrors[`machine_model_${index}`]}
+                                    className="min-w-[80px] flex-1"
+                                    dropdownClassName="z-[100]"
+                                    usePortal
+                                  />
+                                  <SearchableSelect
+                                    value={machine.type}
+                                    onChange={(v) => handleMachineChange(machine.id, 'type', v)}
+                                    options={typeOptions}
+                                    placeholder="Type"
+                                    error={formErrors[`machine_type_${index}`]}
+                                    className="min-w-[80px] flex-1"
+                                    dropdownClassName="z-[100]"
+                                    usePortal
+                                  />
+                                </div>
+                                {getMachineDescription(machine) && (
+                                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 font-medium">
+                                    {getMachineDescription(machine)}
+                                  </div>
+                                )}
+                                {formErrors[`machine_brand_${index}`] && (
+                                  <p className="text-xs text-red-600 mt-0.5">{formErrors[`machine_brand_${index}`]}</p>
+                                )}
+                              </td>
+                              <td className="border border-gray-800 dark:border-slate-600 px-2 py-1 align-top">
+                                <input
+                                  type="text"
+                                  value={machine.serialNo}
+                                  onChange={(e) => handleMachineChange(machine.id, 'serialNo', e.target.value)}
+                                  placeholder="e.g. SN-2024-001"
+                                  className="w-full px-2 py-1 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 text-center text-sm"
+                                />
+                              </td>
+                              <td className="border border-gray-800 dark:border-slate-600 px-2 py-1 align-top">
+                                <input
+                                  type="text"
+                                  value={machine.motorBoxNo}
+                                  onChange={(e) => handleMachineChange(machine.id, 'motorBoxNo', e.target.value)}
+                                  placeholder="e.g. BOX-2024-001"
+                                  className="w-full px-2 py-1 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 text-center text-sm"
+                                />
+                              </td>
+                              <td className="border border-gray-800 dark:border-slate-600 px-2 py-1 align-top">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={machine.standardPrice || ''}
+                                  onChange={(e) => handleMachineChange(machine.id, 'standardPrice', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-2 py-1 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 text-right text-sm"
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td className="border border-gray-800 dark:border-slate-600 px-1 py-1 align-middle text-center">
+                                {machines.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveMachine(machine.id)}
+                                    className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                                    aria-label="Remove row"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Add-ons (Optional) - after machines, before Total */}
+                  <div className="mb-6 border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50 dark:bg-slate-700/50 border-b border-gray-200 dark:border-slate-600 flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Add-ons (Optional)</span>
+                      <button
+                        type="button"
+                        onClick={handleAddAddOn}
+                        className="px-3 py-1.5 bg-gray-600 dark:bg-slate-600 text-white text-xs font-medium rounded hover:bg-gray-700 dark:hover:bg-slate-700 flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Add-on
+                      </button>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {addOns.length > 0 ? (
+                        addOns.map((addOn) => (
+                          <div key={addOn.id} className="p-3 border border-gray-200 dark:border-slate-600 rounded bg-gray-50 dark:bg-slate-700/30 flex flex-wrap items-center gap-3">
+                            <select
+                              value={addOn.addOnId}
+                              onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
+                              className="px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                            >
+                              <option value="">Select add-on</option>
+                              {mockAddOns.map((ao) => (
+                                <option key={ao.id} value={ao.id}>{ao.name} - Rs. {ao.price.toLocaleString('en-LK')}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              min="1"
+                              value={addOn.quantity}
+                              onChange={(e) => handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)}
+                              className="w-20 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                            />
+                            <button type="button" onClick={() => handleRemoveAddOn(addOn.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">No add-ons added.</p>
+                      )}
+                    </div>
+                    {/* Total: after machines + add-ons */}
+                    <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/30">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                        Total: {pricing.totalPrice.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Terms & Conditions - read-only (same as print) */}
+                  <div className="mb-6">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">Terms & Conditions</h3>
+                    <div className="space-y-1.5 text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-slate-700/40 rounded p-4 border border-gray-200 dark:border-slate-600">
+                      <p><span className="font-semibold">(01)</span> You have to be paid in cash double monthly rental fee on the date of rent machine issues. The excess payment would be immediately return to you as and when you returned the hired machine within the stipulated period.</p>
+                      <p><span className="font-semibold">(02)</span> Above payment has to be paid 05 days prior to next month.</p>
+                      <p><span className="font-semibold">(03)</span> Customer has to take total responsibility with regard to security of the machine.</p>
+                      <p><span className="font-semibold">(04)</span> Both the parties can withdraw or return the machine with one month prior notice.</p>
+                      <p><span className="font-semibold">(05)</span> Company will examine the machine at the point of returning and will release due security deposit.</p>
+                    </div>
+                  </div>
+
+                  {/* Signature section - two columns (signature empty by default; only user-entered value shown/printed) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Customer Signature</div>
+                      <div className="text-sm text-gray-900 dark:text-white border-b border-gray-800 dark:border-slate-600 pb-2 min-h-[2rem] print:min-h-[2rem]">
+                        {signature || ''}
+                      </div>
+                      <input
+                        type="text"
+                        value={signature}
+                        onChange={(e) => setSignature(e.target.value)}
+                        placeholder="Enter signature (leave blank for print)"
+                        className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-slate-600 rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                      />
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">(Agreed upon the terms & Conditions)</div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">ID NO: </span>
+                        <input
+                          type="text"
+                          value={customerIdNo}
+                          onChange={(e) => setCustomerIdNo(e.target.value)}
+                          placeholder="e.g. 123456789V"
+                          className={`ml-1 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white inline-block min-w-[140px] ${formErrors.customerIdNo ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                        />
+                        {formErrors.customerIdNo && <p className="text-xs text-red-600 mt-0.5">{formErrors.customerIdNo}</p>}
+                      </div>
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Full Name: </span>
+                        <input
+                          type="text"
+                          value={customerFullName}
+                          onChange={(e) => setCustomerFullName(e.target.value)}
+                          placeholder="Full name"
+                          className={`ml-1 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white inline-block min-w-[140px] ${formErrors.customerFullName ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                        />
+                        {formErrors.customerFullName && <p className="text-xs text-red-600 mt-0.5">{formErrors.customerFullName}</p>}
+                      </div>
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Date: </span>
+                        <input
+                          type="date"
+                          value={customerSignatureDate}
+                          onChange={(e) => setCustomerSignatureDate(e.target.value)}
+                          className={`ml-1 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors.customerSignatureDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                        />
+                        {formErrors.customerSignatureDate && <p className="text-xs text-red-600 mt-0.5">{formErrors.customerSignatureDate}</p>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Company footer - matches print */}
+                  <div className="bg-slate-700 dark:bg-slate-800 text-white rounded-lg px-4 py-3 mb-6 text-center text-xs">
+                    <div>{LETTERHEAD_COMPANY_INFO.address}</div>
+                    <div className="mt-0.5">
+                      Tel: {LETTERHEAD_COMPANY_INFO.telephone.join(', ')} Fax: {LETTERHEAD_COMPANY_INFO.fax}
+                    </div>
+                    <div>Email: {LETTERHEAD_COMPANY_INFO.email}</div>
+                  </div>
+
                   {/* Form Actions */}
-                  <div className="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200 dark:border-slate-700">
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-slate-700">
                     <button
                       type="button"
                       onClick={handleCloseCreateModal}
-                      className="px-6 py-3 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-slate-600 transition-colors duration-200 font-medium"
+                      className="px-5 py-2.5 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 font-medium text-sm"
                       disabled={isSubmitting}
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                      className="px-5 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       disabled={isSubmitting}
                     >
-                      {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                       Create Agreement
                     </button>
                   </div>
