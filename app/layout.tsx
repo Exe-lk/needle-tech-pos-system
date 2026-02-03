@@ -45,13 +45,15 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-[100dvh] h-[100dvh] max-h-[100dvh] overflow-hidden print:min-h-0 print:h-auto print:max-h-none print:overflow-visible`}
       >
         <SidebarProvider>
-          <div className="flex-1">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y print:overflow-visible print:min-h-0">
             {children}
           </div>
-          <Footer />
+          <div className="flex-shrink-0">
+            <Footer />
+          </div>
         </SidebarProvider>
       </body>
     </html>
