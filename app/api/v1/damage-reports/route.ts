@@ -1,13 +1,21 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
+import { Decimal } from '@prisma/client/runtime/library';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
-import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-export const GET = withAuth(async (request: NextRequest) => {
+/**
+ * @swagger
+ * /api/v1/damage-reports:
+ *   get:
+ *     summary: Get all damage reports
+ *     tags: [Damage Reports]
+ *     security:
+ *       - bearerAuth: []
+ */
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
@@ -16,53 +24,43 @@ export const GET = withAuth(async (request: NextRequest) => {
     const resolvedFilter = searchParams.get('resolved');
     const severityFilter = searchParams.get('severity');
     
-    const filter: any = {};
+    const where: any = {};
     
     if (search) {
-      filter.$or = [
-        { description: { $regex: search, $options: 'i' } },
+      where.OR = [
+        { description: { contains: search, mode: 'insensitive' } },
       ];
     }
     
-    if (machineIdFilter && isValidObjectId(machineIdFilter)) {
-      filter.machineId = toObjectId(machineIdFilter);
-    }
-    if (rentalIdFilter && isValidObjectId(rentalIdFilter)) {
-      filter.rentalId = toObjectId(rentalIdFilter);
-    }
-    if (resolvedFilter !== null) {
-      filter.resolved = resolvedFilter === 'true';
-    }
-    if (severityFilter) {
-      filter.severity = severityFilter;
-    }
+    if (machineIdFilter) where.machineId = machineIdFilter;
+    if (rentalIdFilter) where.rentalId = rentalIdFilter;
+    if (resolvedFilter !== null) where.resolved = resolvedFilter === 'true';
+    if (severityFilter) where.severity = severityFilter;
     
-    const totalItems = await db.collection('damageReports').countDocuments(filter);
+    const totalItems = await prisma.damageReport.count({ where });
     const skip = (page - 1) * limit;
-    const sortObj: Record<string, 1 | -1> = { [sortBy]: sortOrder as 1 | -1 };
+    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
     
-    const damageReports = await db
-      .collection('damageReports')
-      .find(filter)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
-    
-    const sanitizedReports = damageReports.map(report => sanitizeObject(report));
+    const damageReports = await prisma.damageReport.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder_ },
+      include: { machine: true, rental: true, inspector: true }
+    });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      sanitizedReports,
+      damageReports,
       pagination,
       'Damage reports retrieved successfully',
-      { sortBy, sortOrder: sortOrder === 1 ? 'asc' : 'desc' },
+      { sortBy, sortOrder: sortOrder_ },
       search || undefined,
       {
         ...(machineIdFilter && { machineId: machineIdFilter }),
         ...(rentalIdFilter && { rentalId: rentalIdFilter }),
-        ...(resolvedFilter !== null && { resolved: resolvedFilter === 'true' }),
+        ...(resolvedFilter && { resolved: resolvedFilter === 'true' }),
         ...(severityFilter && { severity: severityFilter }),
       }
     );
@@ -72,10 +70,19 @@ export const GET = withAuth(async (request: NextRequest) => {
   }
 });
 
-export const POST = withAuth(async (request: NextRequest) => {
+/**
+ * @swagger
+ * /api/v1/damage-reports:
+ *   post:
+ *     summary: Create a new damage report
+ *     tags: [Damage Reports]
+ *     security:
+ *       - bearerAuth: []
+ */
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { machineId, rentalId, returnId, severity, category, description, photos, estimatedRepairCost, approvedChargeToCustomer } = body;
+    const { machineId, rentalId, severity, category, description, estimatedRepairCost = 0 } = body;
     
     if (!machineId || !severity || !category || !description) {
       return validationErrorResponse('Missing required fields', {
@@ -86,41 +93,36 @@ export const POST = withAuth(async (request: NextRequest) => {
       });
     }
     
-    if (!isValidObjectId(machineId)) {
-      return validationErrorResponse('Invalid machine ID');
-    }
+    const machine = await prisma.machine.findUnique({ where: { id: machineId } });
     
-    const db = await getDatabase();
-    
-    // Verify machine exists
-    const machine = await db.collection('machines').findOne({ _id: toObjectId(machineId) });
     if (!machine) {
-      return validationErrorResponse('Machine not found');
+      return validationErrorResponse('Invalid machine', {
+        machineId: ['Machine not found'],
+      });
     }
     
-    const now = new Date();
-    const newDamageReport = {
-      machineId: toObjectId(machineId),
-      rentalId: rentalId && isValidObjectId(rentalId) ? toObjectId(rentalId) : null,
-      returnId: returnId && isValidObjectId(returnId) ? toObjectId(returnId) : null,
-      severity,
-      category,
-      description,
-      photos: photos || [],
-      estimatedRepairCost: estimatedRepairCost || 0,
-      approvedChargeToCustomer: approvedChargeToCustomer || 0,
-      billedInvoiceId: null,
-      resolved: false,
-      resolvedAt: null,
-      createdByUserId: null, // TODO: Get from auth context
-      createdAt: now,
-      updatedAt: now,
-    };
+    if (rentalId) {
+      const rental = await prisma.rental.findUnique({ where: { id: rentalId } });
+      if (!rental) {
+        return validationErrorResponse('Invalid rental', {
+          rentalId: ['Rental not found'],
+        });
+      }
+    }
     
-    const result = await db.collection('damageReports').insertOne(newDamageReport);
-    const createdReport = await db.collection('damageReports').findOne({ _id: result.insertedId });
+    const newReport = await prisma.damageReport.create({
+      data: {
+        machineId,
+        rentalId: rentalId || null,
+        severity,
+        category,
+        description,
+        estimatedRepairCost: new Decimal(estimatedRepairCost),
+      },
+      include: { machine: true, rental: true, inspector: true }
+    });
     
-    return successResponse(sanitizeObject(createdReport), 'Damage report created successfully', 201);
+    return successResponse(newReport, 'Damage report created successfully', 201);
   } catch (error: any) {
     console.error('Error creating damage report:', error);
     return errorResponse('Failed to create damage report', 500);

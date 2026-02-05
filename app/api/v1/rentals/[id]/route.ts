@@ -1,10 +1,9 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
-import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
-import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
+import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-export const GET = withAuth(async (
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -12,50 +11,54 @@ export const GET = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid rental ID');
-    }
-    
-    const db = await getDatabase();
-    const rentalId = toObjectId(id);
-    
-    const rental = await db.collection('rentals').findOne({ _id: rentalId });
+    const rental = await prisma.rental.findUnique({
+      where: { id },
+      include: { customer: true, machines: true }
+    });
     
     if (!rental) {
       return notFoundResponse('Rental not found');
     }
     
-    // Populate related data
-    const customer = rental.customerId 
-      ? await db.collection('customers').findOne({ _id: rental.customerId })
-      : null;
-    
-    const machines = await Promise.all(
-      (rental.machines || []).map(async (machine: any) => {
-        const machineDoc = machine.machineId 
-          ? await db.collection('machines').findOne({ _id: machine.machineId })
-          : null;
-        return {
-          ...machine,
-          machine: sanitizeObject(machineDoc),
-        };
-      })
-    );
-    
-    const rentalData = {
-      ...sanitizeObject(rental),
-      customer: sanitizeObject(customer),
-      machines,
-    };
-    
-    return successResponse(rentalData, 'Rental retrieved successfully');
+    return successResponse(rental, 'Rental retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching rental:', error);
     return errorResponse('Failed to retrieve rental', 500);
   }
 });
 
-export const PUT = withAuth(async (
+export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+  request: NextRequest,
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    
+    const existingRental = await prisma.rental.findUnique({ where: { id } });
+    if (!existingRental) {
+      return notFoundResponse('Rental not found');
+    }
+    
+    const updatedRental = await prisma.rental.update({
+      where: { id },
+      data: {
+        ...(body.status && { status: body.status }),
+        ...(body.endDate && { endDate: new Date(body.endDate) }),
+        ...(body.notes && { notes: body.notes }),
+      },
+      include: { customer: true, machines: true }
+    });
+    
+    return successResponse(updatedRental, 'Rental updated successfully');
+  } catch (error: any) {
+    console.error('Error updating rental:', error);
+    return errorResponse('Failed to update rental', 500);
+  }
+});
+
+export const DELETE = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -63,21 +66,19 @@ export const PUT = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid rental ID');
-    }
-    
-    const body = await request.json();
-    const db = await getDatabase();
-    const rentalId = toObjectId(id);
-    
-    const existingRental = await db.collection('rentals').findOne({ _id: rentalId });
-    if (!existingRental) {
+    const rental = await prisma.rental.findUnique({ where: { id } });
+    if (!rental) {
       return notFoundResponse('Rental not found');
     }
     
-    const updateData: any = {
-      updatedAt: new Date(),
+    await prisma.rental.delete({ where: { id } });
+    
+    return successResponse({ id }, 'Rental deleted successfully');
+  } catch (error: any) {
+    console.error('Error deleting rental:', error);
+    return errorResponse('Failed to delete rental', 500);
+  }
+});
     };
     
     if (body.status !== undefined) updateData.status = body.status;

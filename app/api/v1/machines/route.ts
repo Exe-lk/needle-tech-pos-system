@@ -1,61 +1,81 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
-import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-export const GET = withAuth(async (request: NextRequest) => {
+/**
+ * @swagger
+ * /api/v1/machines:
+ *   get:
+ *     summary: Get all machines
+ *     description: Retrieve paginated list of machines with Supabase auth
+ *     tags: [Machines]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ */
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
-    const brandFilter = searchParams.get('brand');
     const statusFilter = searchParams.get('status');
-    const categoryFilter = searchParams.get('category');
+    const brandIdFilter = searchParams.get('brandId');
     
-    const filter: any = {};
+    const where: any = {};
     
     if (search) {
-      filter.$or = [
-        { serialNumber: { $regex: search, $options: 'i' } },
-        { model: { $regex: search, $options: 'i' } },
-        { boxNumber: { $regex: search, $options: 'i' } },
-        { 'qrCode.value': { $regex: search, $options: 'i' } },
+      where.OR = [
+        { serialNumber: { contains: search, mode: 'insensitive' } },
+        { boxNumber: { contains: search, mode: 'insensitive' } },
       ];
     }
     
-    if (brandFilter) filter.brand = brandFilter;
-    if (statusFilter) filter.status = statusFilter;
-    if (categoryFilter) filter.category = categoryFilter;
+    if (statusFilter) where.status = statusFilter;
+    if (brandIdFilter) where.brandId = brandIdFilter;
     
-    const totalItems = await db.collection('machines').countDocuments(filter);
+    const totalItems = await prisma.machine.count({ where });
     const skip = (page - 1) * limit;
-    const sortObj: Record<string, 1 | -1> = { [sortBy]: sortOrder as 1 | -1 };
+    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
     
-    const machines = await db
-      .collection('machines')
-      .find(filter)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
-    
-    const sanitizedMachines = machines.map(machine => sanitizeObject(machine));
+    const machines = await prisma.machine.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder_ },
+      include: { brand: true, model: true, machineType: true }
+    });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      sanitizedMachines,
+      machines,
       pagination,
       'Machines retrieved successfully',
-      { sortBy, sortOrder: sortOrder === 1 ? 'asc' : 'desc' },
+      { sortBy, sortOrder: sortOrder_ },
       search || undefined,
       {
-        ...(brandFilter && { brand: brandFilter }),
         ...(statusFilter && { status: statusFilter }),
-        ...(categoryFilter && { category: categoryFilter }),
+        ...(brandIdFilter && { brandId: brandIdFilter }),
       }
     );
   } catch (error: any) {
@@ -64,187 +84,77 @@ export const GET = withAuth(async (request: NextRequest) => {
   }
 });
 
-export const POST = withAuth(async (request: NextRequest) => {
+/**
+ * @swagger
+ * /api/v1/machines:
+ *   post:
+ *     summary: Create a new machine
+ *     description: Create a new machine with Supabase auth (Admin/Manager only)
+ *     tags: [Machines]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - serialNumber
+ *               - brandId
+ *               - modelId
+ *             properties:
+ *               serialNumber:
+ *                 type: string
+ *               boxNumber:
+ *                 type: string
+ *               brandId:
+ *                 type: string
+ *                 format: uuid
+ *               modelId:
+ *                 type: string
+ *                 format: uuid
+ *               machineTypeId:
+ *                 type: string
+ *                 format: uuid
+ */
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { 
-      brandId, brandName, brand, // Brand can be provided as ID, name, or string
-      modelId, modelName, model, // Model can be provided as ID, name, or string
-      typeId, typeName, category, // Type can be provided as ID, name, or string
-      serialNumber, boxNumber, photos, specs, currentLocation 
-    } = body;
+    const { serialNumber, boxNumber, brandId, modelId, machineTypeId } = body;
     
-    if (!serialNumber) {
+    if (!serialNumber || !brandId || !modelId) {
       return validationErrorResponse('Missing required fields', {
         serialNumber: !serialNumber ? ['Serial number is required'] : [],
+        brandId: !brandId ? ['Brand ID is required'] : [],
+        modelId: !modelId ? ['Model ID is required'] : [],
       });
     }
     
-    const db = await getDatabase();
-    
     // Check if serial number already exists
-    const existingMachine = await db.collection('machines').findOne({ serialNumber });
+    const existingMachine = await prisma.machine.findFirst({
+      where: { serialNumber }
+    });
+    
     if (existingMachine) {
       return validationErrorResponse('Serial number already exists', {
         serialNumber: ['Serial number already exists'],
       });
     }
     
-    const now = new Date();
-    
-    // Handle Brand: brandId > brandName > brand (string)
-    let finalBrandName = '';
-    if (brandId && isValidObjectId(brandId)) {
-      const brandDoc = await db.collection('brands').findOne({ _id: toObjectId(brandId) });
-      if (!brandDoc) {
-        return validationErrorResponse('Brand not found', {
-          brandId: ['Invalid brand ID'],
-        });
-      }
-      finalBrandName = brandDoc.name;
-    } else if (brandName) {
-      // Check if brand exists, if not create it
-      let brandDoc = await db.collection('brands').findOne({ 
-        name: { $regex: new RegExp(`^${brandName}$`, 'i') } 
-      });
-      if (!brandDoc) {
-        // Create new brand on-the-fly
-        const brandCode = brandName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-        const newBrand = {
-          name: brandName.trim(),
-          code: brandCode,
-          description: '',
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        };
-        const brandResult = await db.collection('brands').insertOne(newBrand);
-        brandDoc = await db.collection('brands').findOne({ _id: brandResult.insertedId });
-      }
-      finalBrandName = brandDoc.name;
-    } else if (brand) {
-      // Legacy support: brand as string
-      finalBrandName = brand;
-    } else {
-      return validationErrorResponse('Missing required fields', {
-        brand: ['Brand is required (provide brandId, brandName, or brand)'],
-      });
-    }
-    
-    // Handle Model: modelId > modelName > model (string)
-    let finalModelName = '';
-    if (modelId && isValidObjectId(modelId)) {
-      const modelDoc = await db.collection('models').findOne({ _id: toObjectId(modelId) });
-      if (!modelDoc) {
-        return validationErrorResponse('Model not found', {
-          modelId: ['Invalid model ID'],
-        });
-      }
-      finalModelName = modelDoc.name;
-    } else if (modelName) {
-      // Check if model exists for this brand, if not create it
-      let modelDoc = await db.collection('models').findOne({ 
-        name: { $regex: new RegExp(`^${modelName}$`, 'i') },
-        brandName: finalBrandName,
-      });
-      if (!modelDoc) {
-        // Create new model on-the-fly
-        const modelCode = modelName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-        const newModel = {
-          name: modelName.trim(),
-          brandName: finalBrandName,
-          code: modelCode,
-          description: '',
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        };
-        const modelResult = await db.collection('models').insertOne(newModel);
-        modelDoc = await db.collection('models').findOne({ _id: modelResult.insertedId });
-      }
-      finalModelName = modelDoc.name;
-    } else if (model) {
-      // Legacy support: model as string
-      finalModelName = model;
-    }
-    
-    // Handle Type/Category: typeId > typeName > category (string)
-    let finalCategoryName = '';
-    if (typeId && isValidObjectId(typeId)) {
-      const typeDoc = await db.collection('machineTypes').findOne({ _id: toObjectId(typeId) });
-      if (!typeDoc) {
-        return validationErrorResponse('Machine type not found', {
-          typeId: ['Invalid type ID'],
-        });
-      }
-      finalCategoryName = typeDoc.name;
-    } else if (typeName) {
-      // Check if type exists, if not create it
-      let typeDoc = await db.collection('machineTypes').findOne({ 
-        name: { $regex: new RegExp(`^${typeName}$`, 'i') } 
-      });
-      if (!typeDoc) {
-        // Create new type on-the-fly
-        const typeCode = typeName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-        const newType = {
-          name: typeName.trim(),
-          code: typeCode,
-          description: '',
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        };
-        const typeResult = await db.collection('machineTypes').insertOne(newType);
-        typeDoc = await db.collection('machineTypes').findOne({ _id: typeResult.insertedId });
-      }
-      finalCategoryName = typeDoc.name;
-    } else if (category) {
-      // Legacy support: category as string
-      finalCategoryName = category;
-    }
-    
-    const qrCodeValue = `MCH-${finalBrandName}-${serialNumber}`;
-    
-    const newMachine = {
-      brand: finalBrandName,
-      model: finalModelName,
-      category: finalCategoryName,
-      serialNumber,
-      boxNumber: boxNumber || '',
-      qrCode: {
-        value: qrCodeValue,
-        imageUrl: '', // Will be generated by QR service
+    const newMachine = await prisma.machine.create({
+      data: {
+        serialNumber,
+        boxNumber: boxNumber || '',
+        brandId,
+        modelId,
+        machineTypeId: machineTypeId || undefined,
+        status: 'AVAILABLE',
       },
-      photos: photos || [],
-      specs: specs || {},
-      status: 'AVAILABLE',
-      statusHistory: [
-        {
-          status: 'AVAILABLE',
-          changedAt: now,
-          changedByUserId: null, // TODO: Get from auth context
-          note: 'Initial registration',
-        },
-      ],
-      currentLocation: currentLocation || {
-        type: 'WAREHOUSE',
-        name: 'Main Warehouse',
-        address: '',
-      },
-      lifecycle: {
-        onboardedAt: now,
-        onboardedByUserId: null, // TODO: Get from auth context
-        lastRentalId: null,
-        totalRentalDays: 0,
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
+      include: { brand: true, model: true, machineType: true }
+    });
     
-    const result = await db.collection('machines').insertOne(newMachine);
-    const createdMachine = await db.collection('machines').findOne({ _id: result.insertedId });
-    
-    return successResponse(sanitizeObject(createdMachine), 'Machine created successfully', 201);
+    return successResponse(newMachine, 'Machine created successfully', 201);
   } catch (error: any) {
     console.error('Error creating machine:', error);
     return errorResponse('Failed to create machine', 500);

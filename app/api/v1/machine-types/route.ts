@@ -1,48 +1,50 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
-import { parseQueryParams, buildPaginationMeta, sanitizeObject } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
+import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
 /**
- * GET /api/v1/machine-types
- * Get all machine types (categories) with pagination
+ * @swagger
+ * /api/v1/machine-types:
+ *   get:
+ *     summary: Get all machine types
+ *     tags: [Machine Types]
+ *     security:
+ *       - bearerAuth: []
  */
-export const GET = withAuth(async (request: NextRequest) => {
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
-    const filter: any = {};
+    const where: any = {};
     
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } },
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
       ];
     }
     
-    const totalItems = await db.collection('machineTypes').countDocuments(filter);
+    const totalItems = await prisma.machineType.count({ where });
     const skip = (page - 1) * limit;
-    const sortObj: Record<string, 1 | -1> = { [sortBy]: sortOrder as 1 | -1 };
+    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
     
-    const types = await db
-      .collection('machineTypes')
-      .find(filter)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
+    const types = await prisma.machineType.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder_ }
+    });
     
-    const sanitizedTypes = types.map(type => sanitizeObject(type));
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      sanitizedTypes,
+      types,
       pagination,
       'Machine types retrieved successfully',
-      { sortBy, sortOrder: sortOrder === 1 ? 'asc' : 'desc' },
+      { sortBy, sortOrder: sortOrder_ },
       search || undefined
     );
   } catch (error: any) {
@@ -52,31 +54,34 @@ export const GET = withAuth(async (request: NextRequest) => {
 });
 
 /**
- * POST /api/v1/machine-types
- * Create a new machine type (category)
+ * @swagger
+ * /api/v1/machine-types:
+ *   post:
+ *     summary: Create a new machine type
+ *     tags: [Machine Types]
+ *     security:
+ *       - bearerAuth: []
  */
-export const POST = withAuth(async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { name, code, description } = body;
     
     if (!name) {
       return validationErrorResponse('Missing required fields', {
-        name: !name ? ['Type name is required'] : [],
+        name: ['Type name is required'],
       });
     }
     
-    const db = await getDatabase();
-    
-    // Generate code from name if not provided
     const typeCode = code || name.toUpperCase().replace(/[^A-Z0-9]/g, '_');
     
-    // Check if type with same name or code already exists
-    const existingType = await db.collection('machineTypes').findOne({
-      $or: [
-        { name: { $regex: new RegExp(`^${name}$`, 'i') } },
-        { code: typeCode },
-      ],
+    const existingType = await prisma.machineType.findFirst({
+      where: {
+        OR: [
+          { name: { equals: name, mode: 'insensitive' } },
+          { code: typeCode },
+        ],
+      },
     });
     
     if (existingType) {
@@ -85,18 +90,21 @@ export const POST = withAuth(async (request: NextRequest) => {
       });
     }
     
-    const now = new Date();
-    const newType = {
-      name: name.trim(),
-      code: typeCode,
-      description: description || '',
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const newType = await prisma.machineType.create({
+      data: {
+        name: name.trim(),
+        code: typeCode,
+        description: description || '',
+        isActive: true,
+      },
+    });
     
-    const result = await db.collection('machineTypes').insertOne(newType);
-    const createdType = await db.collection('machineTypes').findOne({ _id: result.insertedId });
+    return successResponse(newType, 'Machine type created successfully', 201);
+  } catch (error: any) {
+    console.error('Error creating machine type:', error);
+    return errorResponse('Failed to create machine type', 500);
+  }
+});
     
     return successResponse(sanitizeObject(createdType), 'Machine type created successfully', 201);
   } catch (error: any) {

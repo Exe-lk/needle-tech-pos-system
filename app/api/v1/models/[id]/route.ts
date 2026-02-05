@@ -1,15 +1,9 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
-import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/v1/models/:id
- * Get a single model by ID
- */
-export const GET = withAuth(async (
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -17,116 +11,65 @@ export const GET = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid model ID');
-    }
-    
-    const db = await getDatabase();
-    const modelId = toObjectId(id);
-    
-    const model = await db.collection('models').findOne({ _id: modelId });
+    const model = await prisma.model.findUnique({
+      where: { id },
+      include: { brand: true }
+    });
     
     if (!model) {
       return notFoundResponse('Model not found');
     }
     
-    // Populate brand
-    const brand = model.brandName
-      ? await db.collection('brands').findOne({ name: model.brandName })
-      : null;
-    
-    const populatedModel = {
-      ...model,
-      brand: sanitizeObject(brand),
-    };
-    
-    return successResponse(sanitizeObject(populatedModel), 'Model retrieved successfully');
+    return successResponse(model, 'Model retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching model:', error);
     return errorResponse('Failed to retrieve model', 500);
   }
 });
 
-/**
- * PUT /api/v1/models/:id
- * Update a model
- */
-export const PUT = withAuth(async (
+export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     const { id } = await params;
-    
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid model ID');
-    }
-    
     const body = await request.json();
-    const db = await getDatabase();
-    const modelId = toObjectId(id);
     
-    const existingModel = await db.collection('models').findOne({ _id: modelId });
+    const existingModel = await prisma.model.findUnique({ where: { id } });
     if (!existingModel) {
       return notFoundResponse('Model not found');
     }
     
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
-    
-    if (body.name !== undefined) updateData.name = body.name.trim();
-    if (body.code !== undefined) updateData.code = body.code;
-    if (body.description !== undefined) updateData.description = body.description;
-    if (body.isActive !== undefined) updateData.isActive = body.isActive;
-    
-    // Handle brand change
-    if (body.brandId !== undefined || body.brandName !== undefined) {
-      let finalBrandName = body.brandName;
-      if (body.brandId) {
-        const brand = await db.collection('brands').findOne({ _id: new ObjectId(body.brandId) });
-        if (!brand) {
-          return validationErrorResponse('Brand not found', {
-            brandId: ['Invalid brand ID'],
-          });
-        }
-        finalBrandName = brand.name;
-      }
-      if (finalBrandName) {
-        updateData.brandName = finalBrandName;
+    if (body.brandId) {
+      const brand = await prisma.brand.findUnique({ where: { id: body.brandId } });
+      if (!brand) {
+        return validationErrorResponse('Invalid brand', {
+          brandId: ['Brand not found'],
+        });
       }
     }
     
-    await db.collection('models').updateOne(
-      { _id: modelId },
-      { $set: updateData }
-    );
+    const updatedModel = await prisma.model.update({
+      where: { id },
+      data: {
+        ...(body.name && { name: body.name.trim() }),
+        ...(body.code && { code: body.code }),
+        ...(body.description && { description: body.description }),
+        ...(body.brandId && { brandId: body.brandId }),
+        ...(body.isActive !== undefined && { isActive: body.isActive }),
+      },
+      include: { brand: true }
+    });
     
-    const updatedModel = await db.collection('models').findOne({ _id: modelId });
-    
-    // Populate brand
-    const brand = updatedModel?.brandName
-      ? await db.collection('brands').findOne({ name: updatedModel.brandName })
-      : null;
-    
-    const populatedModel = {
-      ...updatedModel,
-      brand: sanitizeObject(brand),
-    };
-    
-    return successResponse(sanitizeObject(populatedModel!), 'Model updated successfully');
+    return successResponse(updatedModel, 'Model updated successfully');
   } catch (error: any) {
     console.error('Error updating model:', error);
     return errorResponse('Failed to update model', 500);
   }
 });
 
-/**
- * DELETE /api/v1/models/:id
- * Delete a model (soft delete - sets isActive to false)
- */
-export const DELETE = withAuth(async (
+export const DELETE = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -134,39 +77,14 @@ export const DELETE = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid model ID');
-    }
-    
-    const db = await getDatabase();
-    const modelId = toObjectId(id);
-    
-    const model = await db.collection('models').findOne({ _id: modelId });
+    const model = await prisma.model.findUnique({ where: { id } });
     if (!model) {
       return notFoundResponse('Model not found');
     }
     
-    // Check if model is used in any machines
-    const machinesCount = await db.collection('machines').countDocuments({ 
-      brand: model.brandName,
-      model: model.name,
-    });
-    if (machinesCount > 0) {
-      return errorResponse(`Cannot delete model. It is used by ${machinesCount} machine(s).`, 400);
-    }
+    await prisma.model.delete({ where: { id } });
     
-    // Soft delete
-    await db.collection('models').updateOne(
-      { _id: modelId },
-      { 
-        $set: { 
-          isActive: false,
-          updatedAt: new Date(),
-        } 
-      }
-    );
-    
-    return successResponse(null, 'Model deleted successfully', 200);
+    return successResponse({ id }, 'Model deleted successfully');
   } catch (error: any) {
     console.error('Error deleting model:', error);
     return errorResponse('Failed to delete model', 500);

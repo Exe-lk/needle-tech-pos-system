@@ -18,26 +18,88 @@ async function main() {
   // Create roles
   console.log('Creating roles...')
   
+  const superAdminRole = await prisma.role.upsert({
+    where: { name: 'SUPER_ADMIN' },
+    update: {
+      description: 'Super Administrator with absolute system access and user management',
+      permissions: ['*'] // Wildcard for all permissions
+    },
+    create: {
+      name: 'SUPER_ADMIN',
+      description: 'Super Administrator with absolute system access and user management',
+      permissions: ['*'] // Wildcard for all permissions
+    }
+  })
+
   const adminRole = await prisma.role.upsert({
     where: { name: 'ADMIN' },
-    update: {},
+    update: {
+      description: 'Administrator with full system access (read/write)',
+      permissions: [
+        'users:*',
+        'customers:*',
+        'machines:*',
+        'rentals:*',
+        'invoices:*',
+        'payments:*',
+        'gate-passes:*',
+        'returns:*',
+        'damage-reports:*',
+        'brands:*',
+        'models:*',
+        'machine-types:*',
+        'roles:read',
+        'settings:*',
+        'reports:*'
+      ]
+    },
     create: {
       name: 'ADMIN',
-      description: 'Administrator with full system access',
-      permissions: ['*'] // Wildcard for all permissions
+      description: 'Administrator with full system access (read/write)',
+      permissions: [
+        'users:*',
+        'customers:*',
+        'machines:*',
+        'rentals:*',
+        'invoices:*',
+        'payments:*',
+        'gate-passes:*',
+        'returns:*',
+        'damage-reports:*',
+        'brands:*',
+        'models:*',
+        'machine-types:*',
+        'roles:read',
+        'settings:*',
+        'reports:*'
+      ]
     }
   })
 
   const managerRole = await prisma.role.upsert({
     where: { name: 'MANAGER' },
-    update: {},
-    create: {
-      name: 'MANAGER',
-      description: 'Manager with elevated permissions',
+    update: {
+      description: 'Manager with elevated permissions over most business operations',
       permissions: [
         'users:read',
         'customers:*',
-        'machines:*',
+        'machines:read',
+        'rentals:*',
+        'invoices:*',
+        'payments:*',
+        'gate-passes:*',
+        'returns:*',
+        'damage-reports:*',
+        'reports:read'
+      ]
+    },
+    create: {
+      name: 'MANAGER',
+      description: 'Manager with elevated permissions over most business operations',
+      permissions: [
+        'users:read',
+        'customers:*',
+        'machines:read',
         'rentals:*',
         'invoices:*',
         'payments:*',
@@ -49,12 +111,51 @@ async function main() {
     }
   })
 
+  const operatorRole = await prisma.role.upsert({
+    where: { name: 'OPERATOR' },
+    update: {
+      description: 'Operator with limited operational permissions',
+      permissions: [
+        'customers:read',
+        'machines:read',
+        'rentals:read',
+        'invoices:read',
+        'payments:read',
+        'gate-passes:*',
+        'returns:read'
+      ]
+    },
+    create: {
+      name: 'OPERATOR',
+      description: 'Operator with limited operational permissions',
+      permissions: [
+        'customers:read',
+        'machines:read',
+        'rentals:read',
+        'invoices:read',
+        'payments:read',
+        'gate-passes:*',
+        'returns:read'
+      ]
+    }
+  })
+
   const userRole = await prisma.role.upsert({
     where: { name: 'USER' },
-    update: {},
+    update: {
+      description: 'Standard user with basic read-only permissions',
+      permissions: [
+        'customers:read',
+        'machines:read',
+        'rentals:read',
+        'invoices:read',
+        'gate-passes:read',
+        'returns:read'
+      ]
+    },
     create: {
       name: 'USER',
-      description: 'Standard user with basic permissions',
+      description: 'Standard user with basic read-only permissions',
       permissions: [
         'customers:read',
         'machines:read',
@@ -67,19 +168,80 @@ async function main() {
   })
 
   console.log('✅ Roles created:', { 
+    superAdmin: superAdminRole.name,
     admin: adminRole.name, 
-    manager: managerRole.name, 
+    manager: managerRole.name,
+    operator: operatorRole.name,
     user: userRole.name 
   })
 
   // Create admin user in Supabase Auth
-  console.log('Creating admin user...')
+  console.log('Creating SuperAdmin user...')
+  
+  const superAdminEmail = 'superadmin@needletech.com'
+  const superAdminPassword = 'SuperAdmin@12345'
+
+  // Check if user already exists
+  const { data: existingUsers } = await supabase.auth.admin.listUsers()
+  const existingSuperAdmin = existingUsers.users.find(u => u.email === superAdminEmail)
+
+  let superAdminAuthId: string
+
+  if (existingSuperAdmin) {
+    console.log('SuperAdmin user already exists in Supabase Auth')
+    superAdminAuthId = existingSuperAdmin.id
+  } else {
+    const { data: authData, error } = await supabase.auth.admin.createUser({
+      email: superAdminEmail,
+      password: superAdminPassword,
+      email_confirm: true,
+      user_metadata: {
+        username: 'superadmin',
+        fullName: 'Super Administrator'
+      }
+    })
+
+    if (error) {
+      console.error('❌ Error creating SuperAdmin user in Supabase:', error)
+      throw error
+    }
+
+    if (!authData.user) {
+      throw new Error('No user returned from Supabase')
+    }
+
+    superAdminAuthId = authData.user.id
+    console.log('✅ SuperAdmin user created in Supabase Auth')
+  }
+
+  // Create or update SuperAdmin user in database
+  const superAdminUser = await prisma.user.upsert({
+    where: { id: superAdminAuthId },
+    update: {
+      roleId: superAdminRole.id
+    },
+    create: {
+      id: superAdminAuthId,
+      username: 'superadmin',
+      email: superAdminEmail,
+      fullName: 'Super Administrator',
+      roleId: superAdminRole.id,
+      status: 'ACTIVE'
+    }
+  })
+
+  console.log('✅ SuperAdmin user created in database:', {
+    id: superAdminUser.id,
+    username: superAdminUser.username,
+    email: superAdminUser.email
+  })
+
+  // Create default admin user
+  console.log('Creating default Admin user...')
   
   const adminEmail = 'admin@needletech.com'
   const adminPassword = 'Admin@123456'
 
-  // Check if user already exists
-  const { data: existingUsers } = await supabase.auth.admin.listUsers()
   const existingAdmin = existingUsers.users.find(u => u.email === adminEmail)
 
   let adminAuthId: string
@@ -120,7 +282,6 @@ async function main() {
     create: {
       id: adminAuthId,
       username: 'admin',
-      passwordHash: '', // Managed by Supabase
       email: adminEmail,
       fullName: 'System Administrator',
       roleId: adminRole.id,
@@ -170,10 +331,14 @@ async function main() {
   })
 
   console.log('\n🎉 Seed completed successfully!')
-  console.log('\n📝 Default Admin Credentials:')
+  console.log('\n📝 Default User Credentials:')
+  console.log('\n   SUPER ADMIN:')
+  console.log('   Email:', superAdminEmail)
+  console.log('   Password:', superAdminPassword)
+  console.log('\n   ADMIN:')
   console.log('   Email:', adminEmail)
   console.log('   Password:', adminPassword)
-  console.log('\n⚠️  Please change the admin password after first login!')
+  console.log('\n⚠️  Please change all default passwords after first login!')
 }
 
 main()

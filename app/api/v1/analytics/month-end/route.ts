@@ -1,11 +1,10 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse } from '@/lib/api-response';
-import { sanitizeObject } from '@/lib/utils';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-export async function GET(request: NextRequest) {
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get('month'); // Format: YYYY-MM
     const year = searchParams.get('year'); // Format: YYYY
@@ -24,62 +23,76 @@ export async function GET(request: NextRequest) {
     }
     
     // Total rentals
-    const totalRentals = await db.collection('rentals').countDocuments({
-      createdAt: { $gte: startDate, $lte: endDate },
+    const totalRentals = await prisma.rental.count({
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+      },
     });
     
     // Total revenue
-    const rentals = await db.collection('rentals').find({
-      createdAt: { $gte: startDate, $lte: endDate },
-    }).toArray();
-    
-    const totalRevenue = rentals.reduce((sum, rental) => sum + (rental.financials?.total || 0), 0);
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        issueDate: { gte: startDate, lte: endDate },
+      },
+      select: {
+        id: true,
+        totals: true,
+        taxCategory: true,
+        paymentStatus: true,
+        balance: true,
+      },
+    });
     
     // Total payments received
-    const payments = await db.collection('payments').find({
-      paidAt: { $gte: startDate, $lte: endDate },
-    }).toArray();
+    const payments = await prisma.payment.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+      },
+      select: { totalAmount: true },
+    });
     
-    const totalPayments = payments.reduce((sum, payment) => sum + (payment.totalAmount || 0), 0);
-    
-    // VAT vs Non-VAT breakdown
-    const invoices = await db.collection('invoices').find({
-      issueDate: { $gte: startDate, $lte: endDate },
-    }).toArray();
+    // Calculations
+    const totalRevenue = invoices.reduce((sum, inv) => sum + (parseFloat(inv.totals?.toString() || '0')), 0);
+    const totalPayments = payments.reduce((sum, p) => sum + parseFloat(p.totalAmount?.toString() || '0'), 0);
     
     const vatInvoices = invoices.filter(inv => inv.taxCategory === 'VAT');
     const nonVatInvoices = invoices.filter(inv => inv.taxCategory === 'NON_VAT');
     
-    const vatRevenue = vatInvoices.reduce((sum, inv) => sum + (inv.totals?.grandTotal || 0), 0);
-    const nonVatRevenue = nonVatInvoices.reduce((sum, inv) => sum + (inv.totals?.grandTotal || 0), 0);
+    const vatRevenue = vatInvoices.reduce((sum, inv) => sum + parseFloat(inv.totals?.toString() || '0'), 0);
+    const nonVatRevenue = nonVatInvoices.reduce((sum, inv) => sum + parseFloat(inv.totals?.toString() || '0'), 0);
     
     // Machine utilization
-    const activeRentals = await db.collection('rentals').countDocuments({
-      status: 'ACTIVE',
-      createdAt: { $lte: endDate },
+    const activeRentals = await prisma.rental.count({
+      where: {
+        status: 'ACTIVE',
+        createdAt: { lte: endDate },
+      },
     });
     
-    const totalMachines = await db.collection('machines').countDocuments({
-      status: { $ne: 'RETIRED' },
+    const totalMachines = await prisma.machine.count({
+      where: {
+        status: { not: 'RETIRED' },
+      },
     });
     
     const utilizationRate = totalMachines > 0 ? (activeRentals / totalMachines) * 100 : 0;
     
     // Outstanding amounts
-    const outstandingInvoices = await db.collection('invoices').find({
-      paymentStatus: { $in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
-    }).toArray();
-    
-    const totalOutstanding = outstandingInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
+    const outstandingInvoices = invoices.filter(inv => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(inv.paymentStatus));
+    const totalOutstanding = outstandingInvoices.reduce((sum, inv) => sum + parseFloat(inv.balance?.toString() || '0'), 0);
     
     // Returns and damages
-    const returns = await db.collection('returns').find({
-      returnDate: { $gte: startDate, $lte: endDate },
-    }).toArray();
+    const returns = await prisma.return.count({
+      where: {
+        returnDate: { gte: startDate, lte: endDate },
+      },
+    });
     
-    const damageReports = await db.collection('damageReports').find({
-      createdAt: { $gte: startDate, $lte: endDate },
-    }).toArray();
+    const damageReports = await prisma.damageReport.count({
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+      },
+    });
     
     const analytics = {
       period: {
@@ -106,14 +119,14 @@ export async function GET(request: NextRequest) {
         totalPayments: totalPayments,
       },
       operations: {
-        totalReturns: returns.length,
-        totalDamages: damageReports.length,
+        totalReturns: returns,
+        totalDamages: damageReports,
       },
     };
     
-    return successResponse(sanitizeObject(analytics), 'Month-end analytics retrieved successfully');
+    return successResponse(analytics, 'Month-end analytics retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching analytics:', error);
     return errorResponse('Failed to retrieve analytics', 500);
   }
-}
+});

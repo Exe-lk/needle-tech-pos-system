@@ -26,12 +26,11 @@ model Role {
 }
 
 model User {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id           String    @id @db.Uuid // Matches Supabase auth.users.id
   username     String    @unique
-  passwordHash String
   roleId       String    @db.Uuid
   fullName     String
-  email        String?
+  email        String    @unique
   phone        String?
   status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?  @db.Timestamptz(6)

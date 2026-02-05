@@ -1,10 +1,18 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
-import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
-import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
+import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-export const GET = withAuth(async (
+/**
+ * @swagger
+ * /api/v1/machines/{id}:
+ *   get:
+ *     summary: Get machine by ID
+ *     tags: [Machines]
+ *     security:
+ *       - bearerAuth: []
+ */
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -12,88 +20,76 @@ export const GET = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid machine ID');
-    }
-    
-    const db = await getDatabase();
-    const machineId = toObjectId(id);
-    
-    const machine = await db.collection('machines').findOne({ _id: machineId });
+    const machine = await prisma.machine.findUnique({
+      where: { id },
+      include: { brand: true, model: true, machineType: true }
+    });
     
     if (!machine) {
       return notFoundResponse('Machine not found');
     }
     
-    return successResponse(sanitizeObject(machine), 'Machine retrieved successfully');
+    return successResponse(machine, 'Machine retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching machine:', error);
     return errorResponse('Failed to retrieve machine', 500);
   }
 });
 
-export const PUT = withAuth(async (
+/**
+ * @swagger
+ * /api/v1/machines/{id}:
+ *   put:
+ *     summary: Update machine
+ *     tags: [Machines]
+ *     security:
+ *       - bearerAuth: []
+ */
+export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     const { id } = await params;
-    
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid machine ID');
-    }
-    
     const body = await request.json();
-    const db = await getDatabase();
-    const machineId = toObjectId(id);
     
-    const existingMachine = await db.collection('machines').findOne({ _id: machineId });
+    const existingMachine = await prisma.machine.findUnique({ where: { id } });
     if (!existingMachine) {
       return notFoundResponse('Machine not found');
     }
     
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
+    const updatedMachine = await prisma.machine.update({
+      where: { id },
+      data: {
+        ...(body.brandId && { brandId: body.brandId }),
+        ...(body.modelId && { modelId: body.modelId }),
+        ...(body.machineTypeId && { machineTypeId: body.machineTypeId }),
+        ...(body.serialNumber && { serialNumber: body.serialNumber }),
+        ...(body.status && { status: body.status }),
+        ...(body.currentLocation && { currentLocation: body.currentLocation }),
+        ...(body.isActive !== undefined && { isActive: body.isActive }),
+      },
+      include: { brand: true, model: true, machineType: true }
+    });
     
-    if (body.brand !== undefined) updateData.brand = body.brand;
-    if (body.model !== undefined) updateData.model = body.model;
-    if (body.category !== undefined) updateData.category = body.category;
-    if (body.boxNumber !== undefined) updateData.boxNumber = body.boxNumber;
-    if (body.photos !== undefined) updateData.photos = body.photos;
-    if (body.specs !== undefined) updateData.specs = body.specs;
-    if (body.currentLocation !== undefined) updateData.currentLocation = body.currentLocation;
-    
-    // Handle status change with history
-    if (body.status !== undefined && body.status !== existingMachine.status) {
-      updateData.status = body.status;
-      updateData.statusHistory = [
-        ...(existingMachine.statusHistory || []),
-        {
-          status: body.status,
-          changedAt: new Date(),
-          changedByUserId: null, // TODO: Get from auth context
-          note: body.statusNote || 'Status updated',
-        },
-      ];
-    }
-    
-    await db.collection('machines').updateOne(
-      { _id: machineId },
-      { $set: updateData }
-    );
-    
-    const updatedMachine = await db.collection('machines').findOne({ _id: machineId });
-    
-    return successResponse(sanitizeObject(updatedMachine!), 'Machine updated successfully');
+    return successResponse(updatedMachine, 'Machine updated successfully');
   } catch (error: any) {
     console.error('Error updating machine:', error);
     return errorResponse('Failed to update machine', 500);
   }
 });
 
-export const DELETE = withAuth(async (
+/**
+ * @swagger
+ * /api/v1/machines/{id}:
+ *   delete:
+ *     summary: Delete machine
+ *     tags: [Machines]
+ *     security:
+ *       - bearerAuth: []
+ */
+export const DELETE = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -101,30 +97,14 @@ export const DELETE = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid machine ID');
-    }
-    
-    const db = await getDatabase();
-    const machineId = toObjectId(id);
-    
-    const machine = await db.collection('machines').findOne({ _id: machineId });
+    const machine = await prisma.machine.findUnique({ where: { id } });
     if (!machine) {
       return notFoundResponse('Machine not found');
     }
     
-    // Soft delete - set status to RETIRED
-    await db.collection('machines').updateOne(
-      { _id: machineId },
-      { 
-        $set: { 
-          status: 'RETIRED',
-          updatedAt: new Date(),
-        } 
-      }
-    );
+    await prisma.machine.delete({ where: { id } });
     
-    return successResponse(null, 'Machine deleted successfully', 200);
+    return successResponse({ id }, 'Machine deleted successfully');
   } catch (error: any) {
     console.error('Error deleting machine:', error);
     return errorResponse('Failed to delete machine', 500);

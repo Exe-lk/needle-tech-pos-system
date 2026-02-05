@@ -1,10 +1,10 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
-import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
+import { Decimal } from '@prisma/client/runtime/library';
 
-export const GET = withAuth(async (
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -12,27 +12,56 @@ export const GET = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid damage report ID');
-    }
-    
-    const db = await getDatabase();
-    const reportId = toObjectId(id);
-    
-    const report = await db.collection('damageReports').findOne({ _id: reportId });
+    const report = await prisma.damageReport.findUnique({
+      where: { id },
+      include: { machine: true, rental: true }
+    });
     
     if (!report) {
       return notFoundResponse('Damage report not found');
     }
     
-    return successResponse(sanitizeObject(report), 'Damage report retrieved successfully');
+    return successResponse(report, 'Damage report retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching damage report:', error);
     return errorResponse('Failed to retrieve damage report', 500);
   }
 });
 
-export const PUT = withAuth(async (
+export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+  request: NextRequest,
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    
+    const existingReport = await prisma.damageReport.findUnique({ where: { id } });
+    if (!existingReport) {
+      return notFoundResponse('Damage report not found');
+    }
+    
+    const updatedReport = await prisma.damageReport.update({
+      where: { id },
+      data: {
+        ...(body.severity && { severity: body.severity }),
+        ...(body.category && { category: body.category }),
+        ...(body.description && { description: body.description }),
+        ...(body.estimatedRepairCost !== undefined && { estimatedRepairCost: new Decimal(body.estimatedRepairCost) }),
+        ...(body.resolved !== undefined && { resolved: body.resolved }),
+      },
+      include: { machine: true, rental: true }
+    });
+    
+    return successResponse(updatedReport, 'Damage report updated successfully');
+  } catch (error: any) {
+    console.error('Error updating damage report:', error);
+    return errorResponse('Failed to update damage report', 500);
+  }
+});
+
+export const DELETE = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -40,46 +69,16 @@ export const PUT = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid damage report ID');
-    }
-    
-    const body = await request.json();
-    const db = await getDatabase();
-    const reportId = toObjectId(id);
-    
-    const existingReport = await db.collection('damageReports').findOne({ _id: reportId });
-    if (!existingReport) {
+    const report = await prisma.damageReport.findUnique({ where: { id } });
+    if (!report) {
       return notFoundResponse('Damage report not found');
     }
     
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
+    await prisma.damageReport.delete({ where: { id } });
     
-    if (body.severity !== undefined) updateData.severity = body.severity;
-    if (body.category !== undefined) updateData.category = body.category;
-    if (body.description !== undefined) updateData.description = body.description;
-    if (body.photos !== undefined) updateData.photos = body.photos;
-    if (body.estimatedRepairCost !== undefined) updateData.estimatedRepairCost = body.estimatedRepairCost;
-    if (body.approvedChargeToCustomer !== undefined) updateData.approvedChargeToCustomer = body.approvedChargeToCustomer;
-    if (body.resolved !== undefined) {
-      updateData.resolved = body.resolved;
-      if (body.resolved && !existingReport.resolved) {
-        updateData.resolvedAt = new Date();
-      }
-    }
-    
-    await db.collection('damageReports').updateOne(
-      { _id: reportId },
-      { $set: updateData }
-    );
-    
-    const updatedReport = await db.collection('damageReports').findOne({ _id: reportId });
-    
-    return successResponse(sanitizeObject(updatedReport!), 'Damage report updated successfully');
+    return successResponse({ id }, 'Damage report deleted successfully');
   } catch (error: any) {
-    console.error('Error updating damage report:', error);
-    return errorResponse('Failed to update damage report', 500);
+    console.error('Error deleting damage report:', error);
+    return errorResponse('Failed to delete damage report', 500);
   }
 });

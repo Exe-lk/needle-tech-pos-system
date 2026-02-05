@@ -1,10 +1,9 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
-import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
-import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
+import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-export const GET = withAuth(async (
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -12,27 +11,53 @@ export const GET = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid invoice ID');
-    }
-    
-    const db = await getDatabase();
-    const invoiceId = toObjectId(id);
-    
-    const invoice = await db.collection('invoices').findOne({ _id: invoiceId });
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { customer: true, rental: true }
+    });
     
     if (!invoice) {
       return notFoundResponse('Invoice not found');
     }
     
-    return successResponse(sanitizeObject(invoice), 'Invoice retrieved successfully');
+    return successResponse(invoice, 'Invoice retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching invoice:', error);
     return errorResponse('Failed to retrieve invoice', 500);
   }
 });
 
-export const PUT = withAuth(async (
+export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+  request: NextRequest,
+  auth,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    
+    const existingInvoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!existingInvoice) {
+      return notFoundResponse('Invoice not found');
+    }
+    
+    const updatedInvoice = await prisma.invoice.update({
+      where: { id },
+      data: {
+        ...(body.status && { status: body.status }),
+        ...(body.paymentStatus && { paymentStatus: body.paymentStatus }),
+      },
+      include: { customer: true, rental: true }
+    });
+    
+    return successResponse(updatedInvoice, 'Invoice updated successfully');
+  } catch (error: any) {
+    console.error('Error updating invoice:', error);
+    return errorResponse('Failed to update invoice', 500);
+  }
+});
+
+export const DELETE = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -40,40 +65,16 @@ export const PUT = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid invoice ID');
-    }
-    
-    const body = await request.json();
-    const db = await getDatabase();
-    const invoiceId = toObjectId(id);
-    
-    const existingInvoice = await db.collection('invoices').findOne({ _id: invoiceId });
-    if (!existingInvoice) {
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) {
       return notFoundResponse('Invoice not found');
     }
     
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
+    await prisma.invoice.delete({ where: { id } });
     
-    if (body.status !== undefined) updateData.status = body.status;
-    if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus;
-    if (body.paidAmount !== undefined) {
-      updateData.paidAmount = body.paidAmount;
-      updateData.balance = existingInvoice.totals.grandTotal - body.paidAmount;
-    }
-    
-    await db.collection('invoices').updateOne(
-      { _id: invoiceId },
-      { $set: updateData }
-    );
-    
-    const updatedInvoice = await db.collection('invoices').findOne({ _id: invoiceId });
-    
-    return successResponse(sanitizeObject(updatedInvoice!), 'Invoice updated successfully');
+    return successResponse({ id }, 'Invoice deleted successfully');
   } catch (error: any) {
-    console.error('Error updating invoice:', error);
-    return errorResponse('Failed to update invoice', 500);
+    console.error('Error deleting invoice:', error);
+    return errorResponse('Failed to delete invoice', 500);
   }
 });

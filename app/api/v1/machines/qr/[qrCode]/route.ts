@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
-import { sanitizeObject } from '@/lib/utils';
+import prisma from '@/lib/prisma';
 
 export async function GET(
   request: NextRequest,
@@ -9,16 +8,18 @@ export async function GET(
 ) {
   try {
     const { qrCode: qrCodeParam } = await params;
-    const db = await getDatabase();
     const qrCode = decodeURIComponent(qrCodeParam);
     
-    const machine = await db.collection('machines').findOne({ 'qrCode.value': qrCode });
+    const machine = await prisma.machine.findFirst({
+      where: { qrCode },
+      include: { brand: true, model: true, machineType: true }
+    });
     
     if (!machine) {
       return notFoundResponse('Machine not found');
     }
     
-    return successResponse(sanitizeObject(machine), 'Machine retrieved successfully');
+    return successResponse(machine, 'Machine retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching machine by QR code:', error);
     return errorResponse('Failed to retrieve machine', 500);

@@ -1,14 +1,9 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
-import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
-import { toObjectId, isValidObjectId, sanitizeObject } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
+import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/v1/machine-types/:id
- * Get a single machine type by ID
- */
-export const GET = withAuth(async (
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -16,79 +11,51 @@ export const GET = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid machine type ID');
-    }
-    
-    const db = await getDatabase();
-    const typeId = toObjectId(id);
-    
-    const type = await db.collection('machineTypes').findOne({ _id: typeId });
+    const type = await prisma.machineType.findUnique({ where: { id } });
     
     if (!type) {
       return notFoundResponse('Machine type not found');
     }
     
-    return successResponse(sanitizeObject(type), 'Machine type retrieved successfully');
+    return successResponse(type, 'Machine type retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching machine type:', error);
     return errorResponse('Failed to retrieve machine type', 500);
   }
 });
 
-/**
- * PUT /api/v1/machine-types/:id
- * Update a machine type
- */
-export const PUT = withAuth(async (
+export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     const { id } = await params;
-    
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid machine type ID');
-    }
-    
     const body = await request.json();
-    const db = await getDatabase();
-    const typeId = toObjectId(id);
     
-    const existingType = await db.collection('machineTypes').findOne({ _id: typeId });
+    const existingType = await prisma.machineType.findUnique({ where: { id } });
     if (!existingType) {
       return notFoundResponse('Machine type not found');
     }
     
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
+    const updatedType = await prisma.machineType.update({
+      where: { id },
+      data: {
+        ...(body.name && { name: body.name.trim() }),
+        ...(body.code && { code: body.code }),
+        ...(body.description && { description: body.description }),
+        ...(body.isActive !== undefined && { isActive: body.isActive }),
+      }
+    });
     
-    if (body.name !== undefined) updateData.name = body.name.trim();
-    if (body.code !== undefined) updateData.code = body.code;
-    if (body.description !== undefined) updateData.description = body.description;
-    if (body.isActive !== undefined) updateData.isActive = body.isActive;
-    
-    await db.collection('machineTypes').updateOne(
-      { _id: typeId },
-      { $set: updateData }
-    );
-    
-    const updatedType = await db.collection('machineTypes').findOne({ _id: typeId });
-    
-    return successResponse(sanitizeObject(updatedType!), 'Machine type updated successfully');
+    return successResponse(updatedType, 'Machine type updated successfully');
   } catch (error: any) {
     console.error('Error updating machine type:', error);
     return errorResponse('Failed to update machine type', 500);
   }
 });
 
-/**
- * DELETE /api/v1/machine-types/:id
- * Delete a machine type (soft delete - sets isActive to false)
- */
-export const DELETE = withAuth(async (
+export const DELETE = withAuthAndRole(['ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -96,36 +63,14 @@ export const DELETE = withAuth(async (
   try {
     const { id } = await params;
     
-    if (!isValidObjectId(id)) {
-      return validationErrorResponse('Invalid machine type ID');
-    }
-    
-    const db = await getDatabase();
-    const typeId = toObjectId(id);
-    
-    const type = await db.collection('machineTypes').findOne({ _id: typeId });
+    const type = await prisma.machineType.findUnique({ where: { id } });
     if (!type) {
       return notFoundResponse('Machine type not found');
     }
     
-    // Check if type is used in any machines
-    const machinesCount = await db.collection('machines').countDocuments({ category: type.name });
-    if (machinesCount > 0) {
-      return errorResponse(`Cannot delete type. It is used by ${machinesCount} machine(s).`, 400);
-    }
+    await prisma.machineType.delete({ where: { id } });
     
-    // Soft delete
-    await db.collection('machineTypes').updateOne(
-      { _id: typeId },
-      { 
-        $set: { 
-          isActive: false,
-          updatedAt: new Date(),
-        } 
-      }
-    );
-    
-    return successResponse(null, 'Machine type deleted successfully', 200);
+    return successResponse({ id }, 'Machine type deleted successfully');
   } catch (error: any) {
     console.error('Error deleting machine type:', error);
     return errorResponse('Failed to delete machine type', 500);

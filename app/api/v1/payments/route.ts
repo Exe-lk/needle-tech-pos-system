@@ -1,56 +1,58 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
+import { Decimal } from '@prisma/client/runtime/library';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
-import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-export const GET = withAuth(async (request: NextRequest) => {
+/**
+ * @swagger
+ * /api/v1/payments:
+ *   get:
+ *     summary: Get all payments
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ */
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
     const customerIdFilter = searchParams.get('customerId');
     
-    const filter: any = {};
+    const where: any = {};
     
     if (search) {
-      filter.$or = [
-        { receiptNumber: { $regex: search, $options: 'i' } },
-        { referenceNumber: { $regex: search, $options: 'i' } },
+      where.OR = [
+        { receiptNumber: { contains: search, mode: 'insensitive' } },
+        { referenceNumber: { contains: search, mode: 'insensitive' } },
       ];
     }
     
-    if (customerIdFilter && isValidObjectId(customerIdFilter)) {
-      filter.customerId = toObjectId(customerIdFilter);
-    }
+    if (customerIdFilter) where.customerId = customerIdFilter;
     
-    const totalItems = await db.collection('payments').countDocuments(filter);
+    const totalItems = await prisma.payment.count({ where });
     const skip = (page - 1) * limit;
-    const sortObj: Record<string, 1 | -1> = { [sortBy]: sortOrder as 1 | -1 };
+    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
     
-    const payments = await db
-      .collection('payments')
-      .find(filter)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
-    
-    const sanitizedPayments = payments.map(payment => sanitizeObject(payment));
+    const payments = await prisma.payment.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder_ },
+      include: { customer: true, invoices: true }
+    });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      sanitizedPayments,
+      payments,
       pagination,
       'Payments retrieved successfully',
-      { sortBy, sortOrder: sortOrder === 1 ? 'asc' : 'desc' },
+      { sortBy, sortOrder: sortOrder_ },
       search || undefined,
-      {
-        ...(customerIdFilter && { customerId: customerIdFilter }),
-      }
+      { ...(customerIdFilter && { customerId: customerIdFilter }) }
     );
   } catch (error: any) {
     console.error('Error fetching payments:', error);
@@ -58,116 +60,54 @@ export const GET = withAuth(async (request: NextRequest) => {
   }
 });
 
-export const POST = withAuth(async (request: NextRequest) => {
+/**
+ * @swagger
+ * /api/v1/payments:
+ *   post:
+ *     summary: Create a new payment
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ */
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { customerId, invoices, totalAmount, currency, paymentMethod, referenceNumber, paidAt, notes } = body;
+    const { customerId, totalAmount, currency = 'USD', paymentMethod, referenceNumber, paidAt, notes } = body;
     
-    if (!customerId || !invoices || !Array.isArray(invoices) || invoices.length === 0 || !totalAmount) {
+    if (!customerId || !totalAmount) {
       return validationErrorResponse('Missing required fields', {
         customerId: !customerId ? ['Customer ID is required'] : [],
-        invoices: !invoices || invoices.length === 0 ? ['At least one invoice is required'] : [],
         totalAmount: !totalAmount ? ['Total amount is required'] : [],
       });
     }
     
-    if (!isValidObjectId(customerId)) {
-      return validationErrorResponse('Invalid customer ID');
-    }
+    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
     
-    const db = await getDatabase();
-    
-    // Verify customer exists
-    const customer = await db.collection('customers').findOne({ _id: toObjectId(customerId) });
     if (!customer) {
-      return validationErrorResponse('Customer not found');
-    }
-    
-    // Get settings for receipt number
-    const settings = await db.collection('settings').findOne({ _id: 'global' } as any);
-    
-    // Generate receipt number
-    const lastPayment = await db.collection('payments')
-      .findOne({}, { sort: { createdAt: -1 } });
-    const receiptNumber = `RCPT-${(lastPayment ? parseInt(lastPayment.receiptNumber?.replace('RCPT-', '') || '0') : 0) + 1}`;
-    
-    // Process invoices
-    const processedInvoices = [];
-    for (const invoiceItem of invoices) {
-      if (!isValidObjectId(invoiceItem.invoiceId)) {
-        return validationErrorResponse('Invalid invoice ID');
-      }
-      
-      const invoice = await db.collection('invoices').findOne({ _id: toObjectId(invoiceItem.invoiceId) });
-      if (!invoice) {
-        return validationErrorResponse(`Invoice ${invoiceItem.invoiceId} not found`);
-      }
-      
-      processedInvoices.push({
-        invoiceId: invoice._id,
-        amount: invoiceItem.amount || 0,
+      return validationErrorResponse('Invalid customer', {
+        customerId: ['Customer not found'],
       });
     }
     
-    const now = new Date();
-    const newPayment = {
-      receiptNumber,
-      customerId: toObjectId(customerId),
-      invoices: processedInvoices,
-      totalAmount,
-      currency: currency || settings?.company?.currency || 'LKR',
-      paymentMethod: paymentMethod || 'CASH',
-      referenceNumber: referenceNumber || '',
-      paidAt: paidAt ? new Date(paidAt) : now,
-      receivedByUserId: null, // TODO: Get from auth context
-      notes: notes || '',
-      createdAt: now,
-      updatedAt: now,
-    };
+    const newPayment = await prisma.payment.create({
+      data: {
+        customerId,
+        totalAmount: new Decimal(totalAmount),
+        currency,
+        paymentMethod: paymentMethod || 'CASH',
+        referenceNumber: referenceNumber || '',
+        paidAt: paidAt ? new Date(paidAt) : new Date(),
+        notes: notes || '',
+      },
+      include: { customer: true, invoices: true }
+    });
     
-    const result = await db.collection('payments').insertOne(newPayment);
-    
-    // Update invoices
-    for (const invoiceItem of processedInvoices) {
-      const invoice = await db.collection('invoices').findOne({ _id: invoiceItem.invoiceId });
-      if (invoice) {
-        const newPaidAmount = (invoice.paidAmount || 0) + invoiceItem.amount;
-        const newBalance = invoice.totals.grandTotal - newPaidAmount;
-        
-        await db.collection('invoices').updateOne(
-          { _id: invoiceItem.invoiceId },
-          {
-            $set: {
-              paidAmount: newPaidAmount,
-              balance: newBalance,
-              paymentStatus: newBalance <= 0 ? 'PAID' : (newPaidAmount > 0 ? 'PARTIAL' : 'PENDING'),
-              updatedAt: now,
-            },
-          }
-        );
-      }
-    }
-    
-    // Update customer balance
-    const customerPayments = await db.collection('payments')
-      .find({ customerId: toObjectId(customerId) })
-      .toArray();
-    const totalPaid = customerPayments.reduce((sum, p) => sum + p.totalAmount, 0);
-    
-    const customerInvoices = await db.collection('invoices')
-      .find({ customerId: toObjectId(customerId) })
-      .toArray();
-    const totalInvoiced = customerInvoices.reduce((sum, inv) => sum + inv.totals.grandTotal, 0);
-    
-    await db.collection('customers').updateOne(
-      { _id: toObjectId(customerId) },
-      {
-        $set: {
-          'financials.currentBalance': totalInvoiced - totalPaid,
-          updatedAt: now,
-        },
-      }
-    );
+    return successResponse(newPayment, 'Payment created successfully', 201);
+  } catch (error: any) {
+    console.error('Error creating payment:', error);
+    return errorResponse('Failed to create payment', 500);
+  }
+});
     
     const createdPayment = await db.collection('payments').findOne({ _id: result.insertedId });
     
