@@ -55,7 +55,7 @@ export function LetterheadDocument({
 
   return (
     <div
-      className={`bg-white text-black font-sans ${className}`}
+      className={`bg-white dark:bg-slate-800 text-black dark:text-white font-sans print:bg-white print:text-black ${className}`}
       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
       {/* Header - Logo top-left, Tagline to the right (matches Gatepass, Invoice, Hiring Agreement) */}
@@ -67,22 +67,22 @@ export function LetterheadDocument({
             <img
               src={info.logoPath}
               alt="Needle Technologies"
-              className="h-12 w-auto sm:h-14 print:h-12 object-contain object-left grayscale"
+              className="h-12 w-auto sm:h-14 print:h-12 object-contain object-left grayscale dark:opacity-90 print:opacity-100"
             />
           </div>
           {/* Tagline - to the right of logo, horizontally aligned */}
-          <p className="text-sm text-gray-700 print:text-xs text-right flex-1 leading-tight">
+          <p className="text-sm text-gray-700 dark:text-slate-300 print:text-gray-700 text-right flex-1 leading-tight">
             {info.tagline}
           </p>
         </div>
 
         {/* Separator line - below logo and tagline */}
-        <div className="border-b border-gray-800 mt-3 mb-4" />
+        <div className="border-b border-gray-800 dark:border-slate-500 mt-3 mb-4 print:border-gray-800" />
 
         {/* Document title (e.g. GATEPASS, INVOICE, HIRING MACHINE AGREEMENT) */}
         {documentTitle && (
           <div className="text-center mb-4">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 uppercase tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white uppercase tracking-tight print:text-gray-900">
               {documentTitle}
             </h2>
           </div>
@@ -96,18 +96,18 @@ export function LetterheadDocument({
       {footerContent && <div className="mb-6 print:mb-4">{footerContent}</div>}
 
       {/* Footer - simple: address, tel/fax, email (Hiring Agreement); full: + cheque + importer */}
-      <div className="border-t border-gray-300 pt-4 mt-6 print:mt-4">
+      <div className="border-t border-gray-300 dark:border-slate-600 pt-4 mt-6 print:mt-4 print:border-gray-300">
         {useFullFooter && (
           <>
-            <p className="text-sm text-gray-700 text-center mb-3 print:text-xs">
+            <p className="text-sm text-gray-700 dark:text-slate-300 text-center mb-3 print:text-xs print:text-gray-700">
               All Cheques should be drawn in favor of &quot;{info.chequePayableTo}&quot;
             </p>
-            <div className="text-[10px] sm:text-xs text-gray-700 text-center mb-2 px-2 print:text-[10px] leading-tight">
+            <div className="text-[10px] sm:text-xs text-gray-700 dark:text-slate-300 text-center mb-2 px-2 print:text-[10px] print:text-gray-700 leading-tight">
               {info.importerInfo}
             </div>
           </>
         )}
-        <div className="text-xs text-gray-700 text-center space-y-1 px-2 print:text-xs">
+        <div className="text-xs text-gray-700 dark:text-slate-300 text-center space-y-1 px-2 print:text-xs print:text-gray-700">
           <div>{info.address}</div>
           <div>Tel: {info.telephone.map((t) => t.replace(/-/g, '')).join(', ')} Fax: 2487623</div>
           <div>Email: {info.email}</div>

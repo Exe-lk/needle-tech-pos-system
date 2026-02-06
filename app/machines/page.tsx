@@ -1108,7 +1108,7 @@ const MachineListPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Machine Management
+                Machine & Tool Management
               </h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Overview of all sewing machines with their details, brand, model, and type.

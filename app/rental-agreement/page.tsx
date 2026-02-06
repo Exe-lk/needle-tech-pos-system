@@ -2519,7 +2519,7 @@ const typeOptions = useMemo(() => {
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200/50 dark:border-slate-700/50">
               <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/80">
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Update Rental Agreement
+                  Update Hiring Machine Agreement Details
                 </h2>
                 <button
                   onClick={handleCloseUpdateModal}
@@ -2532,7 +2532,7 @@ const typeOptions = useMemo(() => {
 
               <div className="flex-1 overflow-y-auto p-6">
                 <UpdateForm
-                  title="Update Rental Agreement Details"
+                  title=""
                   fields={updateFields}
                   onSubmit={handleAgreementUpdate}
                   onClear={handleClear}

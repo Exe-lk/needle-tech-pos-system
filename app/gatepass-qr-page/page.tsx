@@ -481,7 +481,7 @@ const GatePassQRPage: React.FC = () => {
             {/* Page title */}
             <div className="max-w-2xl">
               <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
-                <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 dark:text-emerald-400 shrink-0" />
+               
                 Security Officer Verification
               </h1>
               <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
