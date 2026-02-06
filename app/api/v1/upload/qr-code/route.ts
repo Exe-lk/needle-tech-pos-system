@@ -1,20 +1,20 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, validationErrorResponse } from '@/lib/api-response';
-import { withAuth } from '@/lib/auth';
+import { withAuthAndRole } from '@/lib/auth-middleware';
 import { uploadBase64Image, STORAGE_BUCKETS } from '@/lib/supabase-storage';
-import { getDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import prisma from '@/lib/prisma';
 
 /**
- * POST /api/v1/upload/qr-code
- * Upload QR code image to Supabase Storage and update machine record
- * 
- * Body:
- * - machineId: string (MongoDB ObjectId) OR serialNumber: string
- * - qrCodeValue: string (QR code value for filename)
- * - imageData: string (base64 encoded image with or without data URL prefix)
+ * @swagger
+ * /api/v1/upload/qr-code:
+ *   post:
+ *     summary: Upload QR code image
+ *     description: Upload QR code to Supabase Storage with Supabase auth
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
  */
-export const POST = withAuth(async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { machineId, serialNumber, qrCodeValue, imageData } = body;
@@ -28,24 +28,13 @@ export const POST = withAuth(async (request: NextRequest) => {
       });
     }
 
-    const db = await getDatabase();
+    // Find machine by ID
+    const machine = await prisma.machine.findUnique({
+      where: { id: machineId },
+    });
 
-    // Find machine by ID or serial number
-    let machine;
-    if (serialNumber) {
-      machine = await db.collection('machines').findOne({ serialNumber });
-      if (!machine) {
-        return errorResponse('Machine not found with serial number: ' + serialNumber, 404);
-      }
-    } else {
-      // Validate ObjectId format
-      if (!ObjectId.isValid(machineId)) {
-        return validationErrorResponse('Invalid machine ID format');
-      }
-      machine = await db.collection('machines').findOne({ _id: new ObjectId(machineId) });
-      if (!machine) {
-        return errorResponse('Machine not found', 404);
-      }
+    if (!machine) {
+      return errorResponse('Machine not found', 404);
     }
 
     // Generate file name: qr-codes/{sanitized-qr-value}.png
@@ -61,20 +50,15 @@ export const POST = withAuth(async (request: NextRequest) => {
     );
 
     // Update machine record with QR code image URL
-    await db.collection('machines').updateOne(
-      { _id: machine._id },
-      {
-        $set: {
-          'qrCode.imageUrl': publicUrl,
-          updatedAt: new Date(),
-        },
-      }
+    await prisma.machine.update(
+      { where: { id: machine.id } },
+      { data: { qrCodeImageUrl: publicUrl } }
     );
 
     return successResponse(
       {
         imageUrl: publicUrl,
-        machineId: machine._id.toString(),
+        machineId: machine.id,
         serialNumber: machine.serialNumber,
         qrCodeValue,
       },

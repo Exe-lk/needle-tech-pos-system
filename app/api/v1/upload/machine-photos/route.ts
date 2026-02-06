@@ -1,52 +1,67 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, validationErrorResponse } from '@/lib/api-response';
-import { withAuth } from '@/lib/auth';
+import { withAuthAndRole } from '@/lib/auth-middleware';
 import { uploadMultipleBase64Images, generateUniqueFileName, STORAGE_BUCKETS } from '@/lib/supabase-storage';
-import { getDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import prisma from '@/lib/prisma';
 
 /**
- * POST /api/v1/upload/machine-photos
- * Upload machine photos to Supabase Storage and update machine record
- * 
- * Body:
- * - machineId: string (MongoDB ObjectId) OR serialNumber: string
- * - photos: Array<{ imageData: string, contentType?: string }> (base64 encoded images)
- * - append?: boolean (default: true) - Whether to append to existing photos or replace
+ * @swagger
+ * /api/v1/upload/machine-photos:
+ *   post:
+ *     summary: Upload machine photos
+ *     description: Upload machine photos to Supabase Storage with Supabase auth
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - machineId
+ *               - photos
+ *             properties:
+ *               machineId:
+ *                 type: string
+ *                 format: uuid
+ *               photos:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     imageData:
+ *                       type: string
+ *                       description: Base64 encoded image
+ *                     contentType:
+ *                       type: string
+ *                       default: image/jpeg
+ *               append:
+ *                 type: boolean
+ *                 default: true
  */
-export const POST = withAuth(async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { machineId, serialNumber, photos, append = true } = body;
+    const { machineId, photos, append = true } = body;
 
-    // Validate required fields
-    if ((!machineId && !serialNumber) || !photos || !Array.isArray(photos) || photos.length === 0) {
+    if (!machineId || !photos || !Array.isArray(photos) || photos.length === 0) {
       return validationErrorResponse('Missing required fields', {
-        machineId: (!machineId && !serialNumber) ? ['Either machineId or serialNumber is required'] : [],
+        machineId: !machineId ? ['Machine ID is required'] : [],
         photos: (!photos || !Array.isArray(photos) || photos.length === 0) 
           ? ['At least one photo is required'] 
           : [],
       });
     }
 
-    const db = await getDatabase();
+    // Find machine
+    const machine = await prisma.machine.findUnique({
+      where: { id: machineId },
+    });
 
-    // Find machine by ID or serial number
-    let machine;
-    if (serialNumber) {
-      machine = await db.collection('machines').findOne({ serialNumber });
-      if (!machine) {
-        return errorResponse('Machine not found with serial number: ' + serialNumber, 404);
-      }
-    } else {
-      // Validate ObjectId format
-      if (!ObjectId.isValid(machineId)) {
-        return validationErrorResponse('Invalid machine ID format');
-      }
-      machine = await db.collection('machines').findOne({ _id: new ObjectId(machineId) });
-      if (!machine) {
-        return errorResponse('Machine not found', 404);
-      }
+    if (!machine) {
+      return errorResponse('Machine not found', 404);
     }
 
     // Prepare images for upload
@@ -69,15 +84,25 @@ export const POST = withAuth(async (request: NextRequest) => {
     );
 
     // Update machine record with photo URLs
-    const existingPhotos = machine.photos || [];
+    const existingPhotos = machine.photoUrls || [];
     const updatedPhotos = append 
       ? [...existingPhotos, ...publicUrls] 
       : publicUrls;
 
-    await db.collection('machines').updateOne(
-      { _id: machine._id },
-      {
-        $set: {
+    await prisma.machine.update(
+      { where: { id: machine.id } },
+      { data: { photoUrls: updatedPhotos } }
+    );
+
+    return successResponse(
+      { photoUrls: updatedPhotos },
+      `${photos.length} photo(s) uploaded successfully`
+    );
+  } catch (error: any) {
+    console.error('Error uploading machine photos:', error);
+    return errorResponse('Failed to upload machine photos', 500);
+  }
+});
           photos: updatedPhotos,
           updatedAt: new Date(),
         },

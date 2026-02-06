@@ -1,75 +1,57 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
-import { parseQueryParams, buildPaginationMeta, sanitizeObject, toObjectId, isValidObjectId } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
 /**
- * GET /api/v1/models
- * Get all models with pagination
+ * @swagger
+ * /api/v1/models:
+ *   get:
+ *     summary: Get all machine models
+ *     tags: [Models]
+ *     security:
+ *       - bearerAuth: []
  */
-export const GET = withAuth(async (request: NextRequest) => {
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
-    const brandFilter = searchParams.get('brandId');
+    const brandIdFilter = searchParams.get('brandId');
     
-    const filter: any = {};
+    const where: any = {};
     
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } },
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
       ];
     }
     
-    if (brandFilter && isValidObjectId(brandFilter)) {
-      const brand = await db.collection('brands').findOne({ _id: toObjectId(brandFilter) });
-      if (brand) {
-        filter.brandName = brand.name;
-      }
-    }
+    if (brandIdFilter) where.brandId = brandIdFilter;
     
-    const totalItems = await db.collection('models').countDocuments(filter);
+    const totalItems = await prisma.model.count({ where });
     const skip = (page - 1) * limit;
-    const sortObj: Record<string, 1 | -1> = { [sortBy]: sortOrder as 1 | -1 };
+    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
     
-    const models = await db
-      .collection('models')
-      .find(filter)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
+    const models = await prisma.model.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder_ },
+      include: { brand: true }
+    });
     
-    // Populate brand information
-    const populatedModels = await Promise.all(
-      models.map(async (model) => {
-        const brand = model.brandName
-          ? await db.collection('brands').findOne({ name: model.brandName })
-          : null;
-        return {
-          ...model,
-          brand: sanitizeObject(brand),
-        };
-      })
-    );
-    
-    const sanitizedModels = populatedModels.map(model => sanitizeObject(model));
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      sanitizedModels,
+      models,
       pagination,
       'Models retrieved successfully',
-      { sortBy, sortOrder: sortOrder === 1 ? 'asc' : 'desc' },
+      { sortBy, sortOrder: sortOrder_ },
       search || undefined,
-      {
-        ...(brandFilter && { brandId: brandFilter }),
-      }
+      { ...(brandIdFilter && { brandId: brandIdFilter }) }
     );
   } catch (error: any) {
     console.error('Error fetching models:', error);
@@ -78,54 +60,66 @@ export const GET = withAuth(async (request: NextRequest) => {
 });
 
 /**
- * POST /api/v1/models
- * Create a new model
+ * @swagger
+ * /api/v1/models:
+ *   post:
+ *     summary: Create a new model
+ *     tags: [Models]
+ *     security:
+ *       - bearerAuth: []
  */
-export const POST = withAuth(async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { name, brandId, brandName, code, description } = body;
+    const { name, brandId, code, description } = body;
     
-    if (!name) {
+    if (!name || !brandId) {
       return validationErrorResponse('Missing required fields', {
         name: !name ? ['Model name is required'] : [],
+        brandId: !brandId ? ['Brand ID is required'] : [],
       });
     }
     
-    const db = await getDatabase();
+    const brand = await prisma.brand.findUnique({ where: { id: brandId } });
     
-    // Get brand name from brandId or use provided brandName
-    let finalBrandName = brandName;
-    if (brandId) {
-      if (!isValidObjectId(brandId)) {
-        return validationErrorResponse('Invalid brand ID format');
-      }
-      const brand = await db.collection('brands').findOne({ _id: toObjectId(brandId) });
-      if (!brand) {
-        return validationErrorResponse('Brand not found', {
-          brandId: ['Invalid brand ID'],
-        });
-      }
-      finalBrandName = brand.name;
-    }
-    
-    if (!finalBrandName) {
-      return validationErrorResponse('Missing required fields', {
-        brandId: !brandId && !brandName ? ['Either brandId or brandName is required'] : [],
+    if (!brand) {
+      return validationErrorResponse('Invalid brand', {
+        brandId: ['Brand not found'],
       });
     }
     
-    // Generate code from name if not provided
-    const modelCode = code || name.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-    
-    // Check if model with same name for this brand already exists
-    const existingModel = await db.collection('models').findOne({
-      name: { $regex: new RegExp(`^${name}$`, 'i') },
-      brandName: finalBrandName,
+    const existingModel = await prisma.model.findFirst({
+      where: {
+        OR: [
+          { name: { equals: name, mode: 'insensitive' } },
+          { code: { equals: code, mode: 'insensitive' } },
+        ],
+      },
     });
     
     if (existingModel) {
       return validationErrorResponse('Model already exists', {
+        name: ['Model with this name or code already exists'],
+      });
+    }
+    
+    const newModel = await prisma.model.create({
+      data: {
+        name: name.trim(),
+        code: code || name.toUpperCase().replace(/[^A-Z0-9]/g, '_'),
+        description: description || '',
+        brandId,
+        isActive: true,
+      },
+      include: { brand: true }
+    });
+    
+    return successResponse(newModel, 'Model created successfully', 201);
+  } catch (error: any) {
+    console.error('Error creating model:', error);
+    return errorResponse('Failed to create model', 500);
+  }
+});
         name: ['Model with this name already exists for this brand'],
       });
     }

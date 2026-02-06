@@ -1,20 +1,20 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, validationErrorResponse } from '@/lib/api-response';
-import { withAuth } from '@/lib/auth';
+import { withAuthAndRole } from '@/lib/auth-middleware';
 import { uploadMultipleBase64Images, generateUniqueFileName, STORAGE_BUCKETS } from '@/lib/supabase-storage';
-import { getDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import prisma from '@/lib/prisma';
 
 /**
- * POST /api/v1/upload/damage-report-photos
- * Upload damage report photos to Supabase Storage and update damage report record
- * 
- * Body:
- * - damageReportId: string (MongoDB ObjectId)
- * - photos: Array<{ imageData: string, contentType?: string }> (base64 encoded images)
- * - append?: boolean (default: true) - Whether to append to existing photos or replace
+ * @swagger
+ * /api/v1/upload/damage-report-photos:
+ *   post:
+ *     summary: Upload damage report photos
+ *     description: Upload photos to damage report using Supabase auth
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
  */
-export const POST = withAuth(async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { damageReportId, photos, append = true } = body;
@@ -29,16 +29,9 @@ export const POST = withAuth(async (request: NextRequest) => {
       });
     }
 
-    // Validate ObjectId format
-    if (!ObjectId.isValid(damageReportId)) {
-      return validationErrorResponse('Invalid damage report ID format');
-    }
-
-    const db = await getDatabase();
-
     // Check if damage report exists
-    const damageReport = await db.collection('damageReports').findOne({ 
-      _id: new ObjectId(damageReportId) 
+    const damageReport = await prisma.damageReport.findUnique({ 
+      where: { id: damageReportId } 
     });
     if (!damageReport) {
       return errorResponse('Damage report not found', 404);
@@ -64,19 +57,14 @@ export const POST = withAuth(async (request: NextRequest) => {
     );
 
     // Update damage report record with photo URLs
-    const existingPhotos = damageReport.photos || [];
+    const existingPhotos = damageReport.photoUrls || [];
     const updatedPhotos = append 
       ? [...existingPhotos, ...publicUrls] 
       : publicUrls;
 
-    await db.collection('damageReports').updateOne(
-      { _id: new ObjectId(damageReportId) },
-      {
-        $set: {
-          photos: updatedPhotos,
-          updatedAt: new Date(),
-        },
-      }
+    await prisma.damageReport.update(
+      { where: { id: damageReportId } },
+      { data: { photoUrls: updatedPhotos } }
     );
 
     return successResponse(

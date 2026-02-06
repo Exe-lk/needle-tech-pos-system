@@ -1,26 +1,16 @@
 import { NextRequest } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
 import { successResponse, errorResponse } from '@/lib/api-response';
-import { sanitizeObject } from '@/lib/utils';
-import { withAuth } from '@/lib/auth';
+import { withAuthAndRole } from '@/lib/auth-middleware';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/v1/brands/active
- * Get all active brands (for dropdowns)
- */
-export const GET = withAuth(async (request: NextRequest) => {
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
-    const db = await getDatabase();
+    const brands = await prisma.brand.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' }
+    });
     
-    const brands = await db
-      .collection('brands')
-      .find({ isActive: true })
-      .sort({ name: 1 })
-      .toArray();
-    
-    const sanitizedBrands = brands.map(brand => sanitizeObject(brand));
-    
-    return successResponse(sanitizedBrands, 'Active brands retrieved successfully');
+    return successResponse(brands, 'Active brands retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching active brands:', error);
     return errorResponse('Failed to retrieve active brands', 500);

@@ -1,20 +1,20 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, validationErrorResponse } from '@/lib/api-response';
-import { withAuth } from '@/lib/auth';
+import { withAuthAndRole } from '@/lib/auth-middleware';
 import { uploadMultipleBase64Images, generateUniqueFileName, STORAGE_BUCKETS } from '@/lib/supabase-storage';
-import { getDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import prisma from '@/lib/prisma';
 
 /**
- * POST /api/v1/upload/return-photos
- * Upload return inspection photos to Supabase Storage and update return record
- * 
- * Body:
- * - returnId: string (MongoDB ObjectId)
- * - photos: Array<{ imageData: string, contentType?: string }> (base64 encoded images)
- * - append?: boolean (default: true) - Whether to append to existing photos or replace
+ * @swagger
+ * /api/v1/upload/return-photos:
+ *   post:
+ *     summary: Upload return inspection photos
+ *     description: Upload photos for return inspection with Supabase auth
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
  */
-export const POST = withAuth(async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { returnId, photos, append = true } = body;
@@ -29,16 +29,9 @@ export const POST = withAuth(async (request: NextRequest) => {
       });
     }
 
-    // Validate ObjectId format
-    if (!ObjectId.isValid(returnId)) {
-      return validationErrorResponse('Invalid return ID format');
-    }
-
-    const db = await getDatabase();
-
     // Check if return exists
-    const returnRecord = await db.collection('returns').findOne({ 
-      _id: new ObjectId(returnId) 
+    const returnRecord = await prisma.return.findUnique({ 
+      where: { id: returnId } 
     });
     if (!returnRecord) {
       return errorResponse('Return record not found', 404);
@@ -47,7 +40,7 @@ export const POST = withAuth(async (request: NextRequest) => {
     // Prepare images for upload
     const imagesToUpload = photos.map((photo, index) => {
       const fileName = generateUniqueFileName(
-        `return-${returnRecord.returnNumber || returnId}-photo-${index + 1}`,
+        `return-${returnRecord.id}-photo-${index + 1}`,
         'jpg'
       );
       return {
@@ -64,19 +57,14 @@ export const POST = withAuth(async (request: NextRequest) => {
     );
 
     // Update return record with photo URLs
-    const existingPhotos = returnRecord.photos || [];
+    const existingPhotos = returnRecord.photoUrls || [];
     const updatedPhotos = append 
       ? [...existingPhotos, ...publicUrls] 
       : publicUrls;
 
-    await db.collection('returns').updateOne(
-      { _id: new ObjectId(returnId) },
-      {
-        $set: {
-          photos: updatedPhotos,
-          updatedAt: new Date(),
-        },
-      }
+    await prisma.return.update(
+      { where: { id: returnId } },
+      { data: { photoUrls: updatedPhotos } }
     );
 
     return successResponse(
