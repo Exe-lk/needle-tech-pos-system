@@ -1193,8 +1193,8 @@ const GatePassPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Modal Content - Scrollable document-style form */}
-              <div className="flex-1 overflow-y-auto">
+              {/* Modal Content - Scrollable document-style form (theme-aware) */}
+              <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-slate-800">
                 <div className="p-4 sm:p-6 md:p-8">
                   <LetterheadDocument
                     documentTitle="GATEPASS"
@@ -1207,9 +1207,9 @@ const GatePassPage: React.FC = () => {
                             value={issuedBy}
                             onChange={(e) => setIssuedBy(e.target.value)}
                             placeholder="Name"
-                            className="w-full border-0 border-b border-gray-800 bg-transparent py-1 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-0"
+                            className="w-full border-0 border-b border-gray-800 dark:border-slate-400 bg-transparent py-1 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-0"
                           />
-                          <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-1">Issued By</div>
+                          <div className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 mt-1">Issued By</div>
                         </div>
                         <div className="hidden md:block" />
                         <div>
@@ -1218,13 +1218,13 @@ const GatePassPage: React.FC = () => {
                             value={receivedBy}
                             onChange={(e) => setReceivedBy(e.target.value)}
                             placeholder="Name"
-                            className="w-full border-0 border-b border-gray-800 bg-transparent py-1 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-0"
+                            className="w-full border-0 border-b border-gray-800 dark:border-slate-400 bg-transparent py-1 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-0"
                           />
-                          <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-1">Received By</div>
+                          <div className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 mt-1">Received By</div>
                         </div>
                       </div>
                     }
-                    className="print:p-0"
+                    className="print:p-0 print:!bg-white"
                   >
                     {/* Two-column layout: FROM/TO/Vehicle/Driver | Gatepass/Date/Returnable/Entry (matches print) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
@@ -1240,7 +1240,7 @@ const GatePassPage: React.FC = () => {
                           <select
                             value={agreementReference}
                             onChange={(e) => handleAgreementChange(e.target.value)}
-                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.agreementReference ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 ${formErrors.agreementReference ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           >
                             <option value="">Select Agreement</option>
                             {mockRentalAgreements.map((agreement) => (
@@ -1250,7 +1250,7 @@ const GatePassPage: React.FC = () => {
                             ))}
                           </select>
                           {formErrors.agreementReference && (
-                            <p className="mt-1 text-xs text-red-500">{formErrors.agreementReference}</p>
+                            <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.agreementReference}</p>
                           )}
                         </div>
                         {agreementReference && (() => {
@@ -1274,9 +1274,9 @@ const GatePassPage: React.FC = () => {
                             value={vehicleNumber}
                             onChange={(e) => setVehicleNumber(e.target.value)}
                             placeholder="e.g. ABC-1234"
-                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.vehicleNumber ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 ${formErrors.vehicleNumber ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           />
-                          {formErrors.vehicleNumber && <p className="mt-1 text-xs text-red-500">{formErrors.vehicleNumber}</p>}
+                          {formErrors.vehicleNumber && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.vehicleNumber}</p>}
                         </div>
                         <div>
                           <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -1287,9 +1287,9 @@ const GatePassPage: React.FC = () => {
                             value={driverName}
                             onChange={(e) => setDriverName(e.target.value)}
                             placeholder="e.g. Nimal Perera"
-                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.driverName ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 ${formErrors.driverName ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           />
-                          {formErrors.driverName && <p className="mt-1 text-xs text-red-500">{formErrors.driverName}</p>}
+                          {formErrors.driverName && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.driverName}</p>}
                         </div>
                       </div>
                       <div className="space-y-3 sm:space-y-4 md:text-right">
@@ -1305,9 +1305,9 @@ const GatePassPage: React.FC = () => {
                             type="date"
                             value={dateOfIssue}
                             onChange={(e) => setDateOfIssue(e.target.value)}
-                            className={`w-full md:w-auto min-w-[140px] px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white ${formErrors.dateOfIssue ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                            className={`w-full md:w-auto min-w-[140px] px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 ${formErrors.dateOfIssue ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           />
-                          {formErrors.dateOfIssue && <p className="mt-1 text-xs text-red-500">{formErrors.dateOfIssue}</p>}
+                          {formErrors.dateOfIssue && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.dateOfIssue}</p>}
                         </div>
                         <div>
                           <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Returnable:</div>
@@ -1325,7 +1325,7 @@ const GatePassPage: React.FC = () => {
                           <select
                             value={entry}
                             onChange={(e) => setEntry(e.target.value as 'IN' | 'OUT')}
-                            className="w-full md:w-auto min-w-[80px] px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                            className="w-full md:w-auto min-w-[80px] px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
                           >
                             <option value="OUT">OUT</option>
                             <option value="IN">IN</option>
@@ -1350,7 +1350,7 @@ const GatePassPage: React.FC = () => {
                           Add Item
                         </button>
                       </div>
-                      {formErrors.items && <p className="text-xs text-red-500 mb-2">{formErrors.items}</p>}
+                      {formErrors.items && <p className="text-xs text-red-500 dark:text-red-400 mb-2">{formErrors.items}</p>}
                       <div className="overflow-x-auto border border-gray-200 dark:border-slate-600 rounded-lg">
                         <table className="w-full border-collapse text-xs sm:text-sm">
                           <thead>
@@ -1371,17 +1371,17 @@ const GatePassPage: React.FC = () => {
                                     value={item.description}
                                     onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
                                     placeholder="e.g. JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE"
-                                    className={`w-full min-w-[180px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 ${formErrors[`item_description_${index}`] ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                                    className={`w-full min-w-[180px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 placeholder-gray-500 dark:placeholder-slate-400 ${formErrors[`item_description_${index}`] ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                                   />
                                   {formErrors[`item_description_${index}`] && (
-                                    <p className="text-red-500 text-[10px] mt-0.5">{formErrors[`item_description_${index}`]}</p>
+                                    <p className="text-red-500 dark:text-red-400 text-[10px] mt-0.5">{formErrors[`item_description_${index}`]}</p>
                                   )}
                                 </td>
                                 <td className="py-1.5 px-2 align-top">
                                   <select
                                     value={item.status}
                                     onChange={(e) => handleItemChange(item.id, 'status', e.target.value)}
-                                    className="w-full px-2 py-1 border rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full px-2 py-1 border rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-indigo-500"
                                   >
                                     <option value="GOOD">GOOD</option>
                                     <option value="FAIR">FAIR</option>
@@ -1395,10 +1395,10 @@ const GatePassPage: React.FC = () => {
                                     value={item.serialNo}
                                     onChange={(e) => handleItemChange(item.id, 'serialNo', e.target.value)}
                                     placeholder="Serial No"
-                                    className={`w-full min-w-[100px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 ${formErrors[`item_serialNo_${index}`] ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                                    className={`w-full min-w-[100px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 placeholder-gray-500 dark:placeholder-slate-400 ${formErrors[`item_serialNo_${index}`] ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                                   />
                                   {formErrors[`item_serialNo_${index}`] && (
-                                    <p className="text-red-500 text-[10px] mt-0.5">{formErrors[`item_serialNo_${index}`]}</p>
+                                    <p className="text-red-500 dark:text-red-400 text-[10px] mt-0.5">{formErrors[`item_serialNo_${index}`]}</p>
                                   )}
                                 </td>
                                 <td className="py-1.5 px-2 align-top">
@@ -1407,10 +1407,10 @@ const GatePassPage: React.FC = () => {
                                     value={item.motorBoxNo}
                                     onChange={(e) => handleItemChange(item.id, 'motorBoxNo', e.target.value)}
                                     placeholder="Motor/Box No"
-                                    className={`w-full min-w-[90px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 ${formErrors[`item_motorBoxNo_${index}`] ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                                    className={`w-full min-w-[90px] px-2 py-1 border rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 placeholder-gray-500 dark:placeholder-slate-400 ${formErrors[`item_motorBoxNo_${index}`] ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                                   />
                                   {formErrors[`item_motorBoxNo_${index}`] && (
-                                    <p className="text-red-500 text-[10px] mt-0.5">{formErrors[`item_motorBoxNo_${index}`]}</p>
+                                    <p className="text-red-500 dark:text-red-400 text-[10px] mt-0.5">{formErrors[`item_motorBoxNo_${index}`]}</p>
                                   )}
                                 </td>
                                 <td className="py-1.5 pl-2 align-top">
