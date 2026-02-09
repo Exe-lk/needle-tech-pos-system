@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
@@ -13,7 +13,7 @@ import Tooltip from '@/src/components/common/tooltip';
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
 interface Machine {
-  id: number;
+  id: string;
   barcode: string;
   serialNumber: string;
   boxNo: string;
@@ -24,7 +24,7 @@ interface Machine {
 
 // Machine Profile Data Types
 interface MachineInfo {
-  id: number;
+  id: string;
   barcode: string;
   serialNumber: string;
   boxNo: string;
@@ -36,6 +36,7 @@ interface MachineInfo {
   photos?: string[]; // URLs or paths to photos
   purchaseDate?: string;
   warrantyExpiry?: string;
+  warrantyExpiryDate?: string | null;
   location?: string;
   notes?: string;
   manufactureYear?: string;
@@ -47,7 +48,7 @@ interface MachineInfo {
 
 // Machine Rental History Data Types
 interface MachineRentalHistory {
-  id: number;
+  id: string;
   serialNumber: string;
   brand: string;
   model: string;
@@ -60,158 +61,169 @@ interface MachineRentalHistory {
 }
 
 
-// Mock machine data
-const mockMachines: Machine[] = [
-  {
-    id: 1,
-    barcode: 'BROTHER-XL2600I-SN-2024-001',
-    serialNumber: 'SN-2024-001',
-    boxNo: 'BOX-2024-001',
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-  },
-  {
-    id: 2,
-    barcode: 'SINGER-HEAVY-DUTY-4423-SN-2024-002',
-    serialNumber: 'SN-2024-002',
-    boxNo: 'BOX-2024-002',
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    type: 'Industrial',
-  },
-  {
-    id: 3,
-    barcode: 'JANOME-HD3000-SN-2024-003',
-    serialNumber: 'SN-2024-003',
-    boxNo: 'BOX-2024-003',
-    brand: 'Janome',
-    model: 'HD3000',
-    type: 'Domestic',
-  },
-  {
-    id: 4,
-    barcode: 'BROTHER-SE600-SN-2024-004',
-    serialNumber: 'SN-2024-004',
-    boxNo: 'BOX-2024-004',
-    brand: 'Brother',
-    model: 'SE600',
-    type: 'Embroidery',
-  },
-  {
-    id: 5,
-    barcode: 'JUKI-MO-654DE-SN-2024-005',
-    serialNumber: 'SN-2024-005',
-    boxNo: 'BOX-2024-005',
-    brand: 'Juki',
-    model: 'MO-654DE',
-    type: 'Overlock',
-  },
-  {
-    id: 6,
-    barcode: 'SINGER-BUTTONHOLE-160-SN-2024-006',
-    serialNumber: 'SN-2024-006',
-    boxNo: 'BOX-2024-006',
-    brand: 'Singer',
-    model: 'Buttonhole 160',
-    type: 'Buttonhole',
-  },
-  {
-    id: 7,
-    barcode: 'BROTHER-CS6000I-SN-2024-007',
-    serialNumber: 'SN-2024-007',
-    boxNo: 'BOX-2024-007',
-    brand: 'Brother',
-    model: 'CS6000i',
-    type: 'Domestic',
-  },
-  {
-    id: 8,
-    barcode: 'JANOME-MB-4S-SN-2024-008',
-    serialNumber: 'SN-2024-008',
-    boxNo: 'BOX-2024-008',
-    brand: 'Janome',
-    model: 'MB-4S',
-    type: 'Industrial',
-  },
-];
+// API Functions
+const API_BASE_URL = '/api/v1';
 
-// Mock function to get machine profile data (replace with API call later)
-const getMachineProfileData = (machineId: number): MachineInfo => {
-  const machine = mockMachines.find((m) => m.id === machineId);
-  return {
-    id: machine?.id || 0,
-    barcode: machine?.barcode || '',
-    serialNumber: machine?.serialNumber || '',
-    boxNo: machine?.boxNo || '',
-    brand: machine?.brand || '',
-    model: machine?.model || '',
-    type: machine?.type || 'Domestic',
-    status: machineId === 2 || machineId === 4 ? 'Rented' : 'Available',
-    currentCustomer: machineId === 2 ? 'ABC Holdings (Pvt) Ltd' : machineId === 4 ? 'John Perera' : undefined,
-    photos: [
-      'https://via.placeholder.com/800x600?text=Photo+1',
-      'https://via.placeholder.com/800x600?text=Photo+2',
-      'https://via.placeholder.com/800x600?text=Photo+3',
-    ],
-    purchaseDate: '2024-01-15',
-    warrantyExpiry: '2027-01-15',
-    location: 'Main Warehouse',
-    notes: 'Regular maintenance required every 200 hours of operation.',
-    manufactureYear: '2024',
-    country: 'Sri Lanka',
-    conditionOnArrival: 'New',
-    warrantyStatus: 'Active',
-    registrationLocation: 'Main Warehouse',
-  };
+// Fetch all machines
+const fetchMachines = async (): Promise<Machine[]> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/machines?limit=1000`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch machines');
+    }
+
+    const data = await response.json();
+    return data.data?.items || [];
+  } catch (error) {
+    console.error('Error fetching machines:', error);
+    return [];
+  }
 };
 
-// Mock function to get machine rental history (replace with API call later)
-const getMachineRentalHistory = (machineId: number): MachineRentalHistory[] => {
-  const machine = mockMachines.find((m) => m.id === machineId);
-  if (!machine) return [];
+// Fetch machine by ID
+const fetchMachineById = async (machineId: string): Promise<MachineInfo | null> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/machines/${machineId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+    });
 
-  // Generate mock rental history based on machine
-  const history: MachineRentalHistory[] = [
-    {
-      id: 1,
-      serialNumber: machine.serialNumber,
-      brand: machine.brand,
-      model: machine.model,
-      type: machine.type,
-      customer: 'ABC Holdings (Pvt) Ltd',
-      rentingPeriod: '2024-01-15 to 2024-02-15',
-      startDate: '2024-01-15',
-      endDate: '2024-02-15',
-      status: 'Completed',
-    },
-    {
-      id: 2,
-      serialNumber: machine.serialNumber,
-      brand: machine.brand,
-      model: machine.model,
-      type: machine.type,
-      customer: 'XYZ Engineering',
-      rentingPeriod: '2024-03-01 to 2024-03-31',
-      startDate: '2024-03-01',
-      endDate: '2024-03-31',
-      status: 'Completed',
-    },
-    {
-      id: 3,
-      serialNumber: machine.serialNumber,
-      brand: machine.brand,
-      model: machine.model,
-      type: machine.type,
-      customer: machineId === 2 ? 'ABC Holdings (Pvt) Ltd' : machineId === 4 ? 'John Perera' : 'Mega Constructions',
-      rentingPeriod: machineId === 2 || machineId === 4 ? '2024-04-01 to Present' : '2024-04-10 to 2024-05-10',
-      startDate: '2024-04-01',
-      endDate: machineId === 2 || machineId === 4 ? null : '2024-05-10',
-      status: machineId === 2 || machineId === 4 ? 'Active' : 'Completed',
-    },
-  ];
+    if (!response.ok) {
+      throw new Error('Failed to fetch machine');
+    }
 
-  return history;
+    const data = await response.json();
+    return data.data as MachineInfo;
+  } catch (error) {
+    console.error('Error fetching machine by ID:', error);
+    return null;
+  }
+};
+
+// Create machine
+const createMachine = async (machineData: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/machines`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify(machineData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Failed to create machine',
+      };
+    }
+
+    return {
+      success: true,
+      data: data.data,
+    };
+  } catch (error: any) {
+    console.error('Error creating machine:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+};
+
+// Update machine
+const updateMachine = async (machineId: string, machineData: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/machines/${machineId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify(machineData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Failed to update machine',
+      };
+    }
+
+    return {
+      success: true,
+      data: data.data,
+    };
+  } catch (error: any) {
+    console.error('Error updating machine:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+};
+
+// Delete machine
+const deleteMachine = async (machineId: string): Promise<{ success: boolean; error?: string }> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/machines/${machineId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Failed to delete machine',
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error: any) {
+    console.error('Error deleting machine:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+};
+
+// Mock function for rental history (to be replaced with actual API later)
+const getMachineRentalHistory = (machineId: string): MachineRentalHistory[] => {
+  // TODO: Replace with actual API call to fetch rental history
+  return [];
 };
 
 // Table column configuration
@@ -268,9 +280,29 @@ const MachineListPage: React.FC = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
+  const [selectedMachineDetail, setSelectedMachineDetail] = useState<MachineInfo | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [activeCreateTab, setActiveCreateTab] = useState<'machine' | 'tool'>('machine');
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch machines on component mount
+  useEffect(() => {
+    loadMachines();
+  }, []);
+
+  const loadMachines = async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchMachines();
+      setMachines(data);
+    } catch (error) {
+      console.error('Error loading machines:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -294,26 +326,40 @@ const MachineListPage: React.FC = () => {
     setActiveCreateTab('machine');
   };
 
-  const handleViewMachine = (machine: Machine) => {
+  const handleViewMachine = async (machine: Machine) => {
     setSelectedMachine(machine);
     setCurrentPhotoIndex(0); // Reset photo index when opening view
     setIsViewModalOpen(true);
+    
+    // Fetch detailed machine info
+    const machineDetail = await fetchMachineById(machine.id.toString());
+    if (machineDetail) {
+      setSelectedMachineDetail(machineDetail);
+    }
   };
 
   const handleCloseViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedMachine(null);
+    setSelectedMachineDetail(null);
     setCurrentPhotoIndex(0);
   };
 
-  const handleUpdateMachine = (machine: Machine) => {
+  const handleUpdateMachine = async (machine: Machine) => {
     setSelectedMachine(machine);
     setIsUpdateModalOpen(true);
+    
+    // Fetch detailed machine info for update form
+    const machineDetail = await fetchMachineById(machine.id.toString());
+    if (machineDetail) {
+      setSelectedMachineDetail(machineDetail);
+    }
   };
 
   const handleCloseUpdateModal = () => {
     setIsUpdateModalOpen(false);
     setSelectedMachine(null);
+    setSelectedMachineDetail(null);
   };
 
   const handleDeleteMachine = (machine: Machine) => {
@@ -331,12 +377,16 @@ const MachineListPage: React.FC = () => {
     
     setIsSubmitting(true);
     try {
-      console.log('Delete machine payload:', selectedMachine);
-      // Replace with actual API call
-      // await deleteMachineAPI(selectedMachine.id);
-      alert(`Machine "${selectedMachine.brand} ${selectedMachine.model}" deleted (frontend only).`);
-      handleCloseDeleteModal();
-      // Optionally refresh the machine list here
+      const result = await deleteMachine(selectedMachine.id.toString());
+      
+      if (result.success) {
+        alert(`Machine "${selectedMachine.brand} ${selectedMachine.model}" deleted successfully.`);
+        handleCloseDeleteModal();
+        // Refresh the machine list
+        await loadMachines();
+      } else {
+        alert(`Failed to delete machine: ${result.error}`);
+      }
     } catch (error) {
       console.error('Error deleting machine:', error);
       alert('Failed to delete machine. Please try again.');
@@ -354,16 +404,14 @@ const MachineListPage: React.FC = () => {
   };
 
   const handlePreviousPhoto = () => {
-    if (!selectedMachine) return;
-    const machineInfo = getMachineProfileData(selectedMachine.id);
-    const photos = machineInfo.photos || [];
+    if (!selectedMachineDetail) return;
+    const photos = selectedMachineDetail.photos || [];
     setCurrentPhotoIndex((prev) => (prev > 0 ? prev - 1 : photos.length - 1));
   };
 
   const handleNextPhoto = () => {
-    if (!selectedMachine) return;
-    const machineInfo = getMachineProfileData(selectedMachine.id);
-    const photos = machineInfo.photos || [];
+    if (!selectedMachineDetail) return;
+    const photos = selectedMachineDetail.photos || [];
     setCurrentPhotoIndex((prev) => (prev < photos.length - 1 ? prev + 1 : 0));
   };
 
@@ -678,16 +726,30 @@ const MachineListPage: React.FC = () => {
     },
   ];
 
-  // Auto-generate barcode from Brand + Model + unique suffix (serial/box removed from form)
-  const generateBarcode = (brand: string, model: string): string => {
-    if (!brand || !model) return '';
-    const suffix = Date.now().toString(36).toUpperCase();
-    return `${brand}-${model}-${suffix}`.replace(/\s+/g, '-').toUpperCase();
-  };
-
   // Get initial data for update form
   const getUpdateInitialData = (machine: Machine | null) => {
     if (!machine) return {};
+
+    // Fetch the full machine details if we only have basic info
+    if (selectedMachineDetail) {
+      return {
+        barcode: selectedMachineDetail.barcode,
+        serialNumber: selectedMachineDetail.serialNumber,
+        boxNo: selectedMachineDetail.boxNo,
+        brand: selectedMachineDetail.brand,
+        model: selectedMachineDetail.model,
+        type: selectedMachineDetail.type,
+        manufactureYear: selectedMachineDetail.manufactureYear,
+        country: selectedMachineDetail.country,
+        conditionOnArrival: selectedMachineDetail.conditionOnArrival,
+        status: selectedMachineDetail.status,
+        warrantyStatus: selectedMachineDetail.warrantyStatus,
+        warrantyExpiryDate: selectedMachineDetail.warrantyExpiryDate || selectedMachineDetail.warrantyExpiry,
+        purchaseDate: selectedMachineDetail.purchaseDate,
+        location: selectedMachineDetail.location,
+        notes: selectedMachineDetail.notes,
+      };
+    }
 
     return {
       barcode: machine.barcode,
@@ -716,17 +778,19 @@ const MachineListPage: React.FC = () => {
   const handleMachineSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      // Auto-generate barcode (serial number and box number no longer in form)
-      const barcode = generateBarcode(data.brand, data.model);
+      const result = await createMachine(data);
       
-      const submissionData = {
-        ...data,
-        barcode,
-      };
-      
-      console.log('Create machine payload:', submissionData);
-      alert(`Machine "${data.brand} ${data.model}" registered successfully (frontend only).`);
-      handleCloseCreateModal();
+      if (result.success) {
+        alert(`Machine "${data.brand} ${data.model}" registered successfully.`);
+        handleCloseCreateModal();
+        // Refresh the machine list
+        await loadMachines();
+      } else {
+        alert(`Failed to create machine: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error creating machine:', error);
+      alert('Failed to create machine. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -744,11 +808,23 @@ const MachineListPage: React.FC = () => {
   };
 
   const handleMachineUpdate = async (data: Record<string, any>) => {
+    if (!selectedMachine) return;
+    
     setIsSubmitting(true);
     try {
-      console.log('Update machine payload:', data);
-      alert(`Machine "${data.brand} ${data.model}" updated (frontend only).`);
-      handleCloseUpdateModal();
+      const result = await updateMachine(selectedMachine.id.toString(), data);
+      
+      if (result.success) {
+        alert(`Machine "${data.brand} ${data.model}" updated successfully.`);
+        handleCloseUpdateModal();
+        // Refresh the machine list
+        await loadMachines();
+      } else {
+        alert(`Failed to update machine: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error updating machine:', error);
+      alert('Failed to update machine. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -855,7 +931,12 @@ const MachineListPage: React.FC = () => {
   const renderMachineProfile = () => {
     if (!selectedMachine) return null;
 
-    const machineInfo = getMachineProfileData(selectedMachine.id);
+    const machineInfo = selectedMachineDetail || {
+      ...selectedMachine,
+      status: 'Available',
+      photos: [],
+    } as MachineInfo;
+    
     const photos = machineInfo.photos || [];
     const hasMultiplePhotos = photos.length > 1;
     const currentPhoto = photos[currentPhotoIndex] || null;
@@ -1118,7 +1199,7 @@ const MachineListPage: React.FC = () => {
 
           {/* Machine table card */}
           <Table
-            data={mockMachines}
+            data={machines}
             columns={columns}
             actions={actions}
             itemsPerPage={10}
@@ -1126,7 +1207,7 @@ const MachineListPage: React.FC = () => {
             filterable
             onCreateClick={handleCreateMachine}
             createButtonLabel="Register"
-            emptyMessage="No machines found."
+            emptyMessage={isLoading ? "Loading machines..." : "No machines found."}
           />
         </div>
       </main>
@@ -1336,7 +1417,7 @@ const MachineListPage: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-4">
                 <Table
-                  data={getMachineRentalHistory(selectedMachine.id)}
+                  data={getMachineRentalHistory(selectedMachine.id.toString())}
                   columns={rentalHistoryColumns}
                   itemsPerPage={10}
                   searchable

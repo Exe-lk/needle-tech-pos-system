@@ -5,9 +5,13 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { LogIn } from 'lucide-react';
 
+const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
+const AUTH_REFRESH_TOKEN_KEY = 'needletech_refresh_token';
+const AUTH_USER_KEY = 'needletech_user';
+
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -15,18 +19,44 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!username.trim() || !password) {
-      setError('Please enter both user name and password.');
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      setError('Please enter both email and password.');
       return;
     }
     setIsSubmitting(true);
-    // Replace with your actual auth API call
     try {
-      // Example: await signIn(username, password);
-      // For now, redirect to dashboard on submit
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmedEmail, password }),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        setError(json?.message || 'Invalid email or password.');
+        return;
+      }
+
+      if (json?.status !== 'success' || !json?.data) {
+        setError(json?.message || 'Login failed.');
+        return;
+      }
+
+      const { accessToken, refreshToken, user } = json.data;
+      if (accessToken) {
+        localStorage.setItem(AUTH_ACCESS_TOKEN_KEY, accessToken);
+      }
+      if (refreshToken) {
+        localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, refreshToken);
+      }
+      if (user) {
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+      }
+
       router.push('/dashboard');
     } catch {
-      setError('Invalid user name or password.');
+      setError('Something went wrong. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -50,7 +80,7 @@ export default function LoginPage() {
               Needle Technologies
             </h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Sign in to your account
+              Login to your account
             </p>
           </div>
 
@@ -66,18 +96,18 @@ export default function LoginPage() {
 
             <div>
               <label
-                htmlFor="username"
+                htmlFor="email"
                 className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                User name
+                Email
               </label>
               <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                placeholder="Enter your user name"
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                placeholder="Enter your email"
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 transition-colors focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:border-slate-600 dark:bg-slate-700/50 dark:text-white dark:placeholder-gray-500 dark:focus:border-slate-500 dark:focus:ring-slate-500"
                 disabled={isSubmitting}
               />
