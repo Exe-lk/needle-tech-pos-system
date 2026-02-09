@@ -9,6 +9,7 @@ import {
   Trash2,
   Zap,
   Scan,
+  Info,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -226,18 +227,28 @@ function getUpdateInitialData(agreement: RentalAgreement | null): Record<string,
 // Component
 // ---------------------------------------------------------------------------
 
+type ViewMode = 'menu' | 'details' | 'scan';
+
 const MachineAssignPage: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
+
+  // Step 1: agreement input
   const [agreementNumberInput, setAgreementNumberInput] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
+
+  // Selected agreement + overall state
   const [selectedAgreement, setSelectedAgreement] = useState<RentalAgreement | null>(null);
   const [agreements, setAgreements] = useState<RentalAgreement[]>(mockRentalAgreements);
 
+  // Machine scanning state
   const [machinesForAgreement, setMachinesForAgreement] = useState<MachineForAgreement[]>([]);
   const [activeScanCategoryIndex, setActiveScanCategoryIndex] = useState<number | null>(null);
-  const [scannerKey, setScannerKey] = useState(1);
   const activeScanCategoryIndexRef = useRef<number | null>(null);
+  const [scannerKey, setScannerKey] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Step 2 sub-view (menu / details / scan)
+  const [viewMode, setViewMode] = useState<ViewMode>('menu');
 
   useEffect(() => {
     activeScanCategoryIndexRef.current = activeScanCategoryIndex;
@@ -339,10 +350,13 @@ const MachineAssignPage: React.FC = () => {
       setLookupError('Agreement not found. Please check the number.');
       return;
     }
+
+    // Valid agreement → go to actions screen
     setLookupError(null);
     setMachinesForAgreement([]);
     setActiveScanCategoryIndex(null);
     setSelectedAgreement(found);
+    setViewMode('menu');
     setStep(2);
   };
 
@@ -353,6 +367,7 @@ const MachineAssignPage: React.FC = () => {
     setSelectedAgreement(null);
     setMachinesForAgreement([]);
     setActiveScanCategoryIndex(null);
+    setViewMode('menu');
   };
 
   const handleCloseUpdate = () => {
@@ -361,6 +376,7 @@ const MachineAssignPage: React.FC = () => {
     setActiveScanCategoryIndex(null);
     setStep(1);
     setAgreementNumberInput('');
+    setViewMode('menu');
   };
 
   const handleAgreementUpdate = async (data: Record<string, unknown>) => {
@@ -400,7 +416,9 @@ const MachineAssignPage: React.FC = () => {
         const periodFrom = selectedAgreement.startDate;
         const periodTo =
           selectedAgreement.endDate ||
-          new Date(new Date(selectedAgreement.startDate).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          new Date(new Date(selectedAgreement.startDate).getTime() + 30 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split('T')[0];
 
         const itemsByCategory = new Map<number, MachineForAgreement[]>();
         machinesForAgreement.forEach((m) => {
@@ -463,8 +481,9 @@ const MachineAssignPage: React.FC = () => {
     }
   };
 
-
-  // Render Step 1: Agreement selection
+  // -------------------------------------------------------------------------
+  // STEP 1: Agreement number entry
+  // -------------------------------------------------------------------------
   if (step === 1) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -473,9 +492,11 @@ const MachineAssignPage: React.FC = () => {
           <div className="max-w-md mx-auto">
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
               <Scan className="w-6 h-6" />
-              Scan Inventory
+              Machine Assignment
             </h1>
-            <p className="text-sm text-slate-400 mt-1">Enter agreement number to start scanning</p>
+            <p className="text-sm text-slate-400 mt-1">
+              Enter the rental agreement number to continue
+            </p>
           </div>
         </div>
 
@@ -515,7 +536,7 @@ const MachineAssignPage: React.FC = () => {
                 className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-5 h-5" />
-                Start Scanning
+                Continue
               </button>
             </div>
           </div>
@@ -524,7 +545,9 @@ const MachineAssignPage: React.FC = () => {
     );
   }
 
-  // Render Step 2: Scanning interface
+  // -------------------------------------------------------------------------
+  // STEP 2: Actions / Details / Scan
+  // -------------------------------------------------------------------------
   if (!selectedAgreement) return null;
 
   const categories = getExpectedCategories(selectedAgreement);
@@ -534,226 +557,582 @@ const MachineAssignPage: React.FC = () => {
   const latestMachine = machinesForAgreement[machinesForAgreement.length - 1];
   const previousMachines = machinesForAgreement.slice(0, -1).reverse();
 
-  const currentCategoryIndex = activeScanCategoryIndex !== null ? activeScanCategoryIndex : 
-    categories.findIndex((cat, i) => {
-      const scanned = machinesForAgreement.filter((m) => m.categoryIndex === i).length;
-      return scanned < cat.quantity;
-    });
+  const currentCategoryIndex =
+    activeScanCategoryIndex !== null
+      ? activeScanCategoryIndex
+      : categories.findIndex((cat, i) => {
+          const scanned = machinesForAgreement.filter((m) => m.categoryIndex === i).length;
+          return scanned < cat.quantity;
+        });
 
-  const canStartScanning = currentCategoryIndex >= 0 && currentCategoryIndex < categories.length;
+  const canStartScanning =
+    currentCategoryIndex >= 0 && currentCategoryIndex < categories.length;
 
+  const handleStartScanFlow = () => {
+    if (!canStartScanning) {
+      alert('All planned machines are already scanned for this agreement.');
+      return;
+    }
+    setViewMode('scan');
+    handleOpenQRScanner(currentCategoryIndex);
+  };
+
+  // -------------------------------------------------------------------------
+  // STEP 2 / VIEW: ACTION MENU (View details + Start scan)
+  // -------------------------------------------------------------------------
+  if (viewMode === 'menu') {
+    const remaining = totalExpected - totalScanned;
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+        {/* Header */}
+        <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleBackToStep1}
+            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+            aria-label="Change agreement"
+          >
+            <ArrowLeft className="w-5 h-5 text-white" />
+          </button>
+          <div className="flex-1 text-center">
+            <h1 className="text-lg font-bold text-white">Machine Assignment</h1>
+            <p className="text-xs text-slate-400">
+              Agreement #{selectedAgreement.agreementNo}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-yellow-400" />
+            <Scan className="w-5 h-5 text-white" />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 px-4 py-6">
+          <div className="max-w-xl mx-auto space-y-6">
+            {/* Agreement summary */}
+            <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    Agreement
+                  </p>
+                  <p className="text-base font-semibold text-white">
+                    {selectedAgreement.agreementNo}
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                    selectedAgreement.status === 'Pending'
+                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/40'
+                      : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40'
+                  }`}
+                >
+                  {selectedAgreement.status}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-slate-400 text-xs uppercase tracking-wide">Customer</p>
+                  <p className="text-slate-100 font-medium truncate">
+                    {selectedAgreement.customerName}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs uppercase tracking-wide">Period</p>
+                  <p className="text-slate-100 font-medium">
+                    {selectedAgreement.startDate} → {selectedAgreement.endDate ?? 'Ongoing'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs uppercase tracking-wide">Monthly Rent</p>
+                  <p className="text-slate-100 font-medium">
+                    Rs. {selectedAgreement.monthlyRent.toLocaleString('en-LK')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs uppercase tracking-wide">Machines</p>
+                  <p className="text-slate-100 font-medium">
+                    {totalExpected} planned · {totalScanned} scanned
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-5 space-y-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                What would you like to do?
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('details')}
+                className="w-full min-h-[56px] px-4 py-3 rounded-xl border border-slate-600 bg-slate-800/70 hover:bg-slate-700/80 transition-all flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-slate-700/80 flex items-center justify-center">
+                    <Info className="w-5 h-5 text-slate-200" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-white">View agreement details</p>
+                    <p className="text-xs text-slate-400">
+                      Summary, customer, duration and machine plan
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleStartScanFlow}
+                className="w-full min-h-[56px] px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-between gap-3 text-white font-semibold"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/30 flex items-center justify-center">
+                    <Scan className="w-5 h-5" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm">Start QR scanning</p>
+                    <p className="text-xs text-blue-100/80">
+                      Scan machines one by one to assign them
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right text-xs">
+                  <p className="text-blue-100">Remaining</p>
+                  <p className="font-semibold">
+                    {Math.max(remaining, 0)} / {totalExpected}
+                  </p>
+                </div>
+              </button>
+
+              <p className="text-[11px] text-slate-500">
+                You can come back here any time to switch between viewing details and
+                scanning without losing your progress.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // STEP 2 / VIEW: AGREEMENT DETAILS (with Back to actions)
+  // -------------------------------------------------------------------------
+  if (viewMode === 'details') {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+        {/* Header */}
+        <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setViewMode('menu')}
+            className="p-2 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 text-xs text-slate-200"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <div className="flex-1 text-center">
+            <h1 className="text-lg font-bold text-white">Agreement details</h1>
+            <p className="text-xs text-slate-400">
+              #{selectedAgreement.agreementNo}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleStartScanFlow}
+            className="px-3 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-[11px] font-semibold text-white flex items-center gap-1"
+          >
+            <Scan className="w-3.5 h-3.5" />
+            Start scan
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 px-4 py-6 overflow-y-auto">
+          <div className="max-w-2xl mx-auto space-y-6">
+            {/* High-level info */}
+            <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    Customer
+                  </p>
+                  <p className="text-base font-semibold text-white">
+                    {selectedAgreement.customerName}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Customer #{selectedAgreement.customerNo}
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                    selectedAgreement.status === 'Pending'
+                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/40'
+                      : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40'
+                  }`}
+                >
+                  {selectedAgreement.status}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs sm:text-sm">
+                <div>
+                  <p className="text-slate-400 text-[11px] uppercase tracking-wide">Start</p>
+                  <p className="text-slate-100 font-medium">
+                    {selectedAgreement.startDate}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-[11px] uppercase tracking-wide">End</p>
+                  <p className="text-slate-100 font-medium">
+                    {selectedAgreement.endDate ?? 'Ongoing'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-[11px] uppercase tracking-wide">Monthly Rent</p>
+                  <p className="text-slate-100 font-medium">
+                    Rs. {selectedAgreement.monthlyRent.toLocaleString('en-LK')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-[11px] uppercase tracking-wide">Outstanding</p>
+                  <p className="text-slate-100 font-medium">
+                    Rs. {selectedAgreement.outstanding.toLocaleString('en-LK')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Machine plan */}
+            <div className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Machine plan
+                </p>
+                <p className="text-xs text-slate-400">
+                  {totalScanned} of {totalExpected} machines scanned
+                </p>
+              </div>
+
+              {categories.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  No planned machine categories defined for this agreement.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {categories.map((cat, idx) => {
+                    const scanned = machinesForAgreement.filter(
+                      (m) => m.categoryIndex === idx
+                    ).length;
+                    const progress =
+                      cat.quantity > 0 ? Math.min((scanned / cat.quantity) * 100, 100) : 0;
+                    return (
+                      <div
+                        key={cat.id}
+                        className="bg-slate-900/40 border border-slate-700/60 rounded-xl px-4 py-3 space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-white">
+                              {[cat.brand, cat.model].filter(Boolean).join(' ') || 'Machine'}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {cat.type || 'Category'} • {cat.quantity} machine(s)
+                            </p>
+                          </div>
+                          <div className="text-right text-xs">
+                            <p className="text-slate-400">Scanned</p>
+                            <p className="font-semibold text-slate-100">
+                              {scanned} / {cat.quantity}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-1.5 rounded-full ${
+                              scanned >= cat.quantity ? 'bg-emerald-500' : 'bg-blue-500'
+                            }`}
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Current scans list */}
+            <div className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Assigned machines (scanned)
+                </p>
+                <p className="text-xs text-slate-400">
+                  {totalScanned === 0
+                    ? 'No scans yet'
+                    : `${totalScanned} machine${totalScanned > 1 ? 's' : ''}`}
+                </p>
+              </div>
+              {totalScanned === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-500">
+                  Start scanning to see machines here.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {machinesForAgreement
+                    .slice()
+                    .reverse()
+                    .map((machine) => (
+                      <div
+                        key={machine.id}
+                        className="bg-slate-900/40 border border-slate-700/60 rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center">
+                            <Scan className="w-4 h-4 text-slate-300" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">
+                              {machine.serialNumber}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              Box {machine.boxNumber || '—'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // STEP 2 / VIEW: SCANNING INTERFACE
+  // -------------------------------------------------------------------------
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
       {/* Header */}
       <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
         <button
           type="button"
-          onClick={handleBackToStep1}
+          onClick={() => setViewMode('menu')}
           className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
-          aria-label="Go back"
+          aria-label="Back to actions"
         >
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
         <div className="flex-1 text-center">
-          <h1 className="text-lg font-bold text-white">Scan Inventory</h1>
-          <p className="text-xs text-slate-400">Batch #{selectedAgreement.agreementNo}</p>
+          <h1 className="text-lg font-bold text-white">Scan inventory</h1>
+          <p className="text-xs text-slate-400">
+            Agreement #{selectedAgreement.agreementNo}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Zap className="w-5 h-5 text-yellow-400" />
-          <Scan className="w-5 h-5 text-white" />
-        </div>
+        <button
+          type="button"
+          onClick={() => setViewMode('details')}
+          className="px-3 py-1.5 rounded-full bg-slate-800 text-[11px] text-slate-100 border border-slate-700 flex items-center gap-1"
+        >
+          <Info className="w-3.5 h-3.5" />
+          Details
+        </button>
       </div>
 
-      {/* QR Scanner Section */}
-      <div className="flex-1 flex flex-col">
-        <div className="relative flex-shrink-0 bg-black/60 backdrop-blur-sm" style={{ height: '45vh', minHeight: '280px' }}>
-          {activeScanCategoryIndex !== null ? (
-            <div className="absolute inset-0">
-              <QRScannerComponent
-                key={scannerKey}
-                onScanSuccess={handleInlineQRScanSuccess}
-                autoClose={false}
-                showCloseButton={false}
-                title=""
-                subtitle=""
-                embedded
-              />
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center">
-                <p className="text-sm text-slate-300 font-medium">Align QR code within frame</p>
+      {/* QR Scanner Section - Only show when actively scanning */}
+      {activeScanCategoryIndex !== null && (
+        <div
+          className="relative flex-shrink-0 bg-black/60 backdrop-blur-sm"
+          style={{ height: '45vh', minHeight: '280px' }}
+        >
+          <div className="absolute inset-0">
+            <QRScannerComponent
+              key={scannerKey}
+              onScanSuccess={handleInlineQRScanSuccess}
+              autoClose={false}
+              showCloseButton={false}
+              title=""
+              subtitle=""
+              embedded
+            />
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center">
+              <p className="text-sm text-slate-300 font-medium">
+                Align QR code within frame
+              </p>
+            </div>
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+              <p className="text-xs text-slate-400">Auto-detecting...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Progress Section */}
+      <div className="flex-1 bg-slate-800/30 backdrop-blur-sm px-4 py-4 overflow-y-auto">
+        <div className="max-w-2xl mx-auto space-y-4">
+          {/* Scanning Progress Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white">Scanning progress</h2>
+              <p className="text-xs text-slate-400">
+                Job ID: #{selectedAgreement.agreementNo}
+              </p>
+            </div>
+            <div className="flex items-center gap-3 bg-slate-800/50 rounded-xl px-4 py-2 border border-slate-700/50">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-white tabular-nums">
+                  {totalScanned}
+                </div>
+                <div className="text-xs text-slate-400">Scanned</div>
               </div>
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-                <p className="text-xs text-slate-400">Auto-detecting...</p>
+              <div className="w-px h-8 bg-slate-700" />
+              <div className="text-center">
+                <div className="text-2xl font-bold text-white tabular-nums">
+                  {totalExpected}
+                </div>
+                <div className="text-xs text-slate-400">Total</div>
               </div>
             </div>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center px-6">
-                <div className="w-24 h-24 mx-auto mb-4 rounded-2xl bg-slate-800/50 border-2 border-dashed border-slate-600 flex items-center justify-center">
-                  <Scan className="w-12 h-12 text-slate-500" />
+          </div>
+
+          {/* Progress Bar */}
+          <div className="space-y-2">
+            <div className="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+              <div
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  allComplete ? 'bg-green-500' : 'bg-blue-500'
+                }`}
+                style={{
+                  width: `${totalExpected > 0 ? (totalScanned / totalExpected) * 100 : 0}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Latest Scan */}
+          {latestMachine && (
+            <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 backdrop-blur-sm border border-emerald-700/50 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex-shrink-0 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base font-bold text-emerald-300 truncate">
+                      {latestMachine.serialNumber}
+                    </p>
+                    <p className="text-sm text-emerald-400/80">
+                      Box {latestMachine.boxNumber || '—'} • Added
+                    </p>
+                  </div>
                 </div>
-                <p className="text-slate-300 font-medium mb-2">Ready to scan</p>
-                <p className="text-xs text-slate-500">Tap the button below to start scanning</p>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveMachineFromAgreement(latestMachine.id)}
+                  className="flex-shrink-0 p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
+                  aria-label="Undo last scan"
+                >
+                  <RotateCcw className="w-5 h-5 text-slate-400" />
+                </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Progress Section */}
-        <div className="flex-1 bg-slate-800/30 backdrop-blur-sm px-4 py-4 overflow-y-auto">
-          <div className="max-w-2xl mx-auto space-y-4">
-            {/* Scanning Progress Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-white">Scanning Progress</h2>
-                <p className="text-xs text-slate-400">Job ID: #{selectedAgreement.agreementNo}</p>
-              </div>
-              <div className="flex items-center gap-3 bg-slate-800/50 rounded-xl px-4 py-2 border border-slate-700/50">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-white tabular-nums">
-                    {totalScanned}
-                  </div>
-                  <div className="text-xs text-slate-400">Scanned</div>
-                </div>
-                <div className="w-px h-8 bg-slate-700"></div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-white tabular-nums">
-                    {totalExpected}
-                  </div>
-                  <div className="text-xs text-slate-400">Total</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
+          {/* Previous Scans */}
+          {previousMachines.length > 0 && (
             <div className="space-y-2">
-              <div className="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className={`h-1.5 rounded-full transition-all duration-500 ${
-                    allComplete ? 'bg-green-500' : 'bg-blue-500'
-                  }`}
-                  style={{ width: `${totalExpected > 0 ? (totalScanned / totalExpected) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Latest Scan */}
-            {latestMachine && (
-              <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 backdrop-blur-sm border border-emerald-700/50 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex-shrink-0 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
-                      <CheckCircle2 className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-base font-bold text-emerald-300 truncate">
-                        {latestMachine.serialNumber}
-                      </p>
-                      <p className="text-sm text-emerald-400/80">
-                        Box {latestMachine.boxNumber || '—'} • Added
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMachineFromAgreement(latestMachine.id)}
-                    className="flex-shrink-0 p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
-                    aria-label="Undo last scan"
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Previous scans
+              </h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {previousMachines.map((machine) => (
+                  <div
+                    key={machine.id}
+                    className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-lg p-3 flex items-center justify-between"
                   >
-                    <RotateCcw className="w-5 h-5 text-slate-400" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Previous Scans */}
-            {previousMachines.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Previous Scans
-                </h3>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {previousMachines.map((machine) => (
-                    <div
-                      key={machine.id}
-                      className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-lg p-3 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="flex-shrink-0 w-8 h-8 bg-slate-700/50 rounded-lg flex items-center justify-center">
-                          <Scan className="w-4 h-4 text-slate-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">
-                            {machine.serialNumber}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            Box {machine.boxNumber || '—'}
-                          </p>
-                        </div>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex-shrink-0 w-8 h-8 bg-slate-700/50 rounded-lg flex items-center justify-center">
+                        <Scan className="w-4 h-4 text-slate-400" />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveMachineFromAgreement(machine.id)}
-                        className="flex-shrink-0 p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
-                        aria-label="Delete scan"
-                      >
-                        <Trash2 className="w-4 h-4 text-slate-400" />
-                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">
+                          {machine.serialNumber}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Box {machine.boxNumber || '—'}
+                        </p>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMachineFromAgreement(machine.id)}
+                      className="flex-shrink-0 p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
+                      aria-label="Delete scan"
+                    >
+                      <Trash2 className="w-4 h-4 text-slate-400" />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
-            {/* Start/Resume Scanning Button */}
-            {!allComplete && canStartScanning && activeScanCategoryIndex === null && (
-              <button
-                type="button"
-                onClick={() => handleOpenQRScanner(currentCategoryIndex)}
-                className="w-full min-h-[56px] px-6 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2"
-              >
-                <Scan className="w-5 h-5" />
-                {totalScanned === 0 ? 'Start Scanning' : 'Resume Scanning'}
-              </button>
-            )}
+          {/* Start/Resume Scanning Button */}
+          {!allComplete && canStartScanning && activeScanCategoryIndex === null && (
+            <button
+              type="button"
+              onClick={handleStartScanFlow}
+              className="w-full min-h-[56px] px-6 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2"
+            >
+              <Scan className="w-5 h-5" />
+              {totalScanned === 0 ? 'Start scanning' : 'Resume scanning'}
+            </button>
+          )}
 
-            {/* Done Scanning Button */}
-            {(allComplete || totalScanned > 0) && activeScanCategoryIndex === null && (
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!allComplete) {
-                    const confirm = window.confirm(
-                      `You've scanned ${totalScanned} of ${totalExpected} machines. Are you sure you want to finish?`
-                    );
-                    if (!confirm) return;
-                  }
-                  
-                  setIsSubmitting(true);
-                  try {
-                    const data = getUpdateInitialData(selectedAgreement);
-                    await handleAgreementUpdate({ ...data, status: 'Active' });
-                  } finally {
-                    setIsSubmitting(false);
-                  }
-                }}
-                disabled={isSubmitting}
-                className="w-full min-h-[56px] px-6 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <CheckCircle2 className="w-5 h-5" />
-                {isSubmitting ? 'Processing...' : 'Done Scanning'}
-              </button>
-            )}
+          {/* Done Scanning Button */}
+          {(allComplete || totalScanned > 0) && activeScanCategoryIndex === null && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!allComplete) {
+                  const confirmFinish = window.confirm(
+                    `You've scanned ${totalScanned} of ${totalExpected} machines. Are you sure you want to finish?`
+                  );
+                  if (!confirmFinish) return;
+                }
 
-            {totalScanned === 0 && (
-              <div className="text-center py-8 px-4">
-                <Scan className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-sm font-medium text-slate-400">No machines scanned yet</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Scan QR codes to add machines to this batch
-                </p>
-              </div>
-            )}
-          </div>
+                setIsSubmitting(true);
+                try {
+                  const data = getUpdateInitialData(selectedAgreement);
+                  await handleAgreementUpdate({ ...data, status: 'Active' });
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }}
+              disabled={isSubmitting}
+              className="w-full min-h-[56px] px-6 py-3 text-base font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CheckCircle2 className="w-5 h-5" />
+              {isSubmitting ? 'Processing...' : 'Done scanning & create invoice'}
+            </button>
+          )}
+
+          {totalScanned === 0 && (
+            <div className="text-center py-8 px-4">
+              <Scan className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+              <p className="text-sm font-medium text-slate-400">
+                No machines scanned yet
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Tap “Start scanning” to begin assigning machines to this agreement.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

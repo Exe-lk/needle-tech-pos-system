@@ -1,27 +1,24 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Navbar from '@/src/components/common/navbar';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import {
-  X,
+  ArrowLeft,
   Camera,
   CheckCircle2,
-  ArrowRight,
-  ArrowLeft,
   FileText,
-  Search,
-  RotateCcw,
-  ChevronRight,
-  ChevronLeft,
-  ChevronDown,
-  ChevronUp,
   ImagePlus,
-  Maximize2,
-  Minimize2,
   Package,
+  Scan,
+  Trash2,
+  X,
+  RotateCcw,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type ReturnCondition = 'Good' | 'Standard' | 'Damage' | 'Missing' | 'Exchange';
 
@@ -79,7 +76,10 @@ interface CreatedReturnPayload {
   }>;
 }
 
-// --- QR helpers (same as gatepass) ---
+// ---------------------------------------------------------------------------
+// QR helpers
+// ---------------------------------------------------------------------------
+
 function normalizeSerial(input: string): string {
   return (input || '').trim().toUpperCase();
 }
@@ -91,6 +91,7 @@ function pairKey(serial: string, box: string): string {
 function extractSerialAndBoxFromQR(decodedText: string): { serial: string; box: string } | null {
   const raw = (decodedText || '').trim();
   if (!raw) return null;
+
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
@@ -116,8 +117,9 @@ function extractSerialAndBoxFromQR(decodedText: string): { serial: string; box: 
       if (serial || box) return { serial, box: box || '' };
     }
   } catch {
-    // ignore
+    // ignore JSON parse error
   }
+
   const serialMatch = raw.match(/serial\s*(no|number)?\s*[:\-=]\s*([A-Za-z0-9\-_/]+)/i);
   const boxMatch = raw.match(/(?:motor)?\s*box\s*(no|number)?\s*[:\-=]\s*([A-Za-z0-9\-_/]+)/i);
   const serial = serialMatch ? serialMatch[2].trim() : '';
@@ -126,16 +128,10 @@ function extractSerialAndBoxFromQR(decodedText: string): { serial: string; box: 
   return null;
 }
 
-function extractSerialFromQR(decodedText: string): string {
-  const result = extractSerialAndBoxFromQR(decodedText);
-  return result ? result.serial : '';
-}
+// ---------------------------------------------------------------------------
+// Mock data (same idea as your current file)
+// ---------------------------------------------------------------------------
 
-// --- Breakpoints ---
-const BP_NARROW = 640;
-const BP_MOBILE_SCANNER_FULL = 480;
-
-// --- Mock data (with box numbers) ---
 const mockRentalAgreements: RentalAgreement[] = [
   {
     id: 'AGR-2024-001',
@@ -157,36 +153,36 @@ const mockRentalAgreements: RentalAgreement[] = [
       {
         id: 'MACH-001-01',
         model: 'CAT 320',
-        serialNumber: 'SN-CAT320-2023-001',
-        boxNumber: 'BOX-CAT320-001',
+        serialNumber: 'Brother-XL2600i-SN0001',
+        boxNumber: 'Brother-XL2600i-B001',
         description: 'Excavator CAT 320 - Unit 01',
       },
       {
         id: 'MACH-001-02',
         model: 'CAT 320',
-        serialNumber: 'SN-CAT320-2023-002',
-        boxNumber: 'BOX-CAT320-002',
+        serialNumber: 'Brother-XL2600i-SN0002',
+        boxNumber: 'Brother-XL2600i-B002',
         description: 'Excavator CAT 320 - Unit 02',
       },
       {
         id: 'MACH-001-03',
         model: 'CAT 320',
-        serialNumber: 'SN-CAT320-2023-003',
-        boxNumber: 'BOX-CAT320-003',
+        serialNumber: 'Brother-XL2600i-SN0003',
+        boxNumber: 'Brother-XL2600i-B003',
         description: 'Excavator CAT 320 - Unit 03',
       },
       {
         id: 'MACH-001-04',
         model: 'CAT 320',
-        serialNumber: 'SN-CAT320-2023-004',
-        boxNumber: 'BOX-CAT320-004',
+        serialNumber: 'Brother-XL2600i-SN0004',
+        boxNumber: 'Brother-XL2600i-B004',
         description: 'Excavator CAT 320 - Unit 04',
       },
       {
         id: 'MACH-001-05',
         model: 'CAT 320',
-        serialNumber: 'SN-CAT320-2023-005',
-        boxNumber: 'BOX-CAT320-005',
+        serialNumber: 'Brother-XL2600i-SN0005',
+        boxNumber: 'Brother-XL2600i-B005',
         description: 'Excavator CAT 320 - Unit 05',
       },
       {
@@ -275,54 +271,36 @@ const mockRentalAgreements: RentalAgreement[] = [
   },
 ];
 
-// --- Component ---
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+type ScanResultType = 'success' | 'failed' | 'duplicate';
+type Step = 1 | 2;
+type Step2View = 'menu' | 'details' | 'scan';
 
 const ReturnQRPage: React.FC = () => {
   const router = useRouter();
 
-  // Viewport width tracking for responsive behavior
-  const [viewportWidth, setViewportWidth] = useState(
-    typeof window !== 'undefined' ? window.innerWidth : 1024
-  );
-  const isNarrow = viewportWidth < BP_NARROW;
-  const isVerySmall = viewportWidth < BP_MOBILE_SCANNER_FULL;
+  // Flow
+  const [step, setStep] = useState<Step>(1);
+  const [view, setView] = useState<Step2View>('menu'); // only used when step === 2
 
-  // Step 1: Enter agreement number
-  const [step, setStep] = useState<1 | 2>(1);
   const [agreementNumberInput, setAgreementNumberInput] = useState('');
   const [agreementError, setAgreementError] = useState<string | null>(null);
   const [selectedAgreement, setSelectedAgreement] = useState<RentalAgreement | null>(null);
 
-  // All machines with return state (flat)
+  // Machines + return state
   const [machines, setMachines] = useState<MachineReturnState[]>([]);
-  // Group by model for step 2
-  const machinesByModel = useMemo(() => {
-    const map = new Map<string, MachineReturnState[]>();
-    machines.forEach((m) => {
-      const list = map.get(m.model) || [];
-      list.push(m);
-      map.set(m.model, list);
-    });
-    return Array.from(map.entries()).map(([model, list]) => ({ model, machines: list }));
-  }, [machines]);
+  const [currentMachineIndex, setCurrentMachineIndex] = useState<number | null>(null);
 
-  // Step 2: current model index (0, 1, ...)
-  const [currentModelIndex, setCurrentModelIndex] = useState(0);
-  const currentModelGroup = machinesByModel[currentModelIndex] ?? null;
-  const currentModelMachines = currentModelGroup?.machines ?? [];
-
-  // Selected machine (index within current model's machines) for editing return type / photos
-  const [selectedMachineIndexInModel, setSelectedMachineIndexInModel] = useState<number | null>(null);
-
+  // Scanner
   const [scannerKey, setScannerKey] = useState(1);
-  const [scannerExpanded, setScannerExpanded] = useState(false);
-  const [isScannerVisible, setIsScannerVisible] = useState(false);
-  const [machineListExpanded, setMachineListExpanded] = useState(true);
-  
-  // Ref for scrolling to top of step 2
-  const step2TopRef = useRef<HTMLDivElement>(null);
-  
-  type ScanResultType = 'success' | 'failed' | 'duplicate';
+
+  // Popup for scanned machine
+  const [showMachinePopup, setShowMachinePopup] = useState(false);
+
+  // Feedback + submit
   const [lastFeedback, setLastFeedback] = useState<{
     type: ScanResultType;
     title: string;
@@ -332,42 +310,28 @@ const ReturnQRPage: React.FC = () => {
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Viewport resize listener
-  useEffect(() => {
-    const onResize = () => setViewportWidth(window.innerWidth);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+  const step2TopRef = useRef<HTMLDivElement | null>(null);
 
-  // Cleanup effect
-  useEffect(() => {
-    return () => {
-      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-      machines.forEach((m) => {
-        m.photoPreviews?.forEach((p) => URL.revokeObjectURL(p));
-      });
-    };
-  }, [machines]);
-
+  // Derived
   const totalMachines = machines.length;
   const scannedCount = useMemo(
     () => machines.filter((m) => m.scanned).length,
     [machines]
   );
-  const currentModelScanned = useMemo(
-    () => currentModelMachines.filter((m) => m.scanned).length,
-    [currentModelMachines]
+  const allDone = useMemo(
+    () => machines.length > 0 && machines.every((m) => m.scanned && m.returnType),
+    [machines]
   );
-  const currentModelTotal = currentModelMachines.length;
-  const allModelsDone = useMemo(() => {
-    if (machinesByModel.length === 0) return false;
-    return machinesByModel.every((g) =>
-      g.machines.every((m) => m.scanned && m.returnType != null)
-    );
-  }, [machinesByModel]);
-  const canSubmit = allModelsDone && !isSubmitting;
+  const canSubmit = allDone && !isSubmitting;
+
+  // Cleanup (revoke photo URLs + timers)
+  useEffect(() => {
+    return () => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      machines.forEach((m) => m.photoPreviews?.forEach((p) => URL.revokeObjectURL(p)));
+    };
+  }, [machines]);
 
   const showFeedback = useCallback((fb: { type: ScanResultType; title: string; message: string }) => {
     setLastFeedback(fb);
@@ -380,64 +344,60 @@ const ReturnQRPage: React.FC = () => {
     restartTimerRef.current = setTimeout(() => setScannerKey((k) => k + 1), 450);
   }, []);
 
-  const updateMachineByGlobalIndex = (
-    globalIndex: number,
-    updater: (m: MachineReturnState) => MachineReturnState
-  ) => {
-    setMachines((prev) =>
-      prev.map((m, i) => (i === globalIndex ? updater(m) : m))
-    );
-  };
-
-  const updateCurrentModelMachine = (indexInModel: number, updater: (m: MachineReturnState) => MachineReturnState) => {
-    if (!currentModelGroup) return;
-    const m = currentModelGroup.machines[indexInModel];
-    const globalIndex = machines.findIndex((x) => x.id === m.id);
-    if (globalIndex >= 0) updateMachineByGlobalIndex(globalIndex, updater);
-  };
-
   const resetAll = () => {
     machines.forEach((m) => m.photoPreviews?.forEach((p) => URL.revokeObjectURL(p)));
     setStep(1);
+    setView('menu');
     setAgreementNumberInput('');
     setAgreementError(null);
     setSelectedAgreement(null);
     setMachines([]);
-    setCurrentModelIndex(0);
-    setSelectedMachineIndexInModel(null);
+    setCurrentMachineIndex(null);
     setScannerKey((k) => k + 1);
     setLastFeedback(null);
     setIsSubmitting(false);
-    setIsScannerVisible(false);
-    setScannerExpanded(false);
-    setMachineListExpanded(true);
-    
-    // Scroll to top when resetting
+    setShowMachinePopup(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCancel = () => {
-    resetAll();
-    router.push('/returns');
+  const handleBack = () => {
+    if (step === 1) {
+      router.push('/returns');
+      return;
+    }
+    if (view === 'scan' || view === 'details') {
+      setView('menu');
+      setShowMachinePopup(false);
+      return;
+    }
+    setStep(1);
+    setView('menu');
   };
 
-  // --- Step 1: Find agreement ---
+  // -------------------------------------------------------------------------
+  // Step 1: Agreement lookup
+  // -------------------------------------------------------------------------
+
   const handleFindAgreement = () => {
     const input = agreementNumberInput.trim();
     setAgreementError(null);
+
     if (!input) {
       setAgreementError('Please enter the rental agreement number.');
       return;
     }
+
     const agreement = mockRentalAgreements.find(
       (a) => a.id.toLowerCase() === input.toLowerCase()
     );
+
     if (!agreement) {
       setAgreementError('Agreement not found. Please check the number.');
       setSelectedAgreement(null);
       setMachines([]);
       return;
     }
+
     const initialMachines: MachineReturnState[] = agreement.machines.map((m) => ({
       ...m,
       scanned: false,
@@ -446,125 +406,41 @@ const ReturnQRPage: React.FC = () => {
       photos: [],
       photoPreviews: [],
     }));
+
     setSelectedAgreement(agreement);
     setMachines(initialMachines);
-    setCurrentModelIndex(0);
-    setSelectedMachineIndexInModel(null);
-    setScannerKey((k) => k + 1);
-  };
-
-  const handleContinueToReturns = () => {
-    if (!selectedAgreement || machines.length === 0) return;
+    setCurrentMachineIndex(null);
     setStep(2);
-    setCurrentModelIndex(0);
-    setSelectedMachineIndexInModel(null);
-    setIsScannerVisible(false); // Reset scanner visibility
-    setScannerExpanded(false); // Reset scanner expansion
-    
-    // Scroll to top of step 2 on mobile for better UX
-    setTimeout(() => {
-      if (step2TopRef.current) {
-        step2TopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }, 100);
+    setView('menu'); // show menu with two buttons
   };
 
-  // --- Step 2: QR scan (only for current model) ---
-  const expectedSerialsForCurrentModel = useMemo(() => {
-    const s = new Set<string>();
-    currentModelMachines.forEach((m) => {
-      const serial = normalizeSerial(m.serialNumber);
-      if (serial) s.add(serial);
-    });
-    return s;
-  }, [currentModelMachines]);
+  // -------------------------------------------------------------------------
+  // Machine helpers
+  // -------------------------------------------------------------------------
 
-  const handleScanSuccess = (decodedText: string) => {
-    if (currentModelMachines.length === 0) return;
-
-    const parsed = extractSerialAndBoxFromQR(decodedText);
-    const serialNorm = parsed?.serial ? normalizeSerial(parsed.serial) : '';
-    if (!serialNorm) {
-      showFeedback({
-        type: 'failed',
-        title: 'Scan failed',
-        message: 'Could not read serial number from QR.',
-      });
-      restartScannerSoon();
-      return;
-    }
-
-    const globalIndex = machines.findIndex(
-      (m) =>
-        normalizeSerial(m.serialNumber) === serialNorm ||
-        (parsed?.box && pairKey(m.serialNumber, m.boxNumber) === pairKey(parsed.serial, parsed.box))
-    );
-
-    if (globalIndex === -1) {
-      showFeedback({
-        type: 'failed',
-        title: 'Not in this agreement',
-        message: `Serial ${serialNorm} is not in this return.`,
-      });
-      restartScannerSoon();
-      return;
-    }
-
-    const machine = machines[globalIndex];
-    if (machine.model !== currentModelGroup?.model) {
-      showFeedback({
-        type: 'failed',
-        title: 'Wrong model',
-        message: 'This machine belongs to another model. Switch model or scan the correct machine.',
-      });
-      restartScannerSoon();
-      return;
-    }
-
-    if (machine.scanned) {
-      const idxInModel = currentModelMachines.findIndex((m) => m.id === machine.id);
-      setSelectedMachineIndexInModel(idxInModel >= 0 ? idxInModel : null);
-      showFeedback({
-        type: 'duplicate',
-        title: 'Already scanned',
-        message: `${serialNorm} was already scanned. You can change return type below.`,
-      });
-      restartScannerSoon();
-      return;
-    }
-
-    updateMachineByGlobalIndex(globalIndex, (m) => ({
-      ...m,
-      scanned: true,
-      returnType: m.returnType ?? 'Good',
-    }));
-    const idxInModel = currentModelMachines.findIndex((m) => m.id === machine.id);
-    setSelectedMachineIndexInModel(idxInModel >= 0 ? idxInModel : null);
-
-    showFeedback({
-      type: 'success',
-      title: 'Matched',
-      message: `${serialNorm} recorded. Set return type below.`,
-    });
-    restartScannerSoon();
+  const updateMachineAtIndex = (
+    index: number,
+    updater: (m: MachineReturnState) => MachineReturnState
+  ) => {
+    setMachines((prev) => prev.map((m, i) => (i === index ? updater(m) : m)));
   };
 
-  const handleReturnTypeChange = (indexInModel: number, type: ReturnCondition) => {
-    updateCurrentModelMachine(indexInModel, (m) => ({
+  const handleReturnTypeChange = (index: number, type: ReturnCondition) => {
+    updateMachineAtIndex(index, (m) => ({
       ...m,
       scanned: true,
       returnType: type,
     }));
   };
 
-  const handleDamageNoteChange = (indexInModel: number, note: string) => {
-    updateCurrentModelMachine(indexInModel, (m) => ({ ...m, damageNote: note }));
+  const handleDamageNoteChange = (index: number, note: string) => {
+    updateMachineAtIndex(index, (m) => ({ ...m, damageNote: note }));
   };
 
-  const handlePhotoUpload = (indexInModel: number, files: FileList | null) => {
+  const handlePhotoUpload = (index: number, files: FileList | null) => {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
-    updateCurrentModelMachine(indexInModel, (m) => {
+    updateMachineAtIndex(index, (m) => {
       const existingPreviews = m.photoPreviews || [];
       const newPreviews = fileArray.map((f) => URL.createObjectURL(f));
       return {
@@ -575,8 +451,8 @@ const ReturnQRPage: React.FC = () => {
     });
   };
 
-  const handleRemovePhoto = (indexInModel: number, photoIndex: number) => {
-    updateCurrentModelMachine(indexInModel, (m) => {
+  const handleRemovePhoto = (index: number, photoIndex: number) => {
+    updateMachineAtIndex(index, (m) => {
       const photos = m.photos ? [...m.photos] : [];
       const previews = m.photoPreviews ? [...m.photoPreviews] : [];
       if (previews[photoIndex]) URL.revokeObjectURL(previews[photoIndex]);
@@ -586,21 +462,81 @@ const ReturnQRPage: React.FC = () => {
     });
   };
 
-  const handleNextModel = () => {
-    if (currentModelIndex < machinesByModel.length - 1) {
-      setCurrentModelIndex((i) => i + 1);
-      setSelectedMachineIndexInModel(null);
-      setScannerKey((k) => k + 1);
-    }
+  const clearMachineState = (index: number) => {
+    updateMachineAtIndex(index, (m) => ({
+      ...m,
+      scanned: false,
+      returnType: undefined,
+      damageNote: '',
+      photos: [],
+      photoPreviews: [],
+    }));
   };
 
-  const handlePrevModel = () => {
-    if (currentModelIndex > 0) {
-      setCurrentModelIndex((i) => i - 1);
-      setSelectedMachineIndexInModel(null);
-      setScannerKey((k) => k + 1);
+  // -------------------------------------------------------------------------
+  // QR scan
+  // -------------------------------------------------------------------------
+
+  const handleScanSuccess = (decodedText: string) => {
+    if (machines.length === 0) return;
+
+    const parsed = extractSerialAndBoxFromQR(decodedText);
+    const serialNorm = parsed?.serial ? normalizeSerial(parsed.serial) : '';
+
+    if (!serialNorm) {
+      showFeedback({
+        type: 'failed',
+        title: 'Scan failed',
+        message: 'Could not read serial number from QR.',
+      });
+      restartScannerSoon();
+      return;
     }
+
+    const foundIndex = machines.findIndex(
+      (m) =>
+        normalizeSerial(m.serialNumber) === serialNorm ||
+        (parsed?.box && pairKey(m.serialNumber, m.boxNumber) === pairKey(parsed.serial, parsed.box))
+    );
+
+    if (foundIndex === -1) {
+      showFeedback({
+        type: 'failed',
+        title: 'Not in this agreement',
+        message: `Serial ${serialNorm} is not in this return.`,
+      });
+      restartScannerSoon();
+      return;
+    }
+
+    const machine = machines[foundIndex];
+
+    // Open popup for this machine
+    setCurrentMachineIndex(foundIndex);
+
+    // If not scanned yet, default to Good
+    if (!machine.scanned) {
+      updateMachineAtIndex(foundIndex, (m) => ({
+        ...m,
+        scanned: true,
+        returnType: m.returnType ?? 'Good',
+      }));
+    }
+
+    setShowMachinePopup(true);
+
+    showFeedback({
+      type: 'success',
+      title: 'Matched',
+      message: `${serialNorm} recorded. Select return type & proof.`,
+    });
+
+    // Scanner will restart after popup closes; no need to immediately restart here
   };
+
+  // -------------------------------------------------------------------------
+  // Submit
+  // -------------------------------------------------------------------------
 
   const generateReturnNumber = (): string => {
     return `RET-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000000)
@@ -664,575 +600,562 @@ const ReturnQRPage: React.FC = () => {
     }
   };
 
-  // --- Render helpers ---
+  // -------------------------------------------------------------------------
+  // Render helpers
+  // -------------------------------------------------------------------------
+
   const renderScanFeedback = () => {
     if (!lastFeedback) return null;
     const styles =
       lastFeedback.type === 'success'
-        ? 'bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-200'
+        ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-100'
         : lastFeedback.type === 'duplicate'
-          ? 'bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-200'
-          : 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-200';
+        ? 'bg-amber-950/60 border-amber-500/60 text-amber-100'
+        : 'bg-red-950/60 border-red-500/60 text-red-100';
     return (
       <div
-        className={`p-3 sm:p-4 rounded-xl border-2 ${styles} shadow-lg animate-in fade-in duration-200`}
+        className={`p-3 rounded-xl border ${styles} shadow-lg backdrop-blur-sm`}
         role="status"
         aria-live="polite"
       >
-        <div className="font-semibold text-sm sm:text-base break-words">{lastFeedback.title}</div>
-        <div className="text-xs sm:text-sm mt-1 opacity-90 break-words">{lastFeedback.message}</div>
+        <div className="font-semibold text-sm break-words">{lastFeedback.title}</div>
+        <div className="text-xs mt-1 opacity-90 break-words">{lastFeedback.message}</div>
       </div>
     );
   };
 
-  const renderSelectedMachineEditor = () => {
+  const renderMachinePopup = () => {
     if (
-      currentModelGroup == null ||
-      selectedMachineIndexInModel == null ||
-      selectedMachineIndexInModel < 0 ||
-      selectedMachineIndexInModel >= currentModelMachines.length
+      !showMachinePopup ||
+      currentMachineIndex == null ||
+      currentMachineIndex < 0 ||
+      currentMachineIndex >= machines.length
     ) {
-      return (
-        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 break-words">
-          Scan a machine or click a row to set return type and add photos (for damage/missing).
-        </p>
-      );
+      return null;
     }
 
-    const machine = currentModelMachines[selectedMachineIndexInModel];
+    const machine = machines[currentMachineIndex];
     const isDamage = machine.returnType === 'Damage' || machine.returnType === 'Missing';
     const uploadId = `photo-upload-${machine.id}`;
     const cameraId = `photo-camera-${machine.id}`;
 
-    return (
-      <div className="space-y-3 sm:space-y-4 min-w-0">
-        <div>
-          <p className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 break-words">
-            Serial: <span className="font-mono text-gray-900 dark:text-white break-all">{machine.serialNumber}</span>
-            {' · '}
-            Box: <span className="font-mono text-gray-900 dark:text-white break-all">{machine.boxNumber}</span>
-          </p>
-        </div>
+    const handleClose = () => {
+      setShowMachinePopup(false);
+      restartScannerSoon();
+    };
 
-        <div>
-          <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Return type
-          </label>
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-            {(['Good', 'Standard', 'Damage', 'Missing', 'Exchange'] as ReturnCondition[]).map(
-              (type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => handleReturnTypeChange(selectedMachineIndexInModel, type)}
-                  className={`min-h-[44px] px-3 py-2.5 sm:py-2 rounded-xl border text-xs sm:text-sm font-medium transition-colors touch-manipulation active:scale-[0.98] ${
-                    machine.returnType === type
-                      ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-indigo-500 dark:bg-indigo-900/30 dark:text-indigo-200'
-                      : 'border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:border-blue-400 dark:hover:border-indigo-500'
-                  }`}
-                >
-                  {type}
-                </button>
-              )
+    return (
+      <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="w-full sm:max-w-md bg-slate-950 rounded-t-2xl sm:rounded-2xl border border-slate-700 max-h-[85vh] flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+            <p className="text-xs font-semibold text-slate-100">Machine return details</p>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="p-1.5 rounded-md hover:bg-slate-800"
+            >
+              <X className="w-4 h-4 text-slate-300" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+            <div>
+              <p className="text-xs font-medium text-slate-300">
+                Serial:{' '}
+                <span className="font-mono text-slate-50 break-all">{machine.serialNumber}</span>
+              </p>
+              <p className="text-xs font-medium text-slate-400 mt-1">
+                Box:{' '}
+                <span className="font-mono text-slate-100 break-all">{machine.boxNumber}</span>
+              </p>
+            </div>
+
+            <div>
+              <p className="block text-xs font-semibold text-slate-300 mb-2">Return type</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {(['Good', 'Standard', 'Damage', 'Missing', 'Exchange'] as ReturnCondition[]).map(
+                  (type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => handleReturnTypeChange(currentMachineIndex, type)}
+                      className={`min-h-[40px] px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
+                        machine.returnType === type
+                          ? 'border-blue-400 bg-blue-600/30 text-blue-100 shadow-sm'
+                          : 'border-slate-600 bg-slate-800/60 text-slate-200 hover:border-blue-500/70'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+
+            {isDamage && (
+              <>
+                <div>
+                  <p className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Damage / missing note (required)
+                  </p>
+                  <textarea
+                    value={machine.damageNote || ''}
+                    onChange={(e) => handleDamageNoteChange(currentMachineIndex, e.target.value)}
+                    rows={3}
+                    placeholder="Describe the damage or missing parts..."
+                    className="w-full min-h-[80px] px-3 py-2 border border-slate-600 rounded-xl bg-slate-900/60 text-xs text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                  />
+                </div>
+
+                <div>
+                  <p className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Photos (required, use camera or gallery)
+                  </p>
+
+                  {/* Hidden inputs: camera + gallery */}
+                  <input
+                    id={cameraId}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => handlePhotoUpload(currentMachineIndex, e.target.files)}
+                  />
+                  <input
+                    id={uploadId}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handlePhotoUpload(currentMachineIndex, e.target.files)}
+                  />
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <label
+                      htmlFor={cameraId}
+                      className="min-h-[40px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-600 bg-slate-900/70 text-xs font-medium text-slate-100 cursor-pointer hover:border-blue-400 hover:bg-slate-900"
+                    >
+                      <Camera className="w-4 h-4" />
+                      Take photo
+                    </label>
+                    <label
+                      htmlFor={uploadId}
+                      className="min-h-[40px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-600 bg-slate-900/70 text-xs font-medium text-slate-100 cursor-pointer hover:border-blue-400 hover:bg-slate-900"
+                    >
+                      <ImagePlus className="w-4 h-4" />
+                      Gallery
+                    </label>
+                  </div>
+
+                  {machine.photoPreviews && machine.photoPreviews.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {machine.photoPreviews.map((src, idx) => (
+                        <div key={idx} className="relative group aspect-square">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt={`Proof ${idx + 1}`}
+                            className="w-full h-full object-cover rounded-lg border border-slate-700"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(currentMachineIndex, idx)}
+                            className="absolute top-1 right-1 p-1.5 rounded-md bg-red-600/90 text-white hover:bg-red-700"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
+          <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                clearMachineState(currentMachineIndex);
+                handleClose();
+              }}
+              className="min-h-[40px] px-3 py-2 rounded-xl border border-slate-700 text-xs font-medium text-slate-300 flex items-center gap-1.5 hover:bg-slate-900"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="flex-1 min-h-[40px] px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-xs font-semibold text-emerald-950 flex items-center justify-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Save & continue scanning
+            </button>
+          </div>
         </div>
-
-        {isDamage && (
-          <>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Note (required for damage/missing)
-              </label>
-              <textarea
-                value={machine.damageNote || ''}
-                onChange={(e) => handleDamageNoteChange(selectedMachineIndexInModel, e.target.value)}
-                rows={3}
-                placeholder="Describe the damage or missing parts..."
-                className="w-full min-h-[80px] px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:focus:ring-indigo-500 touch-manipulation resize-y"
-              />
-            </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Photos (required)
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                id={uploadId}
-                onChange={(e) => handlePhotoUpload(selectedMachineIndexInModel, e.target.files)}
-              />
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                id={cameraId}
-                onChange={(e) => handlePhotoUpload(selectedMachineIndexInModel, e.target.files)}
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <label
-                  htmlFor={cameraId}
-                  className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs sm:text-sm font-medium cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-[0.98] transition-transform touch-manipulation"
-                >
-                  <Camera className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Take photo</span>
-                </label>
-                <label
-                  htmlFor={uploadId}
-                  className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs sm:text-sm font-medium cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-[0.98] transition-transform touch-manipulation"
-                >
-                  <ImagePlus className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Upload</span>
-                </label>
-              </div>
-              {machine.photoPreviews && machine.photoPreviews.length > 0 && (
-                <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {machine.photoPreviews.map((src, idx) => (
-                    <div key={idx} className="relative group aspect-square">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={src}
-                        alt={`Proof ${idx + 1}`}
-                        className="w-full h-full object-cover rounded-lg border border-gray-200 dark:border-slate-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePhoto(selectedMachineIndexInModel, idx)}
-                        className="absolute top-1 right-1 min-h-[32px] min-w-[32px] p-1.5 rounded-lg bg-red-500 text-white opacity-90 hover:opacity-100 active:scale-[0.95] transition-all touch-manipulation flex items-center justify-center"
-                        aria-label="Remove photo"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
       </div>
     );
   };
 
-  return (
-    <div
-      className="min-h-0 w-full bg-gray-100 dark:bg-slate-950 overflow-x-hidden"
-      style={{
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        paddingLeft: 'env(safe-area-inset-left)',
-        paddingRight: 'env(safe-area-inset-right)',
-      }}
-    >
-      <Navbar />
+  // -------------------------------------------------------------------------
+  // Render: Step 1 (agreement input)
+// ---------------------------------------------------------------------------
 
-      <main
-        className="w-full min-h-0"
-        style={{
-          paddingTop: 'calc(6rem + env(safe-area-inset-top))',
-          paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))',
-        }}
-      >
-        <div className="px-3 sm:px-4 md:px-6 max-w-3xl mx-auto">
-          <div className="space-y-4 sm:space-y-5">
-            {/* Page title */}
-            <div className="max-w-2xl">
-              <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
-                
-                Return Machine QR Verification
-              </h1>
-              <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                {step === 1
-                  ? 'Enter rental agreement number to view details, then scan each machine QR.'
-                  : 'Verify each machine by scanning its QR. Set return type for all machines.'}
-              </p>
-            </div>
-
-            {step === 1 ? (
-              /* Step 1: Enter agreement number */
-              <div className="w-full max-w-md">
-                <div className="bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-slate-700 p-4 sm:p-6 shadow-sm space-y-4">
-                  <label
-                    htmlFor="agreement-input"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Rental agreement number
-                  </label>
-                  <input
-                    id="agreement-input"
-                    type="text"
-                    inputMode="text"
-                    autoComplete="off"
-                    value={agreementNumberInput}
-                    onChange={(e) => {
-                      setAgreementNumberInput(e.target.value);
-                      setAgreementError(null);
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleFindAgreement()}
-                    placeholder="e.g. AGR-2024-001"
-                    className="w-full min-h-[48px] sm:min-h-[52px] px-4 py-3 text-base border rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:focus:ring-indigo-500 touch-manipulation"
-                    autoFocus
-                  />
-                  {agreementError && (
-                    <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-                      {agreementError}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleFindAgreement}
-                    className="w-full min-h-[48px] sm:min-h-[52px] px-4 py-3 text-base font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-xl hover:bg-blue-700 dark:hover:bg-indigo-700 active:scale-[0.98] transition-transform touch-manipulation flex items-center justify-center gap-2"
-                  >
-                    <Search className="w-4 h-4 shrink-0" />
-                    Find Agreement
-                  </button>
-                </div>
-
-                {selectedAgreement && (
-                  <div className="mt-4 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 shadow-sm">
-                    <div className="flex items-start gap-2 mb-2">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-                          Agreement found: {selectedAgreement.id}
-                        </p>
-                        <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
-                          {selectedAgreement.customerName}
-                        </p>
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-                          {machinesByModel.length} model{machinesByModel.length !== 1 ? 's' : ''}, {totalMachines} machine{totalMachines !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleContinueToReturns}
-                      className="w-full min-h-[48px] px-4 py-3 sm:py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-base sm:text-sm font-medium rounded-xl hover:bg-blue-700 dark:hover:bg-indigo-700 active:scale-[0.98] transition-transform touch-manipulation flex items-center justify-center gap-2"
-                    >
-                      Continue to scan & return
-                      <ArrowRight className="w-4 h-4 shrink-0" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : selectedAgreement ? (
-              /* Step 2: Scan & return flow */
-              <div ref={step2TopRef} className="flex flex-col w-full gap-4">
-                {/* Top: Agreement ref + actions */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-                    Agreement: {selectedAgreement.id}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStep(1);
-                      setIsScannerVisible(false);
-                      setScannerExpanded(false);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    className="min-h-[44px] px-3 sm:px-4 py-2 bg-gray-100 dark:bg-slate-800 text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-slate-700 active:scale-[0.98] touch-manipulation flex items-center justify-center gap-2"
-                  >
-                    <ArrowLeft className="w-4 h-4 shrink-0" />
-                    Change agreement
-                  </button>
-                </div>
-
-                {/* Instruction banner for mobile */}
-                {isNarrow && (
-                  <div className="bg-blue-50 dark:bg-indigo-900/20 border border-blue-200 dark:border-indigo-800 rounded-xl p-3 sm:p-4">
-                    <p className="text-xs sm:text-sm text-blue-800 dark:text-blue-200 font-medium">
-                      📋 Scroll down to see the machine list, then tap "Scan QR" to verify each machine
-                    </p>
-                  </div>
-                )}
-
-                {/* Model navigation */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-slate-700 p-3 sm:p-4 shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={handlePrevModel}
-                        disabled={currentModelIndex === 0}
-                        className="min-h-[44px] min-w-[44px] p-2 rounded-xl border border-gray-300 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-[0.98] transition-transform touch-manipulation shrink-0"
-                        aria-label="Previous model"
-                      >
-                        <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </button>
-                      <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">
-                        Model {currentModelIndex + 1} of {machinesByModel.length}: {currentModelGroup?.model ?? ''}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleNextModel}
-                        disabled={currentModelIndex >= machinesByModel.length - 1}
-                        className="min-h-[44px] min-w-[44px] p-2 rounded-xl border border-gray-300 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-[0.98] transition-transform touch-manipulation shrink-0"
-                        aria-label="Next model"
-                      >
-                        <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </button>
-                    </div>
-                    <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium shrink-0">
-                      Scanned {currentModelScanned} of {currentModelTotal}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Machine list - collapsible on mobile */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm">
-                  {isNarrow ? (
-                    <button
-                      type="button"
-                      onClick={() => setMachineListExpanded((e) => !e)}
-                      className="w-full flex items-center justify-between gap-2 px-3 sm:px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors touch-manipulation min-h-[44px]"
-                      aria-expanded={machineListExpanded}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                          Machines – {currentModelGroup?.model}
-                        </h3>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 break-words">
-                          Scan QR or tap a row to set return type
-                        </p>
-                      </div>
-                      <div className="shrink-0">
-                        {machineListExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-gray-500" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-gray-500" />
-                        )}
-                      </div>
-                    </button>
-                  ) : (
-                    <div className="px-3 sm:px-4 py-3 border-b border-gray-200 dark:border-slate-700">
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                        Machines – {currentModelGroup?.model}
-                      </h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        Scan QR or tap a row to set return type
-                      </p>
-                    </div>
-                  )}
-                  {machineListExpanded && (
-                    <div className="overflow-x-auto border-t border-gray-200 dark:border-slate-700 max-h-[min(40vh,400px)] sm:max-h-[min(60vh,600px)] overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
-                      <table className="w-full text-xs sm:text-sm">
-                        <thead className="bg-gray-50 dark:bg-slate-700/50 sticky top-0 z-10">
-                          <tr>
-                            <th className="px-2 sm:px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300 w-10">
-                              #
-                            </th>
-                            <th className="px-2 sm:px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300">
-                              Serial number
-                            </th>
-                            <th className="px-2 sm:px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300">
-                              Box number
-                            </th>
-                            <th className="px-2 sm:px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300 w-16 sm:w-20">
-                              Status
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                          {currentModelMachines.map((m, idx) => (
-                            <tr
-                              key={m.id}
-                              onClick={() => setSelectedMachineIndexInModel(idx)}
-                              className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 active:bg-gray-100 dark:active:bg-slate-700 touch-manipulation ${
-                                selectedMachineIndexInModel === idx
-                                  ? 'bg-blue-50 dark:bg-indigo-900/20'
-                                  : ''
-                              }`}
-                            >
-                              <td className="px-2 sm:px-3 py-2.5 sm:py-2 text-gray-600 dark:text-gray-400">{idx + 1}</td>
-                              <td className="px-2 sm:px-3 py-2.5 sm:py-2 font-mono text-gray-900 dark:text-white break-all">
-                                {m.serialNumber}
-                              </td>
-                              <td className="px-2 sm:px-3 py-2.5 sm:py-2 font-mono text-gray-900 dark:text-white break-all">
-                                {m.boxNumber}
-                              </td>
-                              <td className="px-2 sm:px-3 py-2.5 sm:py-2">
-                                {m.scanned ? (
-                                  <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                    <CheckCircle2 className="w-3 h-3 shrink-0" />
-                                    <span className="hidden sm:inline">Done</span>
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-gray-500 dark:text-gray-400">Pending</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* Feedback toast */}
-                {lastFeedback && <div>{renderScanFeedback()}</div>}
-
-                {/* Scan QR: button to show scanner, or inline scanner */}
-                {!isScannerVisible ? (
-                  <div className="sticky bottom-0 left-0 right-0 z-10 -mx-3 px-3 pt-3 pb-4 sm:pb-3 bg-gradient-to-t from-gray-100 via-gray-100 dark:from-slate-950 dark:via-slate-950 sm:static sm:mx-0 sm:px-0 sm:pt-0 sm:pb-0 sm:bg-transparent">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsScannerVisible(true);
-                        setScannerKey((k) => k + 1);
-                        // Scroll to scanner button area for better UX on mobile
-                        if (isNarrow) {
-                          setTimeout(() => {
-                            window.scrollBy({ top: 100, behavior: 'smooth' });
-                          }, 150);
-                        }
-                      }}
-                      className="w-full min-h-[52px] sm:min-h-[48px] px-4 py-3 rounded-xl text-base sm:text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 hover:bg-blue-700 dark:hover:bg-indigo-700 active:scale-[0.98] transition-transform touch-manipulation flex items-center justify-center gap-2 shadow-lg sm:shadow-none"
-                    >
-                      <Camera className="w-5 h-5 sm:w-4 sm:h-4" />
-                      Scan QR Code
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        📷 Scan each machine QR code
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {!isVerySmall && (
-                          <button
-                            type="button"
-                            onClick={() => setScannerExpanded((prev) => !prev)}
-                            className="min-h-[44px] min-w-[44px] p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors touch-manipulation"
-                            aria-label={scannerExpanded ? 'Collapse scanner' : 'Expand scanner'}
-                          >
-                            {scannerExpanded ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsScannerVisible(false);
-                            // Scroll back up slightly when closing scanner on mobile
-                            if (isNarrow) {
-                              setTimeout(() => {
-                                window.scrollBy({ top: -50, behavior: 'smooth' });
-                              }, 100);
-                            }
-                          }}
-                          className="min-h-[44px] px-3 py-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-sm text-red-700 dark:text-red-300 font-medium hover:bg-red-200 dark:hover:bg-red-900/50 touch-manipulation"
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </div>
-                    <div className="w-full rounded-xl sm:rounded-2xl border border-gray-200 dark:border-slate-700 overflow-hidden bg-gray-900 dark:bg-black shadow-inner">
-                      <div
-                        className={
-                          scannerExpanded && !isNarrow
-                            ? 'min-h-[min(70dvh,520px)] h-[min(70dvh,520px)]'
-                            : isNarrow
-                              ? 'min-h-[min(55dvh,450px)] h-[min(55dvh,450px)]'
-                              : 'min-h-[min(50dvh,380px)] h-[min(50dvh,380px)]'
-                        }
-                      >
-                        <QRScannerComponent
-                          key={scannerKey}
-                          onScanSuccess={handleScanSuccess}
-                          autoClose={false}
-                          showCloseButton={false}
-                          title="Scan machine QR"
-                          subtitle={`${currentModelScanned}/${currentModelTotal} scanned in this model`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Return type & proof */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-slate-700 p-3 sm:p-4 shadow-sm">
-                  <div className="flex items-center gap-2 mb-3">
-                    <FileText className="w-4 h-4 text-blue-600 dark:text-indigo-400 shrink-0" />
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Return type & proof
-                    </h3>
-                  </div>
-                  {renderSelectedMachineEditor()}
-                </div>
-
-                {/* Progress summary card - more prominent on mobile */}
-                <div className={`rounded-xl border-2 p-3 sm:p-4 ${
-                  canSubmit 
-                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-800' 
-                    : 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-800'
-                }`}>
-                  <div className="flex items-start gap-2">
-                    {canSubmit ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                    ) : (
-                      <Package className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold ${
-                        canSubmit 
-                          ? 'text-emerald-900 dark:text-emerald-100' 
-                          : 'text-blue-900 dark:text-blue-100'
-                      }`}>
-                        {canSubmit ? '✓ All machines verified' : 'Verification in progress'}
-                      </p>
-                      <p className={`text-xs mt-1 ${
-                        canSubmit 
-                          ? 'text-emerald-700 dark:text-emerald-300' 
-                          : 'text-blue-700 dark:text-blue-300'
-                      }`}>
-                        {canSubmit 
-                          ? 'All machines have been scanned and return types set. Ready to submit!'
-                          : `${scannedCount} of ${totalMachines} machines scanned. Scan and set return type for all machines.`
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Submit: always visible, better spacing on mobile */}
-                <div
-                  className="pt-2 pb-4 sm:pt-3 sm:pb-0"
-                  style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
-                >
-                  <button
-                    type="button"
-                    onClick={handleSubmitReturn}
-                    disabled={!canSubmit}
-                    className={`w-full min-h-[52px] sm:min-h-[48px] px-5 py-3 rounded-xl text-base sm:text-sm font-medium text-white flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98] transition-transform ${
-                      canSubmit
-                        ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/20'
-                        : 'bg-gray-400 cursor-not-allowed dark:bg-slate-600'
-                    }`}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent shrink-0" />
-                        Submitting...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
-                        Submit Return
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ) : null}
+  if (step === 1) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        {/* Header */}
+        <div className="bg-slate-950/80 backdrop-blur-sm border-b border-slate-800 px-4 py-4 flex items-center">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 mr-2 hover:bg-slate-900 rounded-lg transition-colors"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-5 h-5 text-slate-100" />
+          </button>
+          <div>
+            <h1 className="text-lg font-bold text-white flex items-center gap-2">
+              <Scan className="w-5 h-5" />
+              Return Machine QR
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Enter rental agreement number to start the return process
+            </p>
           </div>
         </div>
-      </main>
-    </div>
-  );
+
+        {/* Content */}
+        <div className="px-4 py-8">
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-slate-700/70 p-6 space-y-4 shadow-xl shadow-slate-950/60">
+              <label
+                htmlFor="agreement-input"
+                className="block text-sm font-medium text-slate-200"
+              >
+                Rental agreement number
+              </label>
+              <input
+                id="agreement-input"
+                type="text"
+                autoComplete="off"
+                value={agreementNumberInput}
+                onChange={(e) => {
+                  setAgreementNumberInput(e.target.value);
+                  setAgreementError(null);
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleFindAgreement()}
+                placeholder="e.g. AGR-2024-001"
+                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-slate-800/80 text-slate-50 border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-500"
+                autoFocus
+              />
+              {agreementError && (
+                <p className="text-sm text-red-400 flex items-center gap-2" role="alert">
+                  <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
+                  {agreementError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleFindAgreement}
+                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Scan className="w-5 h-5" />
+                Find Agreement
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 2 menu: after agreement found, two buttons
+  // -------------------------------------------------------------------------
+
+  if (step === 2 && view === 'menu' && selectedAgreement) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        {/* Header */}
+        <div className="bg-slate-950/80 backdrop-blur-sm border-b border-slate-800 px-4 py-4 flex items-center">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 mr-2 hover:bg-slate-900 rounded-lg transition-colors"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-5 h-5 text-slate-100" />
+          </button>
+          <div>
+            <h1 className="text-lg font-bold text-white flex items-center gap-2">
+              <Scan className="w-5 h-5" />
+              Return Machine QR
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Agreement {selectedAgreement.id} · {selectedAgreement.customerName}
+            </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-4 py-8">
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-slate-700/70 p-5 space-y-3 shadow-xl shadow-slate-950/60">
+              <p className="text-sm font-semibold text-slate-100">What would you like to do?</p>
+              <p className="text-xs text-slate-400">
+                You can first review agreement details, or start scanning machine QR codes.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setView('details')}
+                className="w-full min-h-[48px] px-4 py-3 text-sm font-semibold text-slate-100 bg-slate-800 rounded-xl border border-slate-700 hover:bg-slate-750 active:scale-[0.98] transition-all flex items-center justify-between gap-2"
+              >
+                <span className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  View agreement details
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {machines.length} machine{machines.length !== 1 ? 's' : ''}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setView('scan');
+                  setScannerKey((k) => k + 1);
+                }}
+                className="w-full min-h-[52px] px-4 py-3 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Camera className="w-5 h-5" />
+                Start QR Scan
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 2 view: agreement details + submit
+  // -------------------------------------------------------------------------
+
+  if (step === 2 && view === 'details' && selectedAgreement) {
+    const progressPct = totalMachines > 0 ? (scannedCount / totalMachines) * 100 : 0;
+
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col">
+        {/* Header */}
+        <div className="bg-slate-950/85 backdrop-blur-sm border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 hover:bg-slate-900 rounded-lg transition-colors"
+            aria-label="Go back to menu"
+          >
+            <ArrowLeft className="w-5 h-5 text-white" />
+          </button>
+          <div className="flex-1 text-center">
+            <h1 className="text-lg font-bold text-white">Agreement details</h1>
+            <p className="text-xs text-slate-400">#{selectedAgreement.id}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Package className="w-5 h-5 text-blue-300" />
+          </div>
+        </div>
+
+        <div className="flex-1 bg-slate-900/40 backdrop-blur-sm px-4 py-4 overflow-y-auto">
+          <div className="max-w-3xl mx-auto space-y-4">
+            {/* Summary */}
+            <div className="bg-slate-900/80 border border-slate-700 rounded-2xl p-4 space-y-2">
+              <p className="text-sm font-semibold text-slate-100">
+                {selectedAgreement.customerName}
+              </p>
+              <p className="text-xs text-slate-400">{selectedAgreement.customerAddress}</p>
+              <p className="text-xs text-slate-400">
+                Period: {selectedAgreement.rentalStartDate} → {selectedAgreement.rentalEndDate}
+              </p>
+              <p className="text-xs text-slate-400">
+                Machines: {machines.length} · Verified: {scannedCount}/{totalMachines}
+              </p>
+              <div className="mt-2">
+                <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-1.5 rounded-full transition-all duration-500 ${
+                      allDone ? 'bg-emerald-400' : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Machine list */}
+            <div className="bg-slate-900/80 border border-slate-700 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-100">Machines</p>
+                <p className="text-[11px] text-slate-400">
+                  {scannedCount}/{totalMachines} verified
+                </p>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto">
+                {machines.map((m, idx) => (
+                  <div
+                    key={m.id}
+                    className="px-4 py-3 flex items-center justify-between gap-3 border-b border-slate-800/80 last:border-b-0"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-[11px] text-slate-300">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-100 truncate">
+                          {m.serialNumber}
+                        </p>
+                        <p className="text-[11px] text-slate-400 truncate">
+                          Box {m.boxNumber || '—'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {m.scanned && m.returnType ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] text-emerald-200 border border-emerald-500/40">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {m.returnType}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {machines.length === 0 && (
+                  <div className="py-6 px-4 text-center text-xs text-slate-500">
+                    No machines found for this agreement.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Submit */}
+            <div className="pb-4">
+              <button
+                type="button"
+                onClick={handleSubmitReturn}
+                disabled={!canSubmit}
+                className={`w-full min-h-[52px] px-5 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                  canSubmit
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-900/40 active:scale-[0.98]'
+                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-950 border-t-transparent" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5" />
+                    Submit return summary
+                  </>
+                )}
+              </button>
+              {!allDone && (
+                <p className="mt-2 text-[11px] text-slate-400 text-center">
+                  All machines must be scanned and have a return type before submitting.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 2 view: full-screen scanner
+  // -------------------------------------------------------------------------
+
+  if (step === 2 && view === 'scan' && selectedAgreement) {
+    const progressPct = totalMachines > 0 ? (scannedCount / totalMachines) * 100 : 0;
+
+    return (
+      <div className="min-h-screen w-full bg-black flex flex-col">
+        {/* Header */}
+        <div className="bg-black/80 backdrop-blur-sm border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 hover:bg-slate-900 rounded-lg transition-colors"
+            aria-label="Back to menu"
+          >
+            <ArrowLeft className="w-5 h-5 text-white" />
+          </button>
+          <div className="flex-1 text-center">
+            <h1 className="text-sm font-semibold text-white">Scan machine QR</h1>
+            <p className="text-[11px] text-slate-400">
+              {scannedCount}/{totalMachines} verified
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Camera className="w-5 h-5 text-blue-300" />
+          </div>
+        </div>
+
+        {/* Scanner full screen */}
+        <div
+          ref={step2TopRef}
+          className="relative flex-1 bg-black"
+        >
+          <QRScannerComponent
+            key={scannerKey}
+            onScanSuccess={handleScanSuccess}
+            autoClose={false}
+            showCloseButton={false}
+            title=""
+            subtitle=""
+            embedded
+          />
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center px-4">
+            <p className="text-sm text-slate-100 font-medium">Align QR code inside the frame</p>
+            <p className="text-xs text-slate-400 mt-1">
+              When a machine is detected, a pop-up will appear to select return type.
+            </p>
+          </div>
+
+          {/* Progress strip at bottom */}
+          <div className="absolute bottom-4 left-0 right-0 px-4 space-y-2">
+            <div className="w-full bg-slate-800/70 rounded-full h-1.5 overflow-hidden">
+              <div
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  allDone ? 'bg-emerald-400' : 'bg-blue-500'
+                }`}
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-slate-300 text-center">
+              For damaged or missing machines, add note and photos in the pop-up.
+            </p>
+          </div>
+        </div>
+
+        {/* Feedback toast (top of scanner) */}
+        <div className="pointer-events-none fixed inset-x-0 top-[72px] px-4 z-30 flex justify-center">
+          {lastFeedback && <div className="pointer-events-auto">{renderScanFeedback()}</div>}
+        </div>
+
+        {/* Machine popup */}
+        {renderMachinePopup()}
+      </div>
+    );
+  }
+
+  return null;
 };
 
 export default ReturnQRPage;
