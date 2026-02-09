@@ -272,6 +272,15 @@ model Machine {
   currentLocationName String?
   currentLocationAddress String?
   
+  // Additional Machine Details (from frontend requirements)
+  manufactureYear     String?
+  country             String?
+  conditionOnArrival  String?
+  warrantyStatus      String?
+  warrantyExpiryDate  DateTime? @db.Timestamptz(6)
+  purchaseDate        DateTime? @db.Timestamptz(6)
+  notes               String?
+  
   // Lifecycle
   onboardedAt        DateTime  @default(now()) @db.Timestamptz(6)
   onboardedByUserId  String?   @db.Uuid

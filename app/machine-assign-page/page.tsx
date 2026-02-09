@@ -1,17 +1,14 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import Navbar from '@/src/components/common/navbar';
-import UpdateForm from '@/src/components/form-popup/update';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import {
-  X,
-  QrCode,
-  CheckCircle2,
-  Trash2,
-  FileText,
-  Cpu,
   ArrowLeft,
+  CheckCircle2,
+  RotateCcw,
+  Trash2,
+  Zap,
+  Scan,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -212,31 +209,6 @@ function extractSerialAndBoxFromQR(decodedText: string): { serial: string; box: 
 
   return null;
 }
-
-// ---------------------------------------------------------------------------
-// Update form fields (same as rental-agreement)
-// ---------------------------------------------------------------------------
-
-const updateFields = [
-  { name: 'agreementNo', label: 'Agreement Number', type: 'text' as const, placeholder: 'Enter agreement number', required: true, disabled: true },
-  { name: 'customerName', label: 'Customer Name', type: 'text' as const, placeholder: 'Enter customer name', required: true, disabled: true },
-  { name: 'startDate', label: 'Start Date', type: 'date' as const, placeholder: 'Select start date', required: true },
-  { name: 'endDate', label: 'End Date', type: 'date' as const, placeholder: 'Select end date', required: false },
-  { name: 'monthlyRent', label: 'Monthly Rent', type: 'number' as const, placeholder: 'Enter monthly rent', required: true },
-  {
-    name: 'status',
-    label: 'Status',
-    type: 'select' as const,
-    placeholder: 'Select status',
-    required: true,
-    options: [
-      { label: 'Active', value: 'Active' },
-      { label: 'Completed', value: 'Completed' },
-      { label: 'Cancelled', value: 'Cancelled' },
-      { label: 'Pending', value: 'Pending' },
-    ],
-  },
-];
 
 function getUpdateInitialData(agreement: RentalAgreement | null): Record<string, unknown> {
   if (!agreement) return {};
@@ -491,401 +463,299 @@ const MachineAssignPage: React.FC = () => {
     }
   };
 
-  const handleClear = () => {
-    // Reset form to initial; optional
-  };
 
-  // Machine Assignment section: only for Pending agreements (same as rental-agreement)
-  const renderMachineManagementSection = () => {
-    if (!selectedAgreement || selectedAgreement.status !== 'Pending') return null;
-
-    const categories = getExpectedCategories(selectedAgreement);
-    const totalExpected = categories.reduce((sum, c) => sum + c.quantity, 0);
-    const totalScanned = machinesForAgreement.length;
-    const allComplete = isAllCategoriesComplete();
-    const progressPercentage = totalExpected > 0 ? Math.min((totalScanned / totalExpected) * 100, 100) : 0;
-
-    const getScannedForCategory = (categoryIndex: number) =>
-      machinesForAgreement.filter((m) => m.categoryIndex === categoryIndex).length;
-    const canScanCategory = (categoryIndex: number) => {
-      for (let j = 0; j < categoryIndex; j++) {
-        if (getScannedForCategory(j) < categories[j].quantity) return false;
-      }
-      return getScannedForCategory(categoryIndex) < categories[categoryIndex].quantity;
-    };
-
+  // Render Step 1: Agreement selection
+  if (step === 1) {
     return (
-      <div className="space-y-4 sm:space-y-6">
-        <div className="border-t border-gray-200 dark:border-slate-700 pt-4 sm:pt-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 sm:mb-5">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-1">Machine Assignment</h3>
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 break-words">
-                Add machines by scanning QR codes for each category. Complete each category in order. QR must contain serial number and box number only.
-              </p>
-            </div>
-            {totalExpected > 0 && (
-              <div className="flex items-center gap-3 sm:gap-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl px-4 py-3 sm:px-5 border border-gray-100 dark:border-slate-600/50 w-full sm:w-auto shrink-0">
-                <div className="text-center flex-1 sm:flex-initial">
-                  <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
-                    {totalScanned}/{totalExpected}
-                  </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">Machines</div>
-                </div>
-                {allComplete && (
-                  <div className="flex items-center text-green-600 dark:text-green-400">
-                    <CheckCircle2 className="w-5 h-5 mr-1.5 shrink-0" />
-                    <span className="text-xs sm:text-sm font-medium">Complete</span>
-                  </div>
-                )}
-              </div>
-            )}
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+        {/* Header */}
+        <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-4">
+          <div className="max-w-md mx-auto">
+            <h1 className="text-xl font-bold text-white flex items-center gap-2">
+              <Scan className="w-6 h-6" />
+              Scan Inventory
+            </h1>
+            <p className="text-sm text-slate-400 mt-1">Enter agreement number to start scanning</p>
           </div>
+        </div>
 
-          {totalExpected > 0 && (
-            <div className="mb-4 sm:mb-5 min-w-0">
-              <div className="flex items-center justify-between mb-2 gap-2">
-                <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Progress</span>
-                <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white tabular-nums shrink-0">
-                  {Math.round(progressPercentage)}%
-                </span>
-              </div>
-              <div className="w-full min-w-0 bg-gray-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
-                <div
-                  className={`h-2.5 rounded-full transition-all duration-500 ease-out ${
-                    allComplete
-                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 dark:from-green-500 dark:to-emerald-600'
-                      : 'bg-gradient-to-r from-blue-500 to-indigo-600 dark:from-blue-500 dark:to-indigo-600'
-                  }`}
-                  style={{ width: `${progressPercentage}%` }}
-                />
-              </div>
-              {allComplete && (
-                <p className="mt-2 text-xs sm:text-sm text-green-600 dark:text-green-400 flex items-center gap-1.5 break-words">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  All machines assigned. Submit to activate agreement and generate invoice.
+        {/* Content */}
+        <div className="px-4 py-8">
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6 space-y-4">
+              <label htmlFor="agreement-input" className="block text-sm font-medium text-slate-300">
+                Agreement Number
+              </label>
+              <input
+                id="agreement-input"
+                type="text"
+                autoComplete="off"
+                value={agreementNumberInput}
+                onChange={(e) => {
+                  setAgreementNumberInput(e.target.value);
+                  setLookupError(null);
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleContinueFromStep1()}
+                placeholder="e.g. RA24010006"
+                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-slate-700/50 text-white border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-500"
+                autoFocus
+              />
+              {lookupError && (
+                <p className="text-sm text-red-400 flex items-center gap-2" role="alert">
+                  <span className="w-1.5 h-1.5 bg-red-400 rounded-full"></span>
+                  {lookupError}
                 </p>
               )}
+              <p className="text-xs text-slate-500">
+                Try: RA24010002, RA24010005, RA24010006
+              </p>
+              <button
+                type="button"
+                onClick={handleContinueFromStep1}
+                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-5 h-5" />
+                Start Scanning
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Step 2: Scanning interface
+  if (!selectedAgreement) return null;
+
+  const categories = getExpectedCategories(selectedAgreement);
+  const totalExpected = categories.reduce((sum, c) => sum + c.quantity, 0);
+  const totalScanned = machinesForAgreement.length;
+  const allComplete = isAllCategoriesComplete();
+  const latestMachine = machinesForAgreement[machinesForAgreement.length - 1];
+  const previousMachines = machinesForAgreement.slice(0, -1).reverse();
+
+  const currentCategoryIndex = activeScanCategoryIndex !== null ? activeScanCategoryIndex : 
+    categories.findIndex((cat, i) => {
+      const scanned = machinesForAgreement.filter((m) => m.categoryIndex === i).length;
+      return scanned < cat.quantity;
+    });
+
+  const canStartScanning = currentCategoryIndex >= 0 && currentCategoryIndex < categories.length;
+
+  return (
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+      {/* Header */}
+      <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={handleBackToStep1}
+          className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+          aria-label="Go back"
+        >
+          <ArrowLeft className="w-5 h-5 text-white" />
+        </button>
+        <div className="flex-1 text-center">
+          <h1 className="text-lg font-bold text-white">Scan Inventory</h1>
+          <p className="text-xs text-slate-400">Batch #{selectedAgreement.agreementNo}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Zap className="w-5 h-5 text-yellow-400" />
+          <Scan className="w-5 h-5 text-white" />
+        </div>
+      </div>
+
+      {/* QR Scanner Section */}
+      <div className="flex-1 flex flex-col">
+        <div className="relative flex-shrink-0 bg-black/60 backdrop-blur-sm" style={{ height: '45vh', minHeight: '280px' }}>
+          {activeScanCategoryIndex !== null ? (
+            <div className="absolute inset-0">
+              <QRScannerComponent
+                key={scannerKey}
+                onScanSuccess={handleInlineQRScanSuccess}
+                autoClose={false}
+                showCloseButton={false}
+                title=""
+                subtitle=""
+                embedded
+              />
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center">
+                <p className="text-sm text-slate-300 font-medium">Align QR code within frame</p>
+              </div>
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+                <p className="text-xs text-slate-400">Auto-detecting...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center px-6">
+                <div className="w-24 h-24 mx-auto mb-4 rounded-2xl bg-slate-800/50 border-2 border-dashed border-slate-600 flex items-center justify-center">
+                  <Scan className="w-12 h-12 text-slate-500" />
+                </div>
+                <p className="text-slate-300 font-medium mb-2">Ready to scan</p>
+                <p className="text-xs text-slate-500">Tap the button below to start scanning</p>
+              </div>
             </div>
           )}
+        </div>
 
-          <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
-            {categories.map((cat, i) => {
-              const scanned = getScannedForCategory(i);
-              const required = cat.quantity;
-              const categoryComplete = scanned >= required;
-              const canScan = canScanCategory(i);
-              const label = [cat.brand, cat.model, cat.type].filter(Boolean).join(' ') || 'Machine';
-              return (
+        {/* Progress Section */}
+        <div className="flex-1 bg-slate-800/30 backdrop-blur-sm px-4 py-4 overflow-y-auto">
+          <div className="max-w-2xl mx-auto space-y-4">
+            {/* Scanning Progress Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">Scanning Progress</h2>
+                <p className="text-xs text-slate-400">Job ID: #{selectedAgreement.agreementNo}</p>
+              </div>
+              <div className="flex items-center gap-3 bg-slate-800/50 rounded-xl px-4 py-2 border border-slate-700/50">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-white tabular-nums">
+                    {totalScanned}
+                  </div>
+                  <div className="text-xs text-slate-400">Scanned</div>
+                </div>
+                <div className="w-px h-8 bg-slate-700"></div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-white tabular-nums">
+                    {totalExpected}
+                  </div>
+                  <div className="text-xs text-slate-400">Total</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="space-y-2">
+              <div className="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
                 <div
-                  key={cat.id}
-                  className={`rounded-xl border p-3 sm:p-4 min-w-0 ${
-                    categoryComplete
-                      ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800/50'
-                      : 'bg-gray-50 dark:bg-slate-700/50 border-gray-200 dark:border-slate-600'
+                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                    allComplete ? 'bg-green-500' : 'bg-blue-500'
                   }`}
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm sm:text-base text-gray-900 dark:text-white break-words">
-                        {cat.brand && <span>{cat.brand} </span>}
-                        {cat.model && <span>{cat.model} </span>}
-                        {cat.type && <span>({cat.type})</span>}
-                        {!cat.brand && !cat.model && !cat.type && 'Machine'}
-                      </div>
-                      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                        Enter {required} machine(s) — {scanned} of {required} scanned
+                  style={{ width: `${totalExpected > 0 ? (totalScanned / totalExpected) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Latest Scan */}
+            {latestMachine && (
+              <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 backdrop-blur-sm border border-emerald-700/50 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
+                      <CheckCircle2 className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-base font-bold text-emerald-300 truncate">
+                        {latestMachine.serialNumber}
+                      </p>
+                      <p className="text-sm text-emerald-400/80">
+                        Box {latestMachine.boxNumber || '—'} • Added
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenQRScanner(i)}
-                      disabled={!canScan}
-                      className="w-full sm:w-auto min-h-[44px] flex-shrink-0 px-4 py-2.5 rounded-xl sm:rounded-lg bg-green-600 dark:bg-green-700 text-white text-sm font-medium hover:bg-green-700 dark:hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98]"
-                    >
-                      <QrCode className="w-4 h-4 shrink-0" />
-                      <span className="truncate">{categoryComplete ? 'Complete' : `Scan QR for ${label}`}</span>
-                    </button>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {machinesForAgreement.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2 min-w-0">
-                <h4 className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 truncate">
-                  Assigned machines ({machinesForAgreement.length})
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm('Remove all machines from this agreement?')) {
-                      setMachinesForAgreement([]);
-                      checkAndUpdateStatus([]);
-                    }
-                  }}
-                  className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation shrink-0"
-                  aria-label="Clear all machines"
-                >
-                  Clear all
-                </button>
-              </div>
-              <div className="space-y-2 max-h-[min(16rem,45vh)] sm:max-h-64 overflow-y-auto overflow-x-hidden pr-1 -mr-1 overscroll-contain">
-                {machinesForAgreement.map((machine, index) => (
-                  <div
-                    key={machine.id}
-                    className="bg-white dark:bg-slate-700/80 border border-gray-200 dark:border-slate-600 rounded-xl p-3 sm:p-4 min-w-0"
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveMachineFromAgreement(latestMachine.id)}
+                    className="flex-shrink-0 p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
+                    aria-label="Undo last scan"
                   >
-                    <div className="flex items-start justify-between gap-2 sm:gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
-                          <span className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg flex items-center justify-center text-xs font-semibold">
-                            {index + 1}
-                          </span>
-                          <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate min-w-0">
-                            {machine.description || 'Machine'}
-                          </p>
+                    <RotateCcw className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Previous Scans */}
+            {previousMachines.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Previous Scans
+                </h3>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {previousMachines.map((machine) => (
+                    <div
+                      key={machine.id}
+                      className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-lg p-3 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="flex-shrink-0 w-8 h-8 bg-slate-700/50 rounded-lg flex items-center justify-center">
+                          <Scan className="w-4 h-4 text-slate-400" />
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-1.5 text-xs text-gray-600 dark:text-gray-400 ml-8 sm:ml-9 break-words">
-                          <div className="min-w-0">
-                            <span className="font-medium text-gray-500 dark:text-gray-500">Serial:</span>{' '}
-                            <span className="break-all">{machine.serialNumber}</span>
-                          </div>
-                          <div className="min-w-0">
-                            <span className="font-medium text-gray-500 dark:text-gray-500">Box:</span> {machine.boxNumber || '—'}
-                          </div>
-                          {machine.scannedAt && (
-                            <div className="sm:col-span-2 text-gray-500 dark:text-gray-500">
-                              Scanned{' '}
-                              {new Date(machine.scannedAt).toLocaleString('en-LK', { dateStyle: 'short', timeStyle: 'short' })}
-                            </div>
-                          )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">
+                            {machine.serialNumber}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            Box {machine.boxNumber || '—'}
+                          </p>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveMachineFromAgreement(machine.id)}
-                        className="flex-shrink-0 min-h-[44px] min-w-[44px] p-2 flex items-center justify-center text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg touch-manipulation"
-                        title="Remove machine"
-                        aria-label="Remove machine"
+                        className="flex-shrink-0 p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
+                        aria-label="Delete scan"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4 text-slate-400" />
                       </button>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {machinesForAgreement.length === 0 && (
-            <div className="text-center py-8 sm:py-10 px-4 sm:px-6 bg-gray-50 dark:bg-slate-700/30 rounded-xl border-2 border-dashed border-gray-200 dark:border-slate-600">
-              <QrCode className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 dark:text-gray-500 mx-auto mb-2 sm:mb-3" />
-              <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">No machines assigned yet</p>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1 px-2">
-                Use the &quot;Scan QR&quot; button for each category above to add machines. QR must contain serial number and box number only.
-              </p>
-            </div>
-          )}
+            {/* Start/Resume Scanning Button */}
+            {!allComplete && canStartScanning && activeScanCategoryIndex === null && (
+              <button
+                type="button"
+                onClick={() => handleOpenQRScanner(currentCategoryIndex)}
+                className="w-full min-h-[56px] px-6 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2"
+              >
+                <Scan className="w-5 h-5" />
+                {totalScanned === 0 ? 'Start Scanning' : 'Resume Scanning'}
+              </button>
+            )}
+
+            {/* Done Scanning Button */}
+            {(allComplete || totalScanned > 0) && activeScanCategoryIndex === null && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!allComplete) {
+                    const confirm = window.confirm(
+                      `You've scanned ${totalScanned} of ${totalExpected} machines. Are you sure you want to finish?`
+                    );
+                    if (!confirm) return;
+                  }
+                  
+                  setIsSubmitting(true);
+                  try {
+                    const data = getUpdateInitialData(selectedAgreement);
+                    await handleAgreementUpdate({ ...data, status: 'Active' });
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+                disabled={isSubmitting}
+                className="w-full min-h-[56px] px-6 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircle2 className="w-5 h-5" />
+                {isSubmitting ? 'Processing...' : 'Done Scanning'}
+              </button>
+            )}
+
+            {totalScanned === 0 && (
+              <div className="text-center py-8 px-4">
+                <Scan className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <p className="text-sm font-medium text-slate-400">No machines scanned yet</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Scan QR codes to add machines to this batch
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    );
-  };
-
-  return (
-    <div
-      className="min-h-screen w-full bg-gray-100 dark:bg-slate-950 overflow-x-hidden"
-      style={{
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        paddingLeft: 'env(safe-area-inset-left)',
-        paddingRight: 'env(safe-area-inset-right)',
-      }}
-    >
-      <Navbar />
-
-      <main
-        className="w-full min-h-0"
-        style={{
-          paddingTop: 'calc(5rem + env(safe-area-inset-top))',
-          paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))',
-          paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
-          paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
-        }}
-      >
-        <div className="mx-auto max-w-4xl w-full">
-          <div className="space-y-4 sm:space-y-5">
-            {/* Page title - responsive typography */}
-            <div className="min-w-0">
-              <h1 className="text-base sm:text-xl md:text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap break-words">
-                
-                Machine Assignment
-              </h1>
-              <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400 break-words">
-                {step === 1
-                  ? 'Enter a rental agreement number to open the update form and assign machines (scan QR when status is Pending).'
-                  : 'Update agreement details and assign machines by scanning QR codes for each category.'}
-              </p>
-            </div>
-
-            {step === 1 ? (
-              /* Step 1: Agreement lookup - full width on mobile, max-w on larger */
-              <div className="w-full max-w-md">
-                <div className="bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-slate-700 p-4 sm:p-6 shadow-sm space-y-4">
-                  <label htmlFor="agreement-input" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Agreement number
-                  </label>
-                  <input
-                    id="agreement-input"
-                    type="text"
-                    autoComplete="off"
-                    value={agreementNumberInput}
-                    onChange={(e) => {
-                      setAgreementNumberInput(e.target.value);
-                      setLookupError(null);
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleContinueFromStep1()}
-                    placeholder="e.g. RA24010006"
-                    className="w-full min-h-[48px] sm:min-h-[52px] px-4 py-3 text-base border rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:focus:ring-indigo-500 touch-manipulation"
-                    autoFocus
-                  />
-                  {lookupError && (
-                    <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-                      {lookupError}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500 dark:text-gray-400 break-words">
-                    Pending agreements you can try: RA24010002, RA24010005, RA24010006
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleContinueFromStep1}
-                    className="w-full min-h-[48px] sm:min-h-[52px] px-4 py-3 text-base font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-xl hover:bg-blue-700 dark:hover:bg-indigo-700 active:scale-[0.98] transition-transform touch-manipulation"
-                  >
-                    Continue
-                  </button>
-                </div>
-              </div>
-            ) : selectedAgreement ? (
-              <div className="flex flex-col w-full gap-4 min-w-0">
-                {/* Top bar: agreement ref + change button - stacks on mobile */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate flex items-center gap-2 min-w-0">
-                    <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                    <span className="truncate">Agreement: {selectedAgreement.agreementNo}</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleBackToStep1}
-                    className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 bg-gray-100 dark:bg-slate-800 text-sm text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-slate-700 active:scale-[0.98] touch-manipulation flex items-center justify-center gap-2 shrink-0"
-                  >
-                    <ArrowLeft className="w-4 h-4 shrink-0" />
-                    Change agreement
-                  </button>
-                </div>
-
-                {/* Update form card - responsive padding and overflow */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl shadow-sm w-full border border-gray-200/50 dark:border-slate-700/50 overflow-hidden min-w-0">
-                  <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/80">
-                    <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">
-                      Update Rental Agreement
-                    </h2>
-                  </div>
-                  <div className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 min-h-0">
-                    <UpdateForm
-                      title="Update Rental Agreement Details"
-                      fields={updateFields}
-                      onSubmit={handleAgreementUpdate}
-                      onClear={handleClear}
-                      submitButtonLabel="Update Agreement"
-                      clearButtonLabel="Reset"
-                      loading={isSubmitting}
-                      initialData={getUpdateInitialData(selectedAgreement)}
-                      className="shadow-none border-0 p-0"
-                      customSections={renderMachineManagementSection()}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </main>
-
-      {/* QR Scanner popup - full-screen on mobile, centered modal on larger */}
-      {selectedAgreement && activeScanCategoryIndex !== null && (() => {
-        const categories = getExpectedCategories(selectedAgreement);
-        const cat = categories[activeScanCategoryIndex];
-        const scanned = machinesForAgreement.filter((m) => m.categoryIndex === activeScanCategoryIndex).length;
-        const required = cat?.quantity ?? 0;
-        const categoryLabel = cat ? [cat.brand, cat.model, cat.type].filter(Boolean).join(' ') || 'Machine' : 'Machine';
-        return (
-          <div
-            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm"
-            style={{
-              paddingLeft: 'env(safe-area-inset-left)',
-              paddingRight: 'env(safe-area-inset-right)',
-              paddingBottom: 'env(safe-area-inset-bottom)',
-            }}
-          >
-            <div className="flex flex-col w-full h-[95dvh] sm:h-auto sm:max-h-[90vh] sm:max-w-lg bg-white dark:bg-slate-800 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 overflow-hidden">
-              <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80 min-h-[3.5rem]">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
-                    Scan — {categoryLabel}
-                  </h3>
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                    {scanned} of {required} scanned · QR: serial & box number only
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveScanCategoryIndex(null)}
-                  className="flex-shrink-0 min-h-[44px] min-w-[44px] p-2 flex items-center justify-center rounded-xl hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 transition-colors touch-manipulation"
-                  aria-label="Close scanner"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 flex flex-col w-full min-w-0">
-                <div className="flex-1 min-h-[180px] sm:min-h-[240px] min-w-0 w-full overflow-hidden bg-gray-900 dark:bg-black rounded-b-xl sm:rounded-none flex flex-col">
-                  <QRScannerComponent
-                    key={scannerKey}
-                    onScanSuccess={handleInlineQRScanSuccess}
-                    autoClose={false}
-                    showCloseButton={false}
-                    title="Scan machine QR"
-                    subtitle={`${scanned}/${required} for this category`}
-                    embedded
-                  />
-                </div>
-              </div>
-              <div
-                className="flex-shrink-0 flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-4 sm:px-5 sm:py-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/50"
-                style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setActiveScanCategoryIndex(null)}
-                  className="w-full sm:w-auto min-h-[48px] order-1 sm:order-2 px-4 py-3 sm:py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors touch-manipulation active:scale-[0.98]"
-                >
-                  Back to categories
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveScanCategoryIndex(null)}
-                  className="w-full sm:flex-1 min-h-[48px] order-2 sm:order-1 px-4 py-3 sm:py-2.5 text-sm font-semibold text-white bg-green-600 dark:bg-green-700 rounded-xl hover:bg-green-700 dark:hover:bg-green-600 transition-colors flex items-center justify-center gap-2 touch-manipulation active:scale-[0.98]"
-                >
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  Complete
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 };
