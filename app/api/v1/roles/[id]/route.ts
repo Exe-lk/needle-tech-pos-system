@@ -24,7 +24,7 @@ import prisma from '@/lib/prisma';
  *       404:
  *         description: Role not found
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -90,7 +90,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (
  *       200:
  *         description: Role updated successfully
  */
-export const PUT = withAuthAndRole(['ADMIN'], async (
+export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -146,7 +146,7 @@ export const PUT = withAuthAndRole(['ADMIN'], async (
  *       400:
  *         description: Cannot delete role with assigned users
  */
-export const DELETE = withAuthAndRole(['ADMIN'], async (
+export const DELETE = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }

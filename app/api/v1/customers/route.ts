@@ -42,7 +42,7 @@ import prisma from '@/lib/prisma';
  *       200:
  *         description: Customers retrieved successfully
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -141,7 +141,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *       400:
  *         description: Validation error
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { code, type, name, contactPerson, phones = [], emails = [] } = body;

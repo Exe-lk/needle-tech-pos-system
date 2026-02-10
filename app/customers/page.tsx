@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
@@ -11,22 +11,56 @@ import { Eye, Pencil, Trash2, X } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 
+// API Configuration
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
+
+// Type Definitions
 type CustomerType = 'Business' | 'Customer';
 type CustomerStatus = 'Active' | 'Inactive' | 'Blocked';
+type ApiCustomerType = 'GARMENT_FACTORY' | 'INDIVIDUAL';
+type ApiCustomerStatus = 'ACTIVE' | 'INACTIVE';
 
 interface Customer {
-  id: number;
+  id: string;
   name: string;
   type: CustomerType;
   outstandingBalance: number;
   status: CustomerStatus;
+  code?: string;
 }
 
-// Customer Profile Data Types
-interface CustomerInfo {
-  id: number;
+interface ApiCustomer {
+  id: string;
+  code: string;
+  type: ApiCustomerType;
   name: string;
-  type: 'Business' | 'Customer';
+  contactPerson: string;
+  phones: string[];
+  emails: string[];
+  billingAddressLine1?: string;
+  billingAddressLine2?: string;
+  billingCity?: string;
+  billingRegion?: string;
+  billingPostalCode?: string;
+  billingCountry?: string;
+  shippingAddressLine1?: string;
+  shippingAddressLine2?: string;
+  shippingCity?: string;
+  shippingRegion?: string;
+  shippingPostalCode?: string;
+  shippingCountry?: string;
+  vatRegistrationNumber?: string;
+  currentBalance: number;
+  status: ApiCustomerStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CustomerInfo {
+  id: string;
+  name: string;
+  type: CustomerType;
   nicNumber?: string;
   vatTin?: string;
   address: string;
@@ -34,244 +68,247 @@ interface CustomerInfo {
   email: string;
   creditStatus: 'Active' | 'Locked';
   totalOutstanding: number;
+  contactPerson?: string;
 }
 
 interface RentalHistory {
-  id: number;
-  machineName: string;
-  rentalDate: string;
-  returnDate: string | null;
-  status: 'Active' | 'Completed' | 'Cancelled';
-  totalAmount: number;
-}
-
-interface Payment {
-  id: number;
-  machineName: string;
-  dueDate: string;
-  amount: number;
-  status: 'Pending' | 'Paid' | 'Overdue';
-}
-
-interface DamageRecord {
-  id: number;
-  machineName: string;
-  rentalDate: string;
-  returnDate: string;
-  damageDescription: string;
-  repairCost: number;
-  status: 'Repaired' | 'Pending';
-}
-
-interface Agreement {
-  id: number;
+  id: string;
   agreementNumber: string;
-  machineName: string;
+  status: string;
   startDate: string;
-  endDate: string;
-  rentalPeriod: string;
-  monthlyRate: number;
-  totalAmount: number;
-  status: 'Active' | 'Expired' | 'Terminated';
+  expectedEndDate: string;
+  actualEndDate?: string;
+  total: number;
+  balance: number;
 }
 
-interface OutstandingAlert {
-  id: number;
-  alertType: 'Payment Overdue' | 'High Balance' | 'Credit Limit Exceeded' | 'Agreement Expiring';
-  description: string;
-  amount: number;
-  dueDate: string;
-  severity: 'Low' | 'Medium' | 'High' | 'Critical';
-  status: 'Active' | 'Resolved';
-}
+// Helper Functions
+const mapApiTypeToFrontend = (apiType: ApiCustomerType): CustomerType => {
+  return apiType === 'GARMENT_FACTORY' ? 'Business' : 'Customer';
+};
 
-// Mock customer data
-const mockCustomers: Customer[] = [
-  {
-    id: 1,
-    name: 'ABC Holdings (Pvt) Ltd',
-    type: 'Business',
-    outstandingBalance: 120000.5,
-    status: 'Active',
-  },
-  {
-    id: 2,
-    name: 'John Perera',
-    type: 'Customer',
-    outstandingBalance: 3500,
-    status: 'Active',
-  },
-  {
-    id: 3,
-    name: 'XYZ Engineering',
-    type: 'Business',
-    outstandingBalance: 0,
-    status: 'Inactive',
-  },
-  {
-    id: 4,
-    name: 'Kamal Silva',
-    type: 'Customer',
-    outstandingBalance: 78000,
-    status: 'Blocked',
-  },
-  {
-    id: 5,
-    name: 'Mega Constructions',
-    type: 'Business',
-    outstandingBalance: 245000.75,
-    status: 'Active',
-  },
-];
+const mapFrontendTypeToApi = (frontendType: CustomerType): ApiCustomerType => {
+  return frontendType === 'Business' ? 'GARMENT_FACTORY' : 'INDIVIDUAL';
+};
 
-// Mock function to get customer profile data (replace with API call later)
-const getCustomerProfileData = (customerId: number): CustomerInfo => {
-  const customer = mockCustomers.find((c) => c.id === customerId);
+const mapApiStatusToFrontend = (apiStatus: ApiCustomerStatus): CustomerStatus => {
+  return apiStatus === 'ACTIVE' ? 'Active' : 'Inactive';
+};
+
+const mapFrontendStatusToApi = (frontendStatus: CustomerStatus): ApiCustomerStatus => {
+  return frontendStatus === 'Blocked' ? 'INACTIVE' : frontendStatus.toUpperCase() as ApiCustomerStatus;
+};
+
+const formatAddress = (customer: ApiCustomer, type: 'billing' | 'shipping' = 'billing'): string => {
+  const prefix = type === 'billing' ? 'billing' : 'shipping';
+  const parts = [
+    customer[`${prefix}AddressLine1` as keyof ApiCustomer],
+    customer[`${prefix}AddressLine2` as keyof ApiCustomer],
+    customer[`${prefix}City` as keyof ApiCustomer],
+    customer[`${prefix}Region` as keyof ApiCustomer],
+    customer[`${prefix}PostalCode` as keyof ApiCustomer],
+    customer[`${prefix}Country` as keyof ApiCustomer],
+  ].filter(Boolean);
+  
+  return parts.join(', ') || 'N/A';
+};
+
+const parseAddress = (address: string) => {
+  const parts = address.split(',').map(p => p.trim());
   return {
-    id: customer?.id || 0,
-    name: customer?.name || '',
-    type: customer?.type || 'Business',
-    vatTin: customer?.type === 'Business' ? 'VAT-123456789' : undefined,
-    nicNumber: customer?.type === 'Customer' ? '123456789V' : undefined,
-    address: '123 Business Street, Colombo 05',
-    phone: '+94 11 2345678',
-    email: 'contact@example.lk',
-    creditStatus: customer?.status === 'Blocked' ? 'Locked' : 'Active',
-    totalOutstanding: customer?.outstandingBalance || 0,
+    line1: parts[0] || '',
+    line2: parts[1] || '',
+    city: parts[2] || '',
+    region: parts[3] || '',
+    postalCode: parts[4] || '',
+    country: parts[5] || 'Sri Lanka',
   };
 };
 
-// Mock rental history data
-const getRentalHistory = (customerId: number): RentalHistory[] => {
-  return [
-    {
-      id: 1,
-      machineName: 'Excavator CAT 320',
-      rentalDate: '2024-01-15',
-      returnDate: '2024-02-15',
-      status: 'Completed',
-      totalAmount: 150000,
-    },
-    {
-      id: 2,
-      machineName: 'Bulldozer CAT D6',
-      rentalDate: '2024-03-01',
-      returnDate: null,
-      status: 'Active',
-      totalAmount: 200000,
-    },
-  ];
+// API Functions
+const getAuthHeaders = () => {
+  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
 };
 
-// Mock payments data
-const getPayments = (customerId: number): Payment[] => {
-  return [
-    {
-      id: 1,
-      machineName: 'Bulldozer CAT D6',
-      dueDate: '2024-04-01',
-      amount: 50000,
-      status: 'Pending',
-    },
-    {
-      id: 2,
-      machineName: 'Bulldozer CAT D6',
-      dueDate: '2024-05-01',
-      amount: 50000,
-      status: 'Pending',
-    },
-  ];
+const fetchCustomers = async (): Promise<Customer[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/customers?limit=1000`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch customers');
+    }
+
+    const data = await response.json();
+    const apiCustomers: ApiCustomer[] = data.data?.items || [];
+
+    return apiCustomers.map(apiCustomer => ({
+      id: apiCustomer.id,
+      code: apiCustomer.code,
+      name: apiCustomer.name,
+      type: mapApiTypeToFrontend(apiCustomer.type),
+      outstandingBalance: Number(apiCustomer.currentBalance),
+      status: mapApiStatusToFrontend(apiCustomer.status),
+    }));
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    return [];
+  }
 };
 
-// Mock damage records data
-const getDamageRecords = (customerId: number): DamageRecord[] => {
-  return [
-    {
-      id: 1,
-      machineName: 'Excavator CAT 320',
-      rentalDate: '2024-01-15',
-      returnDate: '2024-02-15',
-      damageDescription: 'Minor scratch on hydraulic arm',
-      repairCost: 5000,
-      status: 'Repaired',
-    },
-  ];
+const fetchCustomerById = async (customerId: string): Promise<ApiCustomer | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/customers/${customerId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch customer');
+    }
+
+    const data = await response.json();
+    return data.data as ApiCustomer;
+  } catch (error) {
+    console.error('Error fetching customer:', error);
+    return null;
+  }
 };
 
-// Mock agreements data
-const getAgreements = (customerId: number): Agreement[] => {
-  return [
-    {
-      id: 1,
-      agreementNumber: 'AGR-2024-001',
-      machineName: 'Excavator CAT 320',
-      startDate: '2024-01-15',
-      endDate: '2024-07-15',
-      rentalPeriod: '6 months',
-      monthlyRate: 25000,
-      totalAmount: 150000,
-      status: 'Active',
-    },
-    {
-      id: 2,
-      agreementNumber: 'AGR-2024-002',
-      machineName: 'Bulldozer CAT D6',
-      startDate: '2024-03-01',
-      endDate: '2024-09-01',
-      rentalPeriod: '6 months',
-      monthlyRate: 33333.33,
-      totalAmount: 200000,
-      status: 'Active',
-    },
-    {
-      id: 3,
-      agreementNumber: 'AGR-2023-045',
-      machineName: 'Loader CAT 950',
-      startDate: '2023-06-01',
-      endDate: '2023-12-01',
-      rentalPeriod: '6 months',
-      monthlyRate: 20000,
-      totalAmount: 120000,
-      status: 'Expired',
-    },
-  ];
+const fetchCustomerRentalHistory = async (customerId: string): Promise<RentalHistory[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/customers/${customerId}/rental-history`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch rental history');
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error fetching rental history:', error);
+    return [];
+  }
 };
 
-// Mock outstanding alerts data
-const getOutstandingAlerts = (customerId: number): OutstandingAlert[] => {
-  return [
-    {
-      id: 1,
-      alertType: 'Payment Overdue',
-      description: 'Monthly payment for Bulldozer CAT D6 is overdue by 15 days',
-      amount: 50000,
-      dueDate: '2024-04-01',
-      severity: 'High',
-      status: 'Active',
-    },
-    {
-      id: 2,
-      alertType: 'High Balance',
-      description: 'Total outstanding balance exceeds warning threshold',
-      amount: 120000.5,
-      dueDate: '2024-04-15',
-      severity: 'Medium',
-      status: 'Active',
-    },
-    {
-      id: 3,
-      alertType: 'Agreement Expiring',
-      description: 'Agreement AGR-2024-001 will expire in 30 days',
-      amount: 0,
-      dueDate: '2024-07-15',
-      severity: 'Low',
-      status: 'Active',
-    },
-  ];
+const createCustomer = async (customerData: any): Promise<{ success: boolean; error?: string; data?: ApiCustomer }> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/customers`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(customerData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Failed to create customer',
+      };
+    }
+
+    return {
+      success: true,
+      data: data.data,
+    };
+  } catch (error: any) {
+    console.error('Error creating customer:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+};
+
+const updateCustomer = async (customerId: string, customerData: any): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/customers/${customerId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(customerData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Failed to update customer',
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error: any) {
+    console.error('Error updating customer:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+};
+
+const deleteCustomer = async (customerId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/customers/${customerId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Failed to delete customer',
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error: any) {
+    console.error('Error deleting customer:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+};
+
+// Generate unique customer code
+const generateCustomerCode = async (): Promise<string> => {
+  const prefix = 'CUST';
+  const timestamp = Date.now().toString().slice(-6);
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `${prefix}-${timestamp}${random}`;
 };
 
 // Table column configuration
 const columns: TableColumn[] = [
+  {
+    key: 'code',
+    label: 'Customer Code',
+    sortable: true,
+    filterable: false,
+  },
   {
     key: 'name',
     label: 'Customer Name',
@@ -301,8 +338,7 @@ const columns: TableColumn[] = [
     sortable: true,
     filterable: true,
     render: (value: CustomerStatus) => {
-      const base =
-        'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
+      const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
       if (value === 'Active') {
         return (
           <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>
@@ -334,9 +370,48 @@ const CustomerListPage: React.FC = () => {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<ApiCustomer | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<'overview' | 'rental-history' | 'payments' | 'damage-records'>('overview');
   const [activeCreateTab, setActiveCreateTab] = useState<'company' | 'individual'>('company');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [rentalHistory, setRentalHistory] = useState<RentalHistory[]>([]);
+
+  // Fetch customers on component mount
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  const loadCustomers = async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchCustomers();
+      setCustomers(data);
+    } catch (error) {
+      console.error('Error loading customers:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadCustomerDetails = async (customerId: string) => {
+    try {
+      const details = await fetchCustomerById(customerId);
+      setSelectedCustomerDetails(details);
+    } catch (error) {
+      console.error('Error loading customer details:', error);
+    }
+  };
+
+  const loadRentalHistory = async (customerId: string) => {
+    try {
+      const history = await fetchCustomerRentalHistory(customerId);
+      setRentalHistory(history);
+    } catch (error) {
+      console.error('Error loading rental history:', error);
+    }
+  };
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -347,7 +422,8 @@ const CustomerListPage: React.FC = () => {
   };
 
   const handleLogout = () => {
-    console.log('Logout clicked');
+    localStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
+    window.location.href = '/';
   };
 
   const handleCreateCustomer = () => {
@@ -360,26 +436,31 @@ const CustomerListPage: React.FC = () => {
     setActiveCreateTab('company');
   };
 
-  const handleViewCustomer = (customer: Customer) => {
+  const handleViewCustomer = async (customer: Customer) => {
     setSelectedCustomer(customer);
     setIsViewModalOpen(true);
     setActiveProfileTab('overview');
+    await loadCustomerDetails(customer.id);
+    await loadRentalHistory(customer.id);
   };
 
   const handleCloseViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedCustomer(null);
+    setSelectedCustomerDetails(null);
     setActiveProfileTab('overview');
   };
 
-  const handleUpdateCustomer = (customer: Customer) => {
+  const handleUpdateCustomer = async (customer: Customer) => {
     setSelectedCustomer(customer);
+    await loadCustomerDetails(customer.id);
     setIsUpdateModalOpen(true);
   };
 
   const handleCloseUpdateModal = () => {
     setIsUpdateModalOpen(false);
     setSelectedCustomer(null);
+    setSelectedCustomerDetails(null);
   };
 
   const handleDeleteCustomer = (customer: Customer) => {
@@ -397,12 +478,15 @@ const CustomerListPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      console.log('Delete customer payload:', selectedCustomer);
-      // Replace with actual API call
-      // await deleteCustomerAPI(selectedCustomer.id);
-      alert(`Customer "${selectedCustomer.name}" deleted (frontend only).`);
-      handleCloseDeleteModal();
-      // Optionally refresh the customer list here
+      const result = await deleteCustomer(selectedCustomer.id);
+      
+      if (result.success) {
+        alert(`Customer "${selectedCustomer.name}" deleted successfully.`);
+        handleCloseDeleteModal();
+        await loadCustomers(); // Refresh the list
+      } else {
+        alert(`Failed to delete customer: ${result.error}`);
+      }
     } catch (error) {
       console.error('Error deleting customer:', error);
       alert('Failed to delete customer. Please try again.');
@@ -425,7 +509,7 @@ const CustomerListPage: React.FC = () => {
       label: 'VAT / TIN Number',
       type: 'text',
       placeholder: 'Enter VAT or TIN number',
-      required: true,
+      required: false,
       validation: validateVATTIN,
     },
     {
@@ -459,7 +543,17 @@ const CustomerListPage: React.FC = () => {
       required: true,
       validation: validateEmail,
     },
-    
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      placeholder: 'Select status',
+      required: true,
+      options: [
+        { label: 'Active', value: 'Active' },
+        { label: 'Inactive', value: 'Inactive' },
+      ],
+    },
   ];
 
   // Form fields for Customer
@@ -476,7 +570,7 @@ const CustomerListPage: React.FC = () => {
       label: 'NIC Number',
       type: 'text',
       placeholder: 'Enter NIC number',
-      required: true,
+      required: false,
       validation: validateNICNumber,
     },
     {
@@ -512,34 +606,33 @@ const CustomerListPage: React.FC = () => {
       options: [
         { label: 'Active', value: 'Active' },
         { label: 'Inactive', value: 'Inactive' },
-        { label: 'Blocked', value: 'Blocked' },
       ],
     },
   ];
 
   // Get initial data for update form
   const getUpdateInitialData = (customer: Customer | null) => {
-    if (!customer) return {};
+    if (!customer || !selectedCustomerDetails) return {};
 
-    const customerInfo = getCustomerProfileData(customer.id);
+    const address = formatAddress(selectedCustomerDetails, 'billing');
 
     if (customer.type === 'Business') {
       return {
-        companyName: customerInfo.name,
-        vatTin: customerInfo.vatTin || '',
-        businessAddress: customerInfo.address,
-        contactPerson: 'Contact Person Name', // This should come from API
-        phone: customerInfo.phone,
-        email: customerInfo.email,
+        companyName: selectedCustomerDetails.name,
+        vatTin: selectedCustomerDetails.vatRegistrationNumber || '',
+        businessAddress: address,
+        contactPerson: selectedCustomerDetails.contactPerson || '',
+        phone: selectedCustomerDetails.phones[0] || '',
+        email: selectedCustomerDetails.emails[0] || '',
         status: customer.status,
       };
     } else {
       return {
-        fullName: customerInfo.name,
-        nicNumber: customerInfo.nicNumber || '',
-        address: customerInfo.address,
-        phone: customerInfo.phone,
-        email: customerInfo.email,
+        fullName: selectedCustomerDetails.name,
+        nicNumber: '', // NIC is not stored separately in the schema
+        address: address,
+        phone: selectedCustomerDetails.phones[0] || '',
+        email: selectedCustomerDetails.emails[0] || '',
         status: customer.status,
       };
     }
@@ -550,6 +643,7 @@ const CustomerListPage: React.FC = () => {
     if (!customer) return [];
 
     return [
+      { label: 'Customer Code', value: customer.code || 'N/A' },
       { label: 'Type', value: customer.type },
       { label: 'Status', value: customer.status },
       {
@@ -565,9 +659,38 @@ const CustomerListPage: React.FC = () => {
   const handleCompanySubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      console.log('Create business payload:', data);
-      alert(`Business "${data.companyName}" created (frontend only).`);
-      handleCloseCreateModal();
+      const addressParts = parseAddress(data.businessAddress);
+      const code = await generateCustomerCode();
+
+      const payload = {
+        code,
+        type: mapFrontendTypeToApi('Business'),
+        name: data.companyName,
+        contactPerson: data.contactPerson,
+        phones: [data.phone],
+        emails: [data.email],
+        billingAddressLine1: addressParts.line1,
+        billingAddressLine2: addressParts.line2,
+        billingCity: addressParts.city,
+        billingRegion: addressParts.region,
+        billingPostalCode: addressParts.postalCode,
+        billingCountry: addressParts.country,
+        vatRegistrationNumber: data.vatTin || null,
+        status: mapFrontendStatusToApi(data.status),
+      };
+
+      const result = await createCustomer(payload);
+      
+      if (result.success) {
+        alert(`Business "${data.companyName}" created successfully.`);
+        handleCloseCreateModal();
+        await loadCustomers(); // Refresh the list
+      } else {
+        alert(`Failed to create business: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error creating business:', error);
+      alert('Failed to create business. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -576,31 +699,114 @@ const CustomerListPage: React.FC = () => {
   const handleIndividualSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      console.log('Create customer payload:', data);
-      alert(`Customer "${data.fullName}" created (frontend only).`);
-      handleCloseCreateModal();
+      const addressParts = parseAddress(data.address);
+      const code = await generateCustomerCode();
+
+      const payload = {
+        code,
+        type: mapFrontendTypeToApi('Customer'),
+        name: data.fullName,
+        contactPerson: data.fullName,
+        phones: [data.phone],
+        emails: [data.email],
+        billingAddressLine1: addressParts.line1,
+        billingAddressLine2: addressParts.line2,
+        billingCity: addressParts.city,
+        billingRegion: addressParts.region,
+        billingPostalCode: addressParts.postalCode,
+        billingCountry: addressParts.country,
+        status: mapFrontendStatusToApi(data.status),
+      };
+
+      const result = await createCustomer(payload);
+      
+      if (result.success) {
+        alert(`Customer "${data.fullName}" created successfully.`);
+        handleCloseCreateModal();
+        await loadCustomers(); // Refresh the list
+      } else {
+        alert(`Failed to create customer: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      alert('Failed to create customer. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleCompanyUpdate = async (data: Record<string, any>) => {
+    if (!selectedCustomer) return;
+
     setIsSubmitting(true);
     try {
-      console.log('Update business payload:', data);
-      alert(`Business "${data.companyName}" updated (frontend only).`);
-      handleCloseUpdateModal();
+      const addressParts = parseAddress(data.businessAddress);
+
+      const payload = {
+        name: data.companyName,
+        contactPerson: data.contactPerson,
+        phones: [data.phone],
+        emails: [data.email],
+        billingAddressLine1: addressParts.line1,
+        billingAddressLine2: addressParts.line2,
+        billingCity: addressParts.city,
+        billingRegion: addressParts.region,
+        billingPostalCode: addressParts.postalCode,
+        billingCountry: addressParts.country,
+        vatRegistrationNumber: data.vatTin || null,
+        status: mapFrontendStatusToApi(data.status),
+      };
+
+      const result = await updateCustomer(selectedCustomer.id, payload);
+      
+      if (result.success) {
+        alert(`Business "${data.companyName}" updated successfully.`);
+        handleCloseUpdateModal();
+        await loadCustomers(); // Refresh the list
+      } else {
+        alert(`Failed to update business: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error updating business:', error);
+      alert('Failed to update business. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleIndividualUpdate = async (data: Record<string, any>) => {
+    if (!selectedCustomer) return;
+
     setIsSubmitting(true);
     try {
-      console.log('Update customer payload:', data);
-      alert(`Customer "${data.fullName}" updated (frontend only).`);
-      handleCloseUpdateModal();
+      const addressParts = parseAddress(data.address);
+
+      const payload = {
+        name: data.fullName,
+        contactPerson: data.fullName,
+        phones: [data.phone],
+        emails: [data.email],
+        billingAddressLine1: addressParts.line1,
+        billingAddressLine2: addressParts.line2,
+        billingCity: addressParts.city,
+        billingRegion: addressParts.region,
+        billingPostalCode: addressParts.postalCode,
+        billingCountry: addressParts.country,
+        status: mapFrontendStatusToApi(data.status),
+      };
+
+      const result = await updateCustomer(selectedCustomer.id, payload);
+      
+      if (result.success) {
+        alert(`Customer "${data.fullName}" updated successfully.`);
+        handleCloseUpdateModal();
+        await loadCustomers(); // Refresh the list
+      } else {
+        alert(`Failed to update customer: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      alert('Failed to update customer. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -646,18 +852,31 @@ const CustomerListPage: React.FC = () => {
 
   // Profile Content Components
   const renderProfileContent = () => {
-    if (!selectedCustomer) return null;
+    if (!selectedCustomer || !selectedCustomerDetails) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-gray-500 dark:text-gray-400">Loading customer details...</div>
+        </div>
+      );
+    }
 
-    const customerInfo = getCustomerProfileData(selectedCustomer.id);
-    const rentalHistory = getRentalHistory(selectedCustomer.id);
-    const payments = getPayments(selectedCustomer.id);
-    const damageRecords = getDamageRecords(selectedCustomer.id);
+    const customerInfo: CustomerInfo = {
+      id: selectedCustomerDetails.id,
+      name: selectedCustomerDetails.name,
+      type: mapApiTypeToFrontend(selectedCustomerDetails.type),
+      vatTin: selectedCustomerDetails.vatRegistrationNumber,
+      nicNumber: undefined, // Not stored separately in schema
+      address: formatAddress(selectedCustomerDetails, 'billing'),
+      phone: selectedCustomerDetails.phones[0] || 'N/A',
+      email: selectedCustomerDetails.emails[0] || 'N/A',
+      creditStatus: selectedCustomerDetails.status === 'ACTIVE' ? 'Active' : 'Locked',
+      totalOutstanding: Number(selectedCustomerDetails.currentBalance),
+      contactPerson: selectedCustomerDetails.contactPerson,
+    };
 
     // Overview Content
     const overviewContent = (
       <div className="space-y-6">
-        
-
         <div className="space-y-4">
           {/* Customer Info */}
           <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
@@ -665,6 +884,12 @@ const CustomerListPage: React.FC = () => {
               Customer Info
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-500 dark:text-gray-400">Customer Code:</span>
+                <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                  {selectedCustomerDetails.code}
+                </span>
+              </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400">Name:</span>
                 <span className="ml-2 text-gray-900 dark:text-white font-medium">
@@ -685,11 +910,11 @@ const CustomerListPage: React.FC = () => {
                   </span>
                 </div>
               )}
-              {customerInfo.nicNumber && (
+              {customerInfo.contactPerson && (
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">NIC:</span>
+                  <span className="text-gray-500 dark:text-gray-400">Contact Person:</span>
                   <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                    {customerInfo.nicNumber}
+                    {customerInfo.contactPerson}
                   </span>
                 </div>
               )}
@@ -721,10 +946,11 @@ const CustomerListPage: React.FC = () => {
             </h4>
             <div>
               <span
-                className={`px-3 py-1.5 rounded-full text-sm font-semibold inline-flex items-center ${customerInfo.creditStatus === 'Active'
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold inline-flex items-center ${
+                  customerInfo.creditStatus === 'Active'
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
                     : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                  }`}
+                }`}
               >
                 {customerInfo.creditStatus}
               </span>
@@ -738,10 +964,11 @@ const CustomerListPage: React.FC = () => {
             </h4>
             <div>
               <span
-                className={`text-2xl font-bold ${customerInfo.totalOutstanding > 0
+                className={`text-2xl font-bold ${
+                  customerInfo.totalOutstanding > 0
                     ? 'text-red-600 dark:text-red-400'
                     : 'text-green-600 dark:text-green-400'
-                  }`}
+                }`}
               >
                 Rs. {customerInfo.totalOutstanding.toLocaleString('en-LK', {
                   minimumFractionDigits: 2,
@@ -757,38 +984,43 @@ const CustomerListPage: React.FC = () => {
     // Rental History Columns
     const rentalHistoryColumns: TableColumn[] = [
       {
-        key: 'machineName',
-        label: 'Machine Name',
+        key: 'agreementNumber',
+        label: 'Agreement Number',
         sortable: true,
       },
       {
-        key: 'rentalDate',
-        label: 'Rental Date',
+        key: 'startDate',
+        label: 'Start Date',
         sortable: true,
         render: (value: string) => new Date(value).toLocaleDateString('en-LK'),
       },
       {
-        key: 'returnDate',
-        label: 'Return Date',
+        key: 'expectedEndDate',
+        label: 'Expected End Date',
+        sortable: true,
+        render: (value: string) => new Date(value).toLocaleDateString('en-LK'),
+      },
+      {
+        key: 'actualEndDate',
+        label: 'Actual End Date',
         sortable: true,
         render: (value: string | null) =>
-          value ? new Date(value).toLocaleDateString('en-LK') : 'N/A',
+          value ? new Date(value).toLocaleDateString('en-LK') : 'Active',
       },
       {
         key: 'status',
         label: 'Status',
         sortable: true,
         render: (value: string) => {
-          const base =
-            'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
-          if (value === 'Active') {
+          const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
+          if (value === 'ACTIVE') {
             return (
               <span className={`${base} bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}>
                 Active
               </span>
             );
           }
-          if (value === 'Completed') {
+          if (value === 'COMPLETED') {
             return (
               <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>
                 Completed
@@ -803,139 +1035,35 @@ const CustomerListPage: React.FC = () => {
         },
       },
       {
-        key: 'totalAmount',
+        key: 'total',
         label: 'Total Amount',
         sortable: true,
         render: (value: number) => (
           <span className="font-medium text-gray-900 dark:text-white">
-            Rs. {value.toLocaleString('en-LK', {
+            Rs. {Number(value).toLocaleString('en-LK', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
           </span>
         ),
       },
-    ];
-
-    // Payments Columns
-    const paymentsColumns: TableColumn[] = [
       {
-        key: 'machineName',
-        label: 'Machine Name',
-        sortable: true,
-      },
-      {
-        key: 'dueDate',
-        label: 'Due Date',
-        sortable: true,
-        render: (value: string) => new Date(value).toLocaleDateString('en-LK'),
-      },
-      {
-        key: 'amount',
-        label: 'Amount',
+        key: 'balance',
+        label: 'Balance',
         sortable: true,
         render: (value: number) => (
-          <span className="font-medium text-gray-900 dark:text-white">
-            Rs. {value.toLocaleString('en-LK', {
+          <span className={`font-medium ${Number(value) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+            Rs. {Number(value).toLocaleString('en-LK', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
           </span>
         ),
-      },
-      {
-        key: 'status',
-        label: 'Status',
-        sortable: true,
-        render: (value: string) => {
-          const base =
-            'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
-          if (value === 'Paid') {
-            return (
-              <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>
-                Paid
-              </span>
-            );
-          }
-          if (value === 'Overdue') {
-            return (
-              <span className={`${base} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`}>
-                Overdue
-              </span>
-            );
-          }
-          return (
-            <span className={`${base} bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300`}>
-              Pending
-            </span>
-          );
-        },
-      },
-    ];
-
-    // Damage Records Columns
-    const damageRecordsColumns: TableColumn[] = [
-      {
-        key: 'machineName',
-        label: 'Machine Name',
-        sortable: true,
-      },
-      {
-        key: 'rentalDate',
-        label: 'Rental Date',
-        sortable: true,
-        render: (value: string) => new Date(value).toLocaleDateString('en-LK'),
-      },
-      {
-        key: 'returnDate',
-        label: 'Return Date',
-        sortable: true,
-        render: (value: string) => new Date(value).toLocaleDateString('en-LK'),
-      },
-      {
-        key: 'damageDescription',
-        label: 'Damage Description',
-        sortable: false,
-      },
-      {
-        key: 'repairCost',
-        label: 'Repair Cost',
-        sortable: true,
-        render: (value: number) => (
-          <span className="font-medium text-red-600 dark:text-red-400">
-            Rs. {value.toLocaleString('en-LK', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </span>
-        ),
-      },
-      {
-        key: 'status',
-        label: 'Status',
-        sortable: true,
-        render: (value: string) => {
-          const base =
-            'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
-          if (value === 'Repaired') {
-            return (
-              <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>
-                Repaired
-              </span>
-            );
-          }
-          return (
-            <span className={`${base} bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300`}>
-              Pending
-            </span>
-          );
-        },
       },
     ];
 
     const rentalHistoryContent = (
       <div className="space-y-4">
-        
         <Table
           data={rentalHistory}
           columns={rentalHistoryColumns}
@@ -949,29 +1077,17 @@ const CustomerListPage: React.FC = () => {
 
     const paymentsContent = (
       <div className="space-y-4">
-        
-        <Table
-          data={payments}
-          columns={paymentsColumns}
-          itemsPerPage={10}
-          searchable={false}
-          filterable={false}
-          emptyMessage="No upcoming payments found."
-        />
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+          Payment history feature coming soon...
+        </div>
       </div>
     );
 
     const damageRecordsContent = (
       <div className="space-y-4">
-        
-        <Table
-          data={damageRecords}
-          columns={damageRecordsColumns}
-          itemsPerPage={10}
-          searchable={false}
-          filterable={false}
-          emptyMessage="No damage records found."
-        />
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+          Damage records feature coming soon...
+        </div>
       </div>
     );
 
@@ -1001,8 +1117,9 @@ const CustomerListPage: React.FC = () => {
       />
 
       {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-        }`}>
+      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+        isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+      }`}>
         <div className="max-w-7xl mx-auto space-y-4">
           {/* Page header */}
           <div className="flex items-center justify-between">
@@ -1017,18 +1134,24 @@ const CustomerListPage: React.FC = () => {
           </div>
 
           {/* Customer table card */}
-          <Table
-            data={mockCustomers}
-            columns={columns}
-            actions={actions}
-            itemsPerPage={10}
-            searchable
-            filterable
-            onCreateClick={handleCreateCustomer}
-            createButtonLabel="Create Customer"
-            getRowClassName={getRowClassName}
-            emptyMessage="No customers found."
-          />
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500 dark:text-gray-400">Loading customers...</div>
+            </div>
+          ) : (
+            <Table
+              data={customers}
+              columns={columns}
+              actions={actions}
+              itemsPerPage={10}
+              searchable
+              filterable
+              onCreateClick={handleCreateCustomer}
+              createButtonLabel="Create Customer"
+              getRowClassName={getRowClassName}
+              emptyMessage="No customers found."
+            />
+          )}
         </div>
       </main>
 
@@ -1057,10 +1180,11 @@ const CustomerListPage: React.FC = () => {
                 <Tooltip content="Business">
                   <button
                     onClick={() => setActiveCreateTab('company')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'company'
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeCreateTab === 'company'
                         ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      }`}
+                    }`}
                   >
                     Business
                   </button>
@@ -1068,10 +1192,11 @@ const CustomerListPage: React.FC = () => {
                 <Tooltip content="Customer">
                   <button
                     onClick={() => setActiveCreateTab('individual')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'individual'
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeCreateTab === 'individual'
                         ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
                         : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      }`}
+                    }`}
                   >
                     Customer
                   </button>
@@ -1111,7 +1236,7 @@ const CustomerListPage: React.FC = () => {
         </div>
       )}
 
-      {/* Update Customer Modal - Shows only the form for the selected customer type (Business or Customer) */}
+      {/* Update Customer Modal */}
       {isUpdateModalOpen && selectedCustomer && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -1130,9 +1255,13 @@ const CustomerListPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Modal Content - Single form based on customer type (no tabs) */}
+            {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              {selectedCustomer.type === 'Business' ? (
+              {!selectedCustomerDetails ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-gray-500 dark:text-gray-400">Loading customer details...</div>
+                </div>
+              ) : selectedCustomer.type === 'Business' ? (
                 <UpdateForm
                   title="Update Business Details"
                   fields={companyFields}
@@ -1211,7 +1340,6 @@ const CustomerListPage: React.FC = () => {
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                   Customer Profile
                 </h2>
-                
               </div>
               <Tooltip content="Close">
                 <button
@@ -1235,10 +1363,11 @@ const CustomerListPage: React.FC = () => {
                   <Tooltip key={tab.key} content={tab.label}>
                     <button
                       onClick={() => setActiveProfileTab(tab.key as any)}
-                      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeProfileTab === tab.key
+                      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeProfileTab === tab.key
                           ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
                           : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                        }`}
+                      }`}
                     >
                       {tab.label}
                     </button>

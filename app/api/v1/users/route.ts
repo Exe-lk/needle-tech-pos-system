@@ -42,7 +42,7 @@ import prisma from '@/lib/prisma';
  *       200:
  *         description: Users retrieved successfully
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -164,7 +164,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextReq
  *       201:
  *         description: User created successfully
  */
-export const POST = withAuthAndRole(['ADMIN'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { firstName, lastName, email, phone, username, password, role } = body;

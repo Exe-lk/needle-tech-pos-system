@@ -1042,7 +1042,6 @@ const MachineAssignPage: React.FC = () => {
               </div>
             </div>
           )}
-        </div>
 
           {/* Previous Scans */}
           {previousMachines.length > 0 && (
@@ -1080,7 +1079,8 @@ const MachineAssignPage: React.FC = () => {
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
           {/* Start/Resume Scanning Button */}
           {!allComplete && canStartScanning && activeScanCategoryIndex === null && (

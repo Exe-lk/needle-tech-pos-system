@@ -25,7 +25,7 @@ import { supabaseAdmin } from '@/lib/supabase';
  *       404:
  *         description: User not found
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -103,7 +103,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER'], async (
  *       200:
  *         description: User updated successfully
  */
-export const PUT = withAuthAndRole(['ADMIN'], async (
+export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -208,7 +208,7 @@ export const PUT = withAuthAndRole(['ADMIN'], async (
  *       200:
  *         description: User deleted successfully
  */
-export const DELETE = withAuthAndRole(['ADMIN'], async (
+export const DELETE = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
