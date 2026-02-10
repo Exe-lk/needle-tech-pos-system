@@ -11,13 +11,20 @@ import { Eye, Pencil, Trash2, X, Shield, User } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 
-// API Configuration
+// ============================================================================
+// CONSTANTS & CONFIGURATION
+// ============================================================================
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
 
-// Type Definitions
-type UserRole = 'ADMIN' | 'SUPER_ADMIN' | 'OPERATIONAL_OFFICER' | 'STOCK_KEEPER' | 'SECURITY_OFFICER';
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+type UserRole = 'ADMIN' | 'SUPER_ADMIN' | 'MANAGER' | 'OPERATOR' | 'USER';
 type UserStatus = 'Active' | 'Inactive' | 'Suspended';
+type ApiUserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 
 interface User {
   id: string;
@@ -31,68 +38,61 @@ interface User {
   createdAt: string;
 }
 
-interface ApiUser {
-  id: string;
-  username: string;
+interface ApiUserListItem {
+  userId: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  fullName: string;
-  roleId: string;
-  roleName: UserRole;
-  phone?: string;
-  status: string;
-  lastLogin?: string;
-  createdAt: string;
-  updatedAt: string;
+  phone: string;
+  username: string;
+  role: string;
+  isActive: boolean;
+  createdDate: string;
 }
 
-interface UserInfo {
-  id: string;
-  username: string;
+interface ApiUserDetails {
+  userId: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  fullName: string;
-  role: UserRole;
-  phone?: string;
-  status: UserStatus;
-  lastLogin?: string;
-  createdAt: string;
+  phone: string;
+  username: string;
+  role: string;
+  isActive: boolean;
+  createdDate: string;
+  lastLoginAt?: string;
 }
 
-// Helper Functions
-const mapApiStatusToFrontend = (apiStatus: string): UserStatus => {
-  switch (apiStatus.toUpperCase()) {
-    case 'ACTIVE':
-      return 'Active';
-    case 'INACTIVE':
-      return 'Inactive';
-    case 'SUSPENDED':
-      return 'Suspended';
-    default:
-      return 'Inactive';
-  }
+interface RoleOption {
+  id: string;
+  name: string;
+  description?: string;
+  permissions: string[];
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+const mapApiStatusToFrontend = (isActive: boolean): UserStatus => {
+  return isActive ? 'Active' : 'Inactive';
 };
 
-const mapFrontendStatusToApi = (frontendStatus: UserStatus): string => {
-  return frontendStatus.toUpperCase();
+const mapFrontendStatusToApi = (status: UserStatus): boolean => {
+  return status === 'Active';
 };
 
-const formatRoleName = (role: UserRole): string => {
-  switch (role) {
-    case 'ADMIN':
-      return 'Admin';
-    case 'SUPER_ADMIN':
-      return 'Super Admin';
-    case 'OPERATIONAL_OFFICER':
-      return 'Operational Officer';
-    case 'STOCK_KEEPER':
-      return 'Stock Keeper';
-    case 'SECURITY_OFFICER':
-      return 'Security Officer';
-    default:
-      return role;
-  }
+const formatRoleName = (role: string): string => {
+  const roleMap: Record<string, string> = {
+    'ADMIN': 'Admin',
+    'SUPER_ADMIN': 'Super Admin',
+    'MANAGER': 'Manager',
+    'OPERATOR': 'Operator',
+    'USER': 'User'
+  };
+  return roleMap[role] || role;
 };
 
-// API Functions
 const getAuthHeaders = () => {
   const token = localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
   return {
@@ -100,6 +100,10 @@ const getAuthHeaders = () => {
     'Authorization': `Bearer ${token}`,
   };
 };
+
+// ============================================================================
+// API FUNCTIONS
+// ============================================================================
 
 const fetchUsers = async (): Promise<User[]> => {
   try {
@@ -113,27 +117,28 @@ const fetchUsers = async (): Promise<User[]> => {
       throw new Error('Failed to fetch users');
     }
 
-    const data = await response.json();
-    const apiUsers: ApiUser[] = data.data?.items || [];
+    const result = await response.json();
+    
+    // API returns paginated response with structure: { status, code, message, timestamp, data: { items: [...], pagination: {...} } }
+    const apiUsers: ApiUserListItem[] = result.data?.items || [];
 
     return apiUsers.map(apiUser => ({
-      id: apiUser.id,
+      id: apiUser.userId,
       username: apiUser.username,
       email: apiUser.email,
-      fullName: apiUser.fullName,
-      role: apiUser.roleName,
-      status: mapApiStatusToFrontend(apiUser.status),
-      phone: apiUser.phone,
-      lastLogin: apiUser.lastLogin,
-      createdAt: apiUser.createdAt,
+      fullName: `${apiUser.firstName} ${apiUser.lastName}`.trim(),
+      role: apiUser.role as UserRole,
+      status: mapApiStatusToFrontend(apiUser.isActive),
+      phone: apiUser.phone || undefined,
+      createdAt: apiUser.createdDate,
     }));
   } catch (error) {
     console.error('Error fetching users:', error);
-    return [];
+    throw error;
   }
 };
 
-const fetchUserById = async (userId: string): Promise<ApiUser | null> => {
+const fetchUserById = async (userId: string): Promise<ApiUserDetails> => {
   try {
     const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
       method: 'GET',
@@ -145,17 +150,17 @@ const fetchUserById = async (userId: string): Promise<ApiUser | null> => {
       throw new Error('Failed to fetch user');
     }
 
-    const data = await response.json();
-    return data.data as ApiUser;
+    const result = await response.json();
+    return result.data as ApiUserDetails;
   } catch (error) {
     console.error('Error fetching user:', error);
-    return null;
+    throw error;
   }
 };
 
-const fetchRoles = async (): Promise<{ id: string; name: string }[]> => {
+const fetchRoles = async (): Promise<RoleOption[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/roles`, {
+    const response = await fetch(`${API_BASE_URL}/roles?limit=100`, {
       method: 'GET',
       headers: getAuthHeaders(),
       credentials: 'include',
@@ -165,15 +170,23 @@ const fetchRoles = async (): Promise<{ id: string; name: string }[]> => {
       throw new Error('Failed to fetch roles');
     }
 
-    const data = await response.json();
-    return data.data || [];
+    const result = await response.json();
+    return result.data?.items || [];
   } catch (error) {
     console.error('Error fetching roles:', error);
-    return [];
+    throw error;
   }
 };
 
-const createUser = async (userData: any): Promise<{ success: boolean; error?: string; data?: ApiUser }> => {
+const createUser = async (userData: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  username: string;
+  password: string;
+  role: string;
+}): Promise<{ success: boolean; error?: string }> => {
   try {
     const response = await fetch(`${API_BASE_URL}/users`, {
       method: 'POST',
@@ -182,19 +195,16 @@ const createUser = async (userData: any): Promise<{ success: boolean; error?: st
       body: JSON.stringify(userData),
     });
 
-    const data = await response.json();
+    const result = await response.json();
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.message || 'Failed to create user',
+        error: result.message || 'Failed to create user',
       };
     }
 
-    return {
-      success: true,
-      data: data.data,
-    };
+    return { success: true };
   } catch (error: any) {
     console.error('Error creating user:', error);
     return {
@@ -204,7 +214,17 @@ const createUser = async (userData: any): Promise<{ success: boolean; error?: st
   }
 };
 
-const updateUser = async (userId: string, userData: any): Promise<{ success: boolean; error?: string }> => {
+const updateUser = async (
+  userId: string,
+  userData: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    role?: string;
+    isActive?: boolean;
+  }
+): Promise<{ success: boolean; error?: string }> => {
   try {
     const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
       method: 'PUT',
@@ -213,18 +233,16 @@ const updateUser = async (userId: string, userData: any): Promise<{ success: boo
       body: JSON.stringify(userData),
     });
 
-    const data = await response.json();
+    const result = await response.json();
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.message || 'Failed to update user',
+        error: result.message || 'Failed to update user',
       };
     }
 
-    return {
-      success: true,
-    };
+    return { success: true };
   } catch (error: any) {
     console.error('Error updating user:', error);
     return {
@@ -242,18 +260,16 @@ const deleteUser = async (userId: string): Promise<{ success: boolean; error?: s
       credentials: 'include',
     });
 
-    const data = await response.json();
+    const result = await response.json();
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.message || 'Failed to delete user',
+        error: result.message || 'Failed to delete user',
       };
     }
 
-    return {
-      success: true,
-    };
+    return { success: true };
   } catch (error: any) {
     console.error('Error deleting user:', error);
     return {
@@ -263,7 +279,10 @@ const deleteUser = async (userId: string): Promise<{ success: boolean; error?: s
   }
 };
 
-// Table column configuration
+// ============================================================================
+// TABLE CONFIGURATION
+// ============================================================================
+
 const columns: TableColumn[] = [
   {
     key: 'username',
@@ -342,35 +361,57 @@ const columns: TableColumn[] = [
   },
 ];
 
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
 const UserManagementPage: React.FC = () => {
+  // UI State
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  
+  // Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  
+  // Data State
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [selectedUserDetails, setSelectedUserDetails] = useState<ApiUser | null>(null);
+  const [selectedUserDetails, setSelectedUserDetails] = useState<ApiUserDetails | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<{ label: string; value: string }[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch users and roles on component mount
+  // ============================================================================
+  // EFFECTS
+  // ============================================================================
+
   useEffect(() => {
-    loadUsers();
-    loadRoles();
+    loadInitialData();
   }, []);
 
-  const loadUsers = async () => {
+  const loadInitialData = async () => {
     setIsLoading(true);
+    setError(null);
+    try {
+      await Promise.all([loadUsers(), loadRoles()]);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadUsers = async () => {
     try {
       const data = await fetchUsers();
       setUsers(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading users:', error);
-    } finally {
-      setIsLoading(false);
+      throw error;
     }
   };
 
@@ -378,12 +419,13 @@ const UserManagementPage: React.FC = () => {
     try {
       const data = await fetchRoles();
       const roleOptions = data.map(role => ({
-        label: formatRoleName(role.name as UserRole),
-        value: role.id,
+        label: formatRoleName(role.name),
+        value: role.name, // Use role name instead of ID
       }));
       setRoles(roleOptions);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading roles:', error);
+      throw error;
     }
   };
 
@@ -391,10 +433,15 @@ const UserManagementPage: React.FC = () => {
     try {
       const details = await fetchUserById(userId);
       setSelectedUserDetails(details);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading user details:', error);
+      setError('Failed to load user details');
     }
   };
+
+  // ============================================================================
+  // EVENT HANDLERS
+  // ============================================================================
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -406,20 +453,69 @@ const UserManagementPage: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
+    localStorage.removeItem('needletech_refresh_token');
+    localStorage.removeItem('needletech_user');
     window.location.href = '/';
   };
 
+  // Create User Handlers
   const handleCreateUser = () => {
     setIsCreateModalOpen(true);
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
+    setError(null);
   };
 
+  const handleUserSubmit = async (data: Record<string, any>) => {
+    // Validate password match
+    if (data.password !== data.confirmPassword) {
+      setError('Passwords do not match!');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      // Split fullName into firstName and lastName
+      const nameParts = (data.fullName || '').trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      const payload = {
+        firstName,
+        lastName,
+        email: data.email,
+        phone: data.phone || undefined,
+        username: data.username,
+        password: data.password,
+        role: data.role, // Send role name, not roleId
+      };
+
+      const result = await createUser(payload);
+      
+      if (result.success) {
+        alert(`User "${data.username}" created successfully.`);
+        handleCloseCreateModal();
+        await loadUsers();
+      } else {
+        setError(result.error || 'Failed to create user');
+      }
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      setError('Failed to create user. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // View User Handlers
   const handleViewUser = async (user: User) => {
     setSelectedUser(user);
     setIsViewModalOpen(true);
+    setError(null);
     await loadUserDetails(user.id);
   };
 
@@ -427,10 +523,13 @@ const UserManagementPage: React.FC = () => {
     setIsViewModalOpen(false);
     setSelectedUser(null);
     setSelectedUserDetails(null);
+    setError(null);
   };
 
+  // Update User Handlers
   const handleUpdateUser = async (user: User) => {
     setSelectedUser(user);
+    setError(null);
     await loadUserDetails(user.id);
     setIsUpdateModalOpen(true);
   };
@@ -439,22 +538,87 @@ const UserManagementPage: React.FC = () => {
     setIsUpdateModalOpen(false);
     setSelectedUser(null);
     setSelectedUserDetails(null);
+    setError(null);
   };
 
+  const handleUserUpdate = async (data: Record<string, any>) => {
+    if (!selectedUser || !selectedUserDetails) return;
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      // Split fullName into firstName and lastName
+      const nameParts = (data.fullName || '').trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      const payload: any = {};
+      
+      // Only include changed fields
+      if (firstName !== selectedUserDetails.firstName) {
+        payload.firstName = firstName;
+      }
+      if (lastName !== selectedUserDetails.lastName) {
+        payload.lastName = lastName;
+      }
+      if (data.email !== selectedUserDetails.email) {
+        payload.email = data.email;
+      }
+      if (data.phone !== selectedUserDetails.phone) {
+        payload.phone = data.phone || undefined;
+      }
+      if (data.role !== selectedUserDetails.role) {
+        payload.role = data.role;
+      }
+      
+      const isActive = data.status === 'Active';
+      if (isActive !== selectedUserDetails.isActive) {
+        payload.isActive = isActive;
+      }
+
+      // Only send request if there are changes
+      if (Object.keys(payload).length === 0) {
+        setError('No changes detected');
+        return;
+      }
+
+      const result = await updateUser(selectedUser.id, payload);
+      
+      if (result.success) {
+        alert(`User "${selectedUser.username}" updated successfully.`);
+        handleCloseUpdateModal();
+        await loadUsers();
+      } else {
+        setError(result.error || 'Failed to update user');
+      }
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      setError('Failed to update user. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Delete User Handlers
   const handleDeleteUser = (user: User) => {
     setSelectedUser(user);
     setIsDeleteModalOpen(true);
+    setError(null);
   };
 
   const handleCloseDeleteModal = () => {
     setIsDeleteModalOpen(false);
     setSelectedUser(null);
+    setError(null);
   };
 
   const handleConfirmDelete = async () => {
     if (!selectedUser) return;
 
     setIsSubmitting(true);
+    setError(null);
+
     try {
       const result = await deleteUser(selectedUser.id);
       
@@ -463,17 +627,24 @@ const UserManagementPage: React.FC = () => {
         handleCloseDeleteModal();
         await loadUsers();
       } else {
-        alert(`Failed to delete user: ${result.error}`);
+        setError(result.error || 'Failed to delete user');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting user:', error);
-      alert('Failed to delete user. Please try again.');
+      setError('Failed to delete user. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Form fields for User Creation
+  const handleClear = () => {
+    console.log('Form cleared');
+  };
+
+  // ============================================================================
+  // FORM CONFIGURATIONS
+  // ============================================================================
+
   const userFields: FormField[] = [
     {
       name: 'username',
@@ -520,7 +691,7 @@ const UserManagementPage: React.FC = () => {
       required: true,
     },
     {
-      name: 'roleId',
+      name: 'role',
       label: 'Role',
       type: 'select',
       placeholder: 'Select role',
@@ -536,12 +707,10 @@ const UserManagementPage: React.FC = () => {
       options: [
         { label: 'Active', value: 'Active' },
         { label: 'Inactive', value: 'Inactive' },
-        { label: 'Suspended', value: 'Suspended' },
       ],
     },
   ];
 
-  // Form fields for User Update (without password)
   const updateUserFields: FormField[] = [
     {
       name: 'username',
@@ -575,7 +744,7 @@ const UserManagementPage: React.FC = () => {
       validation: validatePhoneNumber,
     },
     {
-      name: 'roleId',
+      name: 'role',
       label: 'Role',
       type: 'select',
       placeholder: 'Select role',
@@ -591,26 +760,27 @@ const UserManagementPage: React.FC = () => {
       options: [
         { label: 'Active', value: 'Active' },
         { label: 'Inactive', value: 'Inactive' },
-        { label: 'Suspended', value: 'Suspended' },
       ],
     },
   ];
 
-  // Get initial data for update form
+  // ============================================================================
+  // HELPER METHODS
+  // ============================================================================
+
   const getUpdateInitialData = (user: User | null) => {
     if (!user || !selectedUserDetails) return {};
 
     return {
       username: selectedUserDetails.username,
-      fullName: selectedUserDetails.fullName,
+      fullName: `${selectedUserDetails.firstName} ${selectedUserDetails.lastName}`.trim(),
       email: selectedUserDetails.email,
       phone: selectedUserDetails.phone || '',
-      roleId: selectedUserDetails.roleId,
-      status: user.status,
+      role: selectedUserDetails.role,
+      status: mapApiStatusToFrontend(selectedUserDetails.isActive),
     };
   };
 
-  // Get delete confirmation details
   const getDeleteDetails = (user: User | null) => {
     if (!user) return [];
 
@@ -623,83 +793,12 @@ const UserManagementPage: React.FC = () => {
     ];
   };
 
-  const handleUserSubmit = async (data: Record<string, any>) => {
-    // Validate password match
-    if (data.password !== data.confirmPassword) {
-      alert('Passwords do not match!');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        username: data.username,
-        fullName: data.fullName,
-        email: data.email,
-        phone: data.phone || null,
-        password: data.password,
-        roleId: data.roleId,
-        status: mapFrontendStatusToApi(data.status),
-      };
-
-      const result = await createUser(payload);
-      
-      if (result.success) {
-        alert(`User "${data.username}" created successfully.`);
-        handleCloseCreateModal();
-        await loadUsers();
-      } else {
-        alert(`Failed to create user: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error creating user:', error);
-      alert('Failed to create user. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleUserUpdate = async (data: Record<string, any>) => {
-    if (!selectedUser) return;
-
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        fullName: data.fullName,
-        email: data.email,
-        phone: data.phone || null,
-        roleId: data.roleId,
-        status: mapFrontendStatusToApi(data.status),
-      };
-
-      const result = await updateUser(selectedUser.id, payload);
-      
-      if (result.success) {
-        alert(`User "${data.username}" updated successfully.`);
-        handleCloseUpdateModal();
-        await loadUsers();
-      } else {
-        alert(`Failed to update user: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error updating user:', error);
-      alert('Failed to update user. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleClear = () => {
-    console.log('Form cleared');
-  };
-
   const getRowClassName = (user: User) => {
     if (user.status === 'Suspended') return 'bg-red-50/60 dark:bg-red-950/40';
     if (user.status === 'Inactive') return 'bg-gray-50 dark:bg-slate-900/40';
     return '';
   };
 
-  // Action buttons
   const actions: ActionButton[] = [
     {
       label: '',
@@ -727,7 +826,6 @@ const UserManagementPage: React.FC = () => {
     },
   ];
 
-  // View User Profile Content
   const renderProfileContent = () => {
     if (!selectedUser || !selectedUserDetails) {
       return (
@@ -737,22 +835,9 @@ const UserManagementPage: React.FC = () => {
       );
     }
 
-    const userInfo: UserInfo = {
-      id: selectedUserDetails.id,
-      username: selectedUserDetails.username,
-      email: selectedUserDetails.email,
-      fullName: selectedUserDetails.fullName,
-      role: selectedUserDetails.roleName,
-      phone: selectedUserDetails.phone,
-      status: mapApiStatusToFrontend(selectedUserDetails.status),
-      lastLogin: selectedUserDetails.lastLogin,
-      createdAt: selectedUserDetails.createdAt,
-    };
-
     return (
       <div className="space-y-6">
         <div className="space-y-4">
-          {/* User Info */}
           <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
               User Information
@@ -761,36 +846,36 @@ const UserManagementPage: React.FC = () => {
               <div>
                 <span className="text-gray-500 dark:text-gray-400">Username:</span>
                 <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {userInfo.username}
+                  {selectedUserDetails.username}
                 </span>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400">Full Name:</span>
                 <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {userInfo.fullName}
+                  {`${selectedUserDetails.firstName} ${selectedUserDetails.lastName}`.trim()}
                 </span>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400">Email:</span>
                 <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {userInfo.email}
+                  {selectedUserDetails.email}
                 </span>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400">Phone:</span>
                 <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {userInfo.phone || 'N/A'}
+                  {selectedUserDetails.phone || 'N/A'}
                 </span>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400">Role:</span>
                 <span className="ml-2 text-gray-900 dark:text-white font-medium flex items-center">
-                  {userInfo.role === 'SUPER_ADMIN' || userInfo.role === 'ADMIN' ? (
+                  {selectedUserDetails.role === 'SUPER_ADMIN' || selectedUserDetails.role === 'ADMIN' ? (
                     <Shield className="w-4 h-4 mr-1 text-purple-600 dark:text-purple-400" />
                   ) : (
                     <User className="w-4 h-4 mr-1 text-gray-600 dark:text-gray-400" />
                   )}
-                  {formatRoleName(userInfo.role)}
+                  {formatRoleName(selectedUserDetails.role)}
                 </span>
               </div>
               <div>
@@ -798,29 +883,27 @@ const UserManagementPage: React.FC = () => {
                 <span className="ml-2">
                   <span
                     className={`px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center ${
-                      userInfo.status === 'Active'
+                      selectedUserDetails.isActive
                         ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                        : userInfo.status === 'Inactive'
-                        ? 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
-                        : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                        : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
                     }`}
                   >
-                    {userInfo.status}
+                    {selectedUserDetails.isActive ? 'Active' : 'Inactive'}
                   </span>
                 </span>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400">Last Login:</span>
                 <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {userInfo.lastLogin
-                    ? new Date(userInfo.lastLogin).toLocaleString('en-LK')
+                  {selectedUserDetails.lastLoginAt
+                    ? new Date(selectedUserDetails.lastLoginAt).toLocaleString('en-LK')
                     : 'Never'}
                 </span>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400">Created At:</span>
                 <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {new Date(userInfo.createdAt).toLocaleString('en-LK')}
+                  {new Date(selectedUserDetails.createdDate).toLocaleString('en-LK')}
                 </span>
               </div>
             </div>
@@ -830,12 +913,14 @@ const UserManagementPage: React.FC = () => {
     );
   };
 
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-      {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
 
-      {/* Left sidebar */}
       <Sidebar
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
@@ -843,12 +928,10 @@ const UserManagementPage: React.FC = () => {
         onExpandedChange={setIsSidebarExpanded}
       />
 
-      {/* Main content area */}
       <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
         <div className="max-w-7xl mx-auto space-y-4">
-          {/* Page header */}
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
@@ -860,7 +943,12 @@ const UserManagementPage: React.FC = () => {
             </div>
           </div>
 
-          {/* User table card */}
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-gray-500 dark:text-gray-400">Loading users...</div>
@@ -886,7 +974,6 @@ const UserManagementPage: React.FC = () => {
       {isCreateModalOpen && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Create User
@@ -901,8 +988,12 @@ const UserManagementPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
+              {error && (
+                <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                </div>
+              )}
               <CreateForm
                 title="User Details"
                 fields={userFields}
@@ -923,7 +1014,6 @@ const UserManagementPage: React.FC = () => {
       {isUpdateModalOpen && selectedUser && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Update User
@@ -938,8 +1028,12 @@ const UserManagementPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6">
+              {error && (
+                <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                </div>
+              )}
               {!selectedUserDetails ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-gray-500 dark:text-gray-400">Loading user details...</div>
@@ -966,7 +1060,6 @@ const UserManagementPage: React.FC = () => {
       {isDeleteModalOpen && selectedUser && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Delete User
@@ -982,8 +1075,12 @@ const UserManagementPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6">
+              {error && (
+                <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                </div>
+              )}
               <DeleteForm
                 title="Delete User"
                 message="This will permanently delete the user and revoke their access to the system. This action cannot be undone."
@@ -1005,7 +1102,6 @@ const UserManagementPage: React.FC = () => {
       {isViewModalOpen && selectedUser && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
@@ -1022,7 +1118,6 @@ const UserManagementPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               {renderProfileContent()}
             </div>

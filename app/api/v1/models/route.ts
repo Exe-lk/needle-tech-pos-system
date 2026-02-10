@@ -13,7 +13,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -68,7 +68,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { name, brandId, code, description } = body;
@@ -115,37 +115,6 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
     });
     
     return successResponse(newModel, 'Model created successfully', 201);
-  } catch (error: any) {
-    console.error('Error creating model:', error);
-    return errorResponse('Failed to create model', 500);
-  }
-});
-        name: ['Model with this name already exists for this brand'],
-      });
-    }
-    
-    const now = new Date();
-    const newModel = {
-      name: name.trim(),
-      brandName: finalBrandName,
-      code: modelCode,
-      description: description || '',
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-    
-    const result = await db.collection('models').insertOne(newModel);
-    const createdModel = await db.collection('models').findOne({ _id: result.insertedId });
-    
-    // Populate brand
-    const brand = await db.collection('brands').findOne({ name: finalBrandName });
-    const populatedModel = {
-      ...createdModel,
-      brand: sanitizeObject(brand),
-    };
-    
-    return successResponse(sanitizeObject(populatedModel), 'Model created successfully', 201);
   } catch (error: any) {
     console.error('Error creating model:', error);
     return errorResponse('Failed to create model', 500);

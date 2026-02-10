@@ -33,7 +33,7 @@ interface MachineInfo {
   type: MachineType;
   status: 'Available' | 'Rented' | 'Maintenance' | 'Retired';
   currentCustomer?: string;
-  photos?: string[]; // URLs or paths to photos
+  photos?: string[];
   purchaseDate?: string;
   warrantyExpiry?: string;
   warrantyExpiryDate?: string | null;
@@ -54,12 +54,38 @@ interface MachineRentalHistory {
   model: string;
   type: MachineType;
   customer: string;
-  rentingPeriod: string; // e.g., "2024-01-15 to 2024-02-15"
+  rentingPeriod: string;
   startDate: string;
   endDate: string | null;
   status: 'Active' | 'Completed' | 'Cancelled';
 }
 
+// API Response Types
+interface Brand {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  isActive: boolean;
+}
+
+interface Model {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  brandId: string;
+  isActive: boolean;
+  brand?: Brand;
+}
+
+interface MachineTypeData {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  isActive: boolean;
+}
 
 // API Functions
 const API_BASE_URL = '/api/v1';
@@ -85,6 +111,85 @@ const fetchMachines = async (): Promise<Machine[]> => {
     return data.data?.items || [];
   } catch (error) {
     console.error('Error fetching machines:', error);
+    return [];
+  }
+};
+
+// Fetch active brands
+const fetchActiveBrands = async (): Promise<Brand[]> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/brands/active`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch brands');
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error fetching brands:', error);
+    return [];
+  }
+};
+
+// Fetch active models (with optional brandId filter)
+const fetchActiveModels = async (brandId?: string): Promise<Model[]> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const url = brandId 
+      ? `${API_BASE_URL}/models/active?brandId=${brandId}`
+      : `${API_BASE_URL}/models/active`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch models');
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    return [];
+  }
+};
+
+// Fetch active machine types
+const fetchActiveMachineTypes = async (): Promise<MachineTypeData[]> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/machine-types/active`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch machine types');
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error fetching machine types:', error);
     return [];
   }
 };
@@ -286,11 +391,34 @@ const MachineListPage: React.FC = () => {
   const [activeCreateTab, setActiveCreateTab] = useState<'machine' | 'tool'>('machine');
   const [machines, setMachines] = useState<Machine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // New state for dropdown options
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
+  const [machineTypes, setMachineTypes] = useState<MachineTypeData[]>([]);
+  const [selectedBrandId, setSelectedBrandId] = useState<string>('');
+  const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(false);
 
   // Fetch machines on component mount
   useEffect(() => {
     loadMachines();
   }, []);
+
+  // Fetch dropdown data when create modal opens
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      loadDropdownData();
+    }
+  }, [isCreateModalOpen]);
+
+  // Fetch models when brand changes
+  useEffect(() => {
+    if (selectedBrandId) {
+      loadModelsByBrand(selectedBrandId);
+    } else if (isCreateModalOpen) {
+      loadModels();
+    }
+  }, [selectedBrandId]);
 
   const loadMachines = async () => {
     setIsLoading(true);
@@ -301,6 +429,43 @@ const MachineListPage: React.FC = () => {
       console.error('Error loading machines:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadDropdownData = async () => {
+    setIsLoadingDropdowns(true);
+    try {
+      const [brandsData, modelsData, typesData] = await Promise.all([
+        fetchActiveBrands(),
+        fetchActiveModels(),
+        fetchActiveMachineTypes(),
+      ]);
+      
+      setBrands(brandsData);
+      setModels(modelsData);
+      setMachineTypes(typesData);
+    } catch (error) {
+      console.error('Error loading dropdown data:', error);
+    } finally {
+      setIsLoadingDropdowns(false);
+    }
+  };
+
+  const loadModels = async () => {
+    try {
+      const modelsData = await fetchActiveModels();
+      setModels(modelsData);
+    } catch (error) {
+      console.error('Error loading models:', error);
+    }
+  };
+
+  const loadModelsByBrand = async (brandId: string) => {
+    try {
+      const modelsData = await fetchActiveModels(brandId);
+      setModels(modelsData);
+    } catch (error) {
+      console.error('Error loading models by brand:', error);
     }
   };
 
@@ -319,19 +484,20 @@ const MachineListPage: React.FC = () => {
   const handleCreateMachine = () => {
     setIsCreateModalOpen(true);
     setActiveCreateTab('machine');
+    setSelectedBrandId(''); // Reset brand selection
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setActiveCreateTab('machine');
+    setSelectedBrandId(''); // Reset brand selection
   };
 
   const handleViewMachine = async (machine: Machine) => {
     setSelectedMachine(machine);
-    setCurrentPhotoIndex(0); // Reset photo index when opening view
+    setCurrentPhotoIndex(0);
     setIsViewModalOpen(true);
     
-    // Fetch detailed machine info
     const machineDetail = await fetchMachineById(machine.id.toString());
     if (machineDetail) {
       setSelectedMachineDetail(machineDetail);
@@ -349,17 +515,20 @@ const MachineListPage: React.FC = () => {
     setSelectedMachine(machine);
     setIsUpdateModalOpen(true);
     
-    // Fetch detailed machine info for update form
     const machineDetail = await fetchMachineById(machine.id.toString());
     if (machineDetail) {
       setSelectedMachineDetail(machineDetail);
     }
+    
+    // Load dropdown data for update modal
+    await loadDropdownData();
   };
 
   const handleCloseUpdateModal = () => {
     setIsUpdateModalOpen(false);
     setSelectedMachine(null);
     setSelectedMachineDetail(null);
+    setSelectedBrandId('');
   };
 
   const handleDeleteMachine = (machine: Machine) => {
@@ -382,7 +551,6 @@ const MachineListPage: React.FC = () => {
       if (result.success) {
         alert(`Machine "${selectedMachine.brand} ${selectedMachine.model}" deleted successfully.`);
         handleCloseDeleteModal();
-        // Refresh the machine list
         await loadMachines();
       } else {
         alert(`Failed to delete machine: ${result.error}`);
@@ -415,62 +583,65 @@ const MachineListPage: React.FC = () => {
     setCurrentPhotoIndex((prev) => (prev < photos.length - 1 ? prev + 1 : 0));
   };
 
-  // Form fields for Machine Registration
-  const machineFields: FormField[] = [
+  // Convert API data to dropdown options
+  const getBrandOptions = () => {
+    return brands.map(brand => ({
+      label: brand.name,
+      value: brand.id,
+    }));
+  };
+
+  const getModelOptions = () => {
+    return models.map(model => ({
+      label: model.name,
+      value: model.id,
+    }));
+  };
+
+  const getMachineTypeOptions = () => {
+    return machineTypes.map(type => ({
+      label: type.name,
+      value: type.id,
+    }));
+  };
+
+  // Form fields for Machine Registration (dynamically populated)
+  const getMachineFields = (): FormField[] => [
     {
-      name: 'brand',
+      name: 'brandId',
       label: 'Brand',
       type: 'select',
-      placeholder: 'Search or select brand',
+      placeholder: isLoadingDropdowns ? 'Loading brands...' : 'Search or select brand',
       required: true,
       searchable: true,
-      creatable: true,
-      options: [
-        { label: 'Brother', value: 'Brother' },
-        { label: 'Singer', value: 'Singer' },
-        { label: 'Janome', value: 'Janome' },
-        { label: 'Juki', value: 'Juki' },
-        { label: 'Pfaff', value: 'Pfaff' },
-        { label: 'Bernina', value: 'Bernina' },
-        { label: 'Other', value: 'Other' },
-      ],
+      creatable: false,
+      options: getBrandOptions(),
+      onChange: (value: string) => {
+        setSelectedBrandId(value);
+      },
     },
     {
-      name: 'model',
+      name: 'modelId',
       label: 'Model',
       type: 'select',
-      placeholder: 'Search or select model',
+      placeholder: selectedBrandId 
+        ? (models.length === 0 ? 'No models available for this brand' : 'Search or select model')
+        : 'Select a brand first',
       required: true,
       searchable: true,
-      creatable: true,
-      options: [
-        { label: 'XL2600i', value: 'XL2600i' },
-        { label: 'Heavy Duty 4423', value: 'Heavy Duty 4423' },
-        { label: 'HD3000', value: 'HD3000' },
-        { label: 'SE600', value: 'SE600' },
-        { label: 'MO-654DE', value: 'MO-654DE' },
-        { label: 'Buttonhole 160', value: 'Buttonhole 160' },
-        { label: 'CS6000i', value: 'CS6000i' },
-        { label: 'MB-4S', value: 'MB-4S' },
-        { label: 'Other', value: 'Other' },
-      ],
+      creatable: false,
+      options: getModelOptions(),
+      disabled: !selectedBrandId,
     },
     {
-      name: 'type',
+      name: 'machineTypeId',
       label: 'Type',
       type: 'select',
-      placeholder: 'Search or select machine type',
+      placeholder: isLoadingDropdowns ? 'Loading types...' : 'Search or select machine type',
       required: true,
       searchable: true,
-      creatable: true,
-      options: [
-        { label: 'Industrial', value: 'Industrial' },
-        { label: 'Domestic', value: 'Domestic' },
-        { label: 'Embroidery', value: 'Embroidery' },
-        { label: 'Overlock', value: 'Overlock' },
-        { label: 'Buttonhole', value: 'Buttonhole' },
-        { label: 'Other', value: 'Other' },
-      ],
+      creatable: false,
+      options: getMachineTypeOptions(),
     },
     {
       name: 'manufactureYear',
@@ -530,7 +701,6 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Select date',
       required: false,
     },
-    // File upload fields
     {
       name: 'referencePhoto',
       label: 'Reference Photo',
@@ -557,7 +727,7 @@ const MachineListPage: React.FC = () => {
     },
   ];
 
-  // Form fields for Tool Registration
+  // Form fields for Tool Registration (unchanged)
   const toolFields: FormField[] = [
     {
       name: 'toolName',
@@ -730,15 +900,19 @@ const MachineListPage: React.FC = () => {
   const getUpdateInitialData = (machine: Machine | null) => {
     if (!machine) return {};
 
-    // Fetch the full machine details if we only have basic info
     if (selectedMachineDetail) {
+      // Find the brand and model IDs based on names
+      const brand = brands.find(b => b.name === selectedMachineDetail.brand);
+      const model = models.find(m => m.name === selectedMachineDetail.model);
+      const machineType = machineTypes.find(t => t.name === selectedMachineDetail.type);
+
       return {
         barcode: selectedMachineDetail.barcode,
         serialNumber: selectedMachineDetail.serialNumber,
         boxNo: selectedMachineDetail.boxNo,
-        brand: selectedMachineDetail.brand,
-        model: selectedMachineDetail.model,
-        type: selectedMachineDetail.type,
+        brandId: brand?.id,
+        modelId: model?.id,
+        machineTypeId: machineType?.id,
         manufactureYear: selectedMachineDetail.manufactureYear,
         country: selectedMachineDetail.country,
         conditionOnArrival: selectedMachineDetail.conditionOnArrival,
@@ -781,9 +955,10 @@ const MachineListPage: React.FC = () => {
       const result = await createMachine(data);
       
       if (result.success) {
-        alert(`Machine "${data.brand} ${data.model}" registered successfully.`);
+        const brandName = brands.find(b => b.id === data.brandId)?.name || '';
+        const modelName = models.find(m => m.id === data.modelId)?.name || '';
+        alert(`Machine "${brandName} ${modelName}" registered successfully.`);
         handleCloseCreateModal();
-        // Refresh the machine list
         await loadMachines();
       } else {
         alert(`Failed to create machine: ${result.error}`);
@@ -815,9 +990,10 @@ const MachineListPage: React.FC = () => {
       const result = await updateMachine(selectedMachine.id.toString(), data);
       
       if (result.success) {
-        alert(`Machine "${data.brand} ${data.model}" updated successfully.`);
+        const brandName = brands.find(b => b.id === data.brandId)?.name || data.brand;
+        const modelName = models.find(m => m.id === data.modelId)?.name || data.model;
+        alert(`Machine "${brandName} ${modelName}" updated successfully.`);
         handleCloseUpdateModal();
-        // Refresh the machine list
         await loadMachines();
       } else {
         alert(`Failed to update machine: ${result.error}`);
@@ -831,37 +1007,37 @@ const MachineListPage: React.FC = () => {
   };
 
   const handleClear = () => {
+    setSelectedBrandId(''); // Reset brand selection when clearing form
     console.log('Form cleared');
   };
 
-  
-    // Action buttons
-    const actions: ActionButton[] = [
-      {
-        label: '',
-        icon: <Eye className="w-4 h-4" />,
-        variant: 'secondary',
-        onClick: handleViewMachine,
-        tooltip: 'View Machine',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
-      },
-      {
-        label: '',
-        icon: <Pencil className="w-4 h-4" />,
-        variant: 'primary',
-        onClick: handleUpdateMachine,
-        tooltip: 'Update Machine',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
-      },
-      {
-        label: '',
-        icon: <Trash2 className="w-4 h-4" />,
-        variant: 'danger',
-        onClick: handleDeleteMachine,
-        tooltip: 'Delete Machine',
-        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
-      },
-    ];
+  // Action buttons
+  const actions: ActionButton[] = [
+    {
+      label: '',
+      icon: <Eye className="w-4 h-4" />,
+      variant: 'secondary',
+      onClick: handleViewMachine,
+      tooltip: 'View Machine',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+    },
+    {
+      label: '',
+      icon: <Pencil className="w-4 h-4" />,
+      variant: 'primary',
+      onClick: handleUpdateMachine,
+      tooltip: 'Update Machine',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+    },
+    {
+      label: '',
+      icon: <Trash2 className="w-4 h-4" />,
+      variant: 'danger',
+      onClick: handleDeleteMachine,
+      tooltip: 'Delete Machine',
+      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
+    },
+  ];
 
   // Rental History Table Columns
   const rentalHistoryColumns: TableColumn[] = [
@@ -927,7 +1103,7 @@ const MachineListPage: React.FC = () => {
     },
   ];
 
-  // View Machine Profile Content - Professional Design with Photos at Top
+  // View Machine Profile Content
   const renderMachineProfile = () => {
     if (!selectedMachine) return null;
 
@@ -963,7 +1139,6 @@ const MachineListPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Navigation Buttons */}
                 {hasMultiplePhotos && (
                   <>
                     <button
@@ -983,7 +1158,6 @@ const MachineListPage: React.FC = () => {
                   </>
                 )}
 
-                {/* Photo Counter */}
                 {hasMultiplePhotos && (
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/60 dark:bg-slate-900/80 rounded-full text-white text-sm font-medium">
                     {currentPhotoIndex + 1} / {photos.length}
@@ -1169,10 +1343,7 @@ const MachineListPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-      {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
-
-      {/* Left sidebar */}
       <Sidebar
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
@@ -1180,12 +1351,10 @@ const MachineListPage: React.FC = () => {
         onExpandedChange={setIsSidebarExpanded}
       />
 
-      {/* Main content area */}
       <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
         <div className="max-w-7xl mx-auto space-y-4">
-          {/* Page header */}
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
@@ -1197,7 +1366,6 @@ const MachineListPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Machine table card */}
           <Table
             data={machines}
             columns={columns}
@@ -1216,7 +1384,6 @@ const MachineListPage: React.FC = () => {
       {isCreateModalOpen && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Register
@@ -1231,7 +1398,6 @@ const MachineListPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-slate-700 px-6">
               <div className="flex space-x-4">
                 <Tooltip content="Machine">
@@ -1259,12 +1425,11 @@ const MachineListPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               {activeCreateTab === 'machine' ? (
                 <CreateForm
                   title="Machine Registration"
-                  fields={machineFields}
+                  fields={getMachineFields()}
                   onSubmit={handleMachineSubmit}
                   onClear={handleClear}
                   submitButtonLabel="Register"
@@ -1295,7 +1460,6 @@ const MachineListPage: React.FC = () => {
       {isUpdateModalOpen && selectedMachine && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Update Machine Details
@@ -1308,11 +1472,10 @@ const MachineListPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               <UpdateForm
                 title=""
-                fields={machineFields}
+                fields={getMachineFields()}
                 onSubmit={handleMachineUpdate}
                 onClear={handleClear}
                 submitButtonLabel="Update"
@@ -1330,7 +1493,6 @@ const MachineListPage: React.FC = () => {
       {isDeleteModalOpen && selectedMachine && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Delete Machine
@@ -1344,7 +1506,6 @@ const MachineListPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6">
               <DeleteForm
                 title="Delete Machine"
@@ -1363,17 +1524,15 @@ const MachineListPage: React.FC = () => {
         </div>
       )}
 
-      {/* View Machine Profile Modal - Professional Design */}
+      {/* View Machine Profile Modal */}
       {isViewModalOpen && selectedMachine && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                   Machine Profile
                 </h2>
-                
               </div>
               <button
                 onClick={handleCloseViewModal}
@@ -1383,7 +1542,6 @@ const MachineListPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               {renderMachineProfile()}
             </div>
@@ -1395,7 +1553,6 @@ const MachineListPage: React.FC = () => {
       {isHistoryModalOpen && selectedMachine && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
@@ -1413,7 +1570,6 @@ const MachineListPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-4">
                 <Table

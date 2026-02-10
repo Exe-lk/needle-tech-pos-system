@@ -13,7 +13,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -62,7 +62,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { name, code, description } = body;
@@ -105,10 +105,4 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
     return errorResponse('Failed to create machine type', 500);
   }
 });
-    
-    return successResponse(sanitizeObject(createdType), 'Machine type created successfully', 201);
-  } catch (error: any) {
-    console.error('Error creating machine type:', error);
-    return errorResponse('Failed to create machine type', 500);
-  }
-});
+

@@ -108,12 +108,4 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
     return errorResponse('Failed to create payment', 500);
   }
 });
-    
-    const createdPayment = await db.collection('payments').findOne({ _id: result.insertedId });
-    
-    return successResponse(sanitizeObject(createdPayment), 'Payment created successfully', 201);
-  } catch (error: any) {
-    console.error('Error creating payment:', error);
-    return errorResponse('Failed to create payment', 500);
-  }
-});
+

@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Download, FileText, Trash2, Printer, Calendar } from 'lucide-react';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
+
+// API Configuration
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
@@ -33,7 +37,7 @@ interface PaymentDetails {
 }
 
 interface Invoice {
-  id: number;
+  id: string;
   invoiceNumber: string;
   invoiceType: 'VAT' | 'Non-VAT';
   customerName: string;
@@ -69,111 +73,395 @@ interface MonthlyInvoicePreview {
   totalAmount: number;
 }
 
-// Mock customers for dropdown
-const mockCustomers = [
-  { id: 'C001', name: 'ABC Holdings (Pvt) Ltd', type: 'Company', vatTinNic: 'VAT-123456789', address: '123 Main Street, Colombo 05' },
-  { id: 'C002', name: 'John Perera', type: 'Individual', vatTinNic: 'NIC-123456789V', address: '45 Galle Road, Mount Lavinia' },
-  { id: 'C003', name: 'XYZ Engineering', type: 'Company', vatTinNic: 'VAT-987654321', address: '78 Kandy Road, Kurunegala' },
-  { id: 'C004', name: 'Kamal Silva', type: 'Individual', vatTinNic: 'NIC-987654321V', address: '12 Negombo Road, Wattala' },
-  { id: 'C005', name: 'Mega Constructions', type: 'Company', vatTinNic: 'VAT-456789123', address: '90 Jaffna Road, Anuradhapura' },
-];
+// API Response Types
+interface ApiCustomer {
+  id: string;
+  code: string;
+  type: 'GARMENT_FACTORY' | 'INDIVIDUAL';
+  name: string;
+  contactPerson: string;
+  phones: string[];
+  emails: string[];
+  billingAddressLine1?: string;
+  billingAddressLine2?: string;
+  billingCity?: string;
+  billingRegion?: string;
+  billingPostalCode?: string;
+  billingCountry?: string;
+  vatRegistrationNumber?: string;
+  currentBalance: number;
+  status: 'ACTIVE' | 'INACTIVE';
+}
 
-// Mock brands and types for dropdowns (matching machines page)
-const mockBrands = ['Brother', 'Singer', 'Janome', 'Juki', 'Pfaff', 'Bernina', 'Other'];
+interface Brand {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  isActive: boolean;
+}
 
-const mockModels: Record<string, string[]> = {
-  Brother: ['XL2600i', 'SE600', 'CS6000i', 'Other'],
-  Singer: ['Heavy Duty 4423', 'Buttonhole 160', 'Other'],
-  Janome: ['HD3000', 'MB-4S', 'Other'],
-  Juki: ['MO-654DE', 'LK1900A-SS', 'LX-1900B-SS', 'Other'],
-  Pfaff: ['Other'],
-  Bernina: ['Other'],
-  Other: ['Other'],
+interface Model {
+  id: string;
+  name: string;
+  code: string;
+  brandId: string;
+  description?: string;
+  isActive: boolean;
+  brand?: Brand;
+}
+
+interface MachineTypeData {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  isActive: boolean;
+}
+
+interface ApiInvoice {
+  id: string;
+  invoiceNumber: string;
+  customerId: string;
+  rentalId?: string;
+  type: string;
+  taxCategory: string;
+  status: 'DRAFT' | 'ISSUED' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+  paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE';
+  issueDate: string;
+  dueDate: string;
+  lineItems: any[];
+  subtotal: number;
+  vatAmount: number;
+  grandTotal: number;
+  balance: number;
+  customer?: ApiCustomer;
+  rental?: any;
+}
+
+// Customer dropdown type
+interface CustomerOption {
+  id: string;
+  name: string;
+  type: 'Company' | 'Individual';
+  vatTinNic: string;
+  address: string;
+}
+
+// Helper Functions
+const getAuthHeaders = () => {
+  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
 };
 
-const mockTypes: { label: string; value: MachineType }[] = [
-  { label: 'Industrial', value: 'Industrial' },
-  { label: 'Domestic', value: 'Domestic' },
-  { label: 'Embroidery', value: 'Embroidery' },
-  { label: 'Overlock', value: 'Overlock' },
-  { label: 'Buttonhole', value: 'Buttonhole' },
-  { label: 'Other', value: 'Other' },
-];
+const mapApiTypeToFrontend = (apiType: 'GARMENT_FACTORY' | 'INDIVIDUAL'): 'Company' | 'Individual' => {
+  return apiType === 'GARMENT_FACTORY' ? 'Company' : 'Individual';
+};
 
-// Mock invoice data
-const initialMockInvoices: Invoice[] = [
-  {
-    id: 1,
-    invoiceNumber: '00415',
-    invoiceType: 'VAT',
-    customerName: 'ABC Holdings (Pvt) Ltd',
-    customerAddress: '123 Main Street, Colombo 05',
-    vatTinNic: 'VAT-123456789',
-    invoiceDate: '2026-01-31',
-    periodFrom: '2026-01-01',
-    periodTo: '2026-12-31',
-    items: [
-      {
-        id: '1',
-        itemCode: '212WG00032',
-        description: 'JUKI LK1900A-SS-ELECTRONIC BAR TACK MACHINE',
-        brand: 'Juki',
-        model: 'LK1900A-SS',
-        type: 'Industrial',
-        numberOfMachines: 1,
-        monthlyRentPerMachine: 15000,
-        subtotal: 15000,
+const mapApiStatusToFrontend = (apiStatus: 'DRAFT' | 'ISSUED' | 'PAID' | 'OVERDUE' | 'CANCELLED'): 'draft' | 'issued' | 'paid' | 'overdue' => {
+  const statusMap: Record<string, 'draft' | 'issued' | 'paid' | 'overdue'> = {
+    'DRAFT': 'draft',
+    'ISSUED': 'issued',
+    'PAID': 'paid',
+    'OVERDUE': 'overdue',
+    'CANCELLED': 'draft'
+  };
+  return statusMap[apiStatus] || 'draft';
+};
+
+const mapFrontendStatusToApi = (status: 'draft' | 'issued' | 'paid' | 'overdue'): 'DRAFT' | 'ISSUED' | 'PAID' | 'OVERDUE' => {
+  const statusMap: Record<string, 'DRAFT' | 'ISSUED' | 'PAID' | 'OVERDUE'> = {
+    'draft': 'DRAFT',
+    'issued': 'ISSUED',
+    'paid': 'PAID',
+    'overdue': 'OVERDUE'
+  };
+  return statusMap[status] || 'DRAFT';
+};
+
+const buildCustomerAddress = (customer: ApiCustomer): string => {
+  const parts = [
+    customer.billingAddressLine1,
+    customer.billingAddressLine2,
+    customer.billingCity,
+    customer.billingRegion,
+    customer.billingPostalCode,
+    customer.billingCountry || 'Sri Lanka'
+  ].filter(Boolean);
+  
+  return parts.join(', ');
+};
+
+// API Functions
+const fetchCustomers = async (): Promise<CustomerOption[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/customers?limit=1000`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch customers');
+    }
+
+    const data = await response.json();
+    const apiCustomers: ApiCustomer[] = data.data?.items || [];
+
+    return apiCustomers.map(customer => ({
+      id: customer.id,
+      name: customer.name,
+      type: mapApiTypeToFrontend(customer.type),
+      vatTinNic: customer.vatRegistrationNumber || customer.code,
+      address: buildCustomerAddress(customer),
+    }));
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    return [];
+  }
+};
+
+const fetchBrands = async (): Promise<Brand[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/brands/active`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch brands');
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error fetching brands:', error);
+    return [];
+  }
+};
+
+const fetchModels = async (brandId?: string): Promise<Model[]> => {
+  try {
+    const url = brandId 
+      ? `${API_BASE_URL}/models/active?brandId=${brandId}`
+      : `${API_BASE_URL}/models/active`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch models');
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    return [];
+  }
+};
+
+const fetchMachineTypes = async (): Promise<MachineTypeData[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/machine-types/active`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch machine types');
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error fetching machine types:', error);
+    return [];
+  }
+};
+
+const fetchInvoices = async (): Promise<Invoice[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/invoices?limit=1000`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch invoices');
+    }
+
+    const data = await response.json();
+    const apiInvoices: ApiInvoice[] = data.data?.items || [];
+
+    return apiInvoices.map(invoice => {
+      const customer = invoice.customer;
+      const lineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
+      
+      return {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceType: invoice.taxCategory === 'VAT' ? 'VAT' : 'Non-VAT',
+        customerName: customer?.name || 'Unknown Customer',
+        customerAddress: customer ? buildCustomerAddress(customer) : '',
+        vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
+        invoiceDate: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+        periodFrom: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+        periodTo: invoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+        items: lineItems.map((item: any, index: number) => ({
+          id: String(index + 1),
+          itemCode: item.itemCode || `212WG${String(index + 1).padStart(5, '0')}`,
+          description: item.description || '',
+          serialNumber: item.serialNumber,
+          brand: item.brand || '',
+          model: item.model || '',
+          type: item.type || 'Industrial',
+          numberOfMachines: item.quantity || 1,
+          monthlyRentPerMachine: Number(item.unitPrice) || 0,
+          subtotal: Number(item.quantity || 1) * Number(item.unitPrice || 0),
+        })),
+        subtotal: Number(invoice.subtotal) || 0,
+        vatAmount: Number(invoice.vatAmount) || 0,
+        totalAmount: Number(invoice.grandTotal) || 0,
+        paymentDetails: {
+          paymentMethod: '',
+          paymentDate: invoice.dueDate?.split('T')[0] || '',
+          amount: Number(invoice.grandTotal) || 0,
+          status: invoice.paymentStatus === 'PAID' ? 'paid' : 'pending',
+        },
+        status: mapApiStatusToFrontend(invoice.status),
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching invoices:', error);
+    return [];
+  }
+};
+
+const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/invoices`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(invoiceData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to create invoice');
+    }
+
+    const data = await response.json();
+    const apiInvoice: ApiInvoice = data.data;
+    const customer = apiInvoice.customer;
+    const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
+
+    return {
+      id: apiInvoice.id,
+      invoiceNumber: apiInvoice.invoiceNumber,
+      invoiceType: apiInvoice.taxCategory === 'VAT' ? 'VAT' : 'Non-VAT',
+      customerName: customer?.name || 'Unknown Customer',
+      customerAddress: customer ? buildCustomerAddress(customer) : '',
+      vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
+      invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+      periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+      periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+      items: lineItems.map((item: any, index: number) => ({
+        id: String(index + 1),
+        itemCode: item.itemCode || `212WG${String(index + 1).padStart(5, '0')}`,
+        description: item.description || '',
+        serialNumber: item.serialNumber,
+        brand: item.brand || '',
+        model: item.model || '',
+        type: item.type || 'Industrial',
+        numberOfMachines: item.quantity || 1,
+        monthlyRentPerMachine: Number(item.unitPrice) || 0,
+        subtotal: Number(item.quantity || 1) * Number(item.unitPrice || 0),
+      })),
+      subtotal: Number(apiInvoice.subtotal) || 0,
+      vatAmount: Number(apiInvoice.vatAmount) || 0,
+      totalAmount: Number(apiInvoice.grandTotal) || 0,
+      paymentDetails: {
+        paymentMethod: '',
+        paymentDate: apiInvoice.dueDate?.split('T')[0] || '',
+        amount: Number(apiInvoice.grandTotal) || 0,
+        status: apiInvoice.paymentStatus === 'PAID' ? 'paid' : 'pending',
       },
-    ],
-    subtotal: 15000,
-    vatAmount: 2700,
-    totalAmount: 17700,
-    paymentDetails: {
-      paymentMethod: 'Bank Transfer',
-      paymentDate: '2026-01-20',
-      receiptNumber: 'RCP-2026-001',
-      amount: 17700,
-      status: 'paid',
-    },
-    status: 'paid',
-  },
-  {
-    id: 2,
-    invoiceNumber: '056832',
-    invoiceType: 'Non-VAT',
-    customerName: 'John Perera',
-    customerAddress: '45 Galle Road, Mount Lavinia',
-    vatTinNic: 'NIC-123456789V',
-    invoiceDate: '2026-02-01',
-    periodFrom: '2026-02-01',
-    periodTo: '2027-02-28',
-    items: [
-      {
-        id: '1',
-        itemCode: '212WG00033',
-        description: 'JUKI LX-1900B-SS - ELECTRONIC BAR TACK MACHINE',
-        serialNumber: '2LIHK00181',
-        brand: 'Juki',
-        model: 'LX-1900B-SS',
-        type: 'Industrial',
-        numberOfMachines: 1,
-        monthlyRentPerMachine: 17000,
-        subtotal: 17000,
+      status: mapApiStatusToFrontend(apiInvoice.status),
+    };
+  } catch (error) {
+    console.error('Error creating invoice:', error);
+    throw error;
+  }
+};
+
+const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoice | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/invoices/${invoiceId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(updateData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to update invoice');
+    }
+
+    const data = await response.json();
+    const apiInvoice: ApiInvoice = data.data;
+    const customer = apiInvoice.customer;
+    const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
+
+    return {
+      id: apiInvoice.id,
+      invoiceNumber: apiInvoice.invoiceNumber,
+      invoiceType: apiInvoice.taxCategory === 'VAT' ? 'VAT' : 'Non-VAT',
+      customerName: customer?.name || 'Unknown Customer',
+      customerAddress: customer ? buildCustomerAddress(customer) : '',
+      vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
+      invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+      periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+      periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+      items: lineItems.map((item: any, index: number) => ({
+        id: String(index + 1),
+        itemCode: item.itemCode || `212WG${String(index + 1).padStart(5, '0')}`,
+        description: item.description || '',
+        serialNumber: item.serialNumber,
+        brand: item.brand || '',
+        model: item.model || '',
+        type: item.type || 'Industrial',
+        numberOfMachines: item.quantity || 1,
+        monthlyRentPerMachine: Number(item.unitPrice) || 0,
+        subtotal: Number(item.quantity || 1) * Number(item.unitPrice || 0),
+      })),
+      subtotal: Number(apiInvoice.subtotal) || 0,
+      vatAmount: Number(apiInvoice.vatAmount) || 0,
+      totalAmount: Number(apiInvoice.grandTotal) || 0,
+      paymentDetails: {
+        paymentMethod: '',
+        paymentDate: apiInvoice.dueDate?.split('T')[0] || '',
+        amount: Number(apiInvoice.grandTotal) || 0,
+        status: apiInvoice.paymentStatus === 'PAID' ? 'paid' : 'pending',
       },
-    ],
-    subtotal: 17000,
-    vatAmount: 0,
-    totalAmount: 17000,
-    paymentDetails: {
-      paymentMethod: 'Cash',
-      paymentDate: '2026-02-12',
-      receiptNumber: 'RCP-2026-002',
-      amount: 17000,
-      status: 'paid',
-    },
-    status: 'paid',
-  },
-];
+      status: mapApiStatusToFrontend(apiInvoice.status),
+    };
+  } catch (error) {
+    console.error('Error updating invoice:', error);
+    throw error;
+  }
+};
 
 // Table column configuration
 const columns: TableColumn[] = [
@@ -265,9 +553,16 @@ const InvoicePage: React.FC = () => {
   const [isMonthlyInvoiceModalOpen, setIsMonthlyInvoiceModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [invoices, setInvoices] = useState<Invoice[]>(initialMockInvoices);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [monthlyInvoicePreviews, setMonthlyInvoicePreviews] = useState<MonthlyInvoicePreview[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set());
+
+  // API Data
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
+  const [machineTypes, setMachineTypes] = useState<MachineTypeData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Create form state
   const [customerId, setCustomerId] = useState('');
@@ -284,6 +579,50 @@ const InvoicePage: React.FC = () => {
 
   // Update form state - only status
   const [invoiceStatus, setInvoiceStatus] = useState<'draft' | 'issued' | 'paid' | 'overdue'>('draft');
+
+  // Item form state for brand-model-type dropdowns
+  const [selectedBrandIds, setSelectedBrandIds] = useState<Record<number, string>>({});
+  const [availableModelsPerItem, setAvailableModelsPerItem] = useState<Record<number, Model[]>>({});
+
+  // Load initial data
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    setIsLoading(true);
+    try {
+      const [customersData, brandsData, typesData, invoicesData] = await Promise.all([
+        fetchCustomers(),
+        fetchBrands(),
+        fetchMachineTypes(),
+        fetchInvoices(),
+      ]);
+      
+      setCustomers(customersData);
+      setBrands(brandsData);
+      setMachineTypes(typesData);
+      setInvoices(invoicesData);
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      alert('Failed to load data. Please refresh the page.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load models when brand is selected for an item
+  const loadModelsForBrand = async (brandId: string, itemIndex: number) => {
+    try {
+      const modelsData = await fetchModels(brandId);
+      setAvailableModelsPerItem(prev => ({
+        ...prev,
+        [itemIndex]: modelsData,
+      }));
+    } catch (error) {
+      console.error('Error loading models:', error);
+    }
+  };
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -311,6 +650,8 @@ const InvoicePage: React.FC = () => {
     setReceiptNumber('');
     setReceiptFile(null);
     setFormErrors({});
+    setSelectedBrandIds({});
+    setAvailableModelsPerItem({});
   };
 
   const handleCloseCreateModal = () => {
@@ -326,11 +667,13 @@ const InvoicePage: React.FC = () => {
     setReceiptNumber('');
     setReceiptFile(null);
     setFormErrors({});
+    setSelectedBrandIds({});
+    setAvailableModelsPerItem({});
   };
 
   const handleCustomerChange = (customerId: string) => {
     setCustomerId(customerId);
-    const customer = mockCustomers.find((c) => c.id === customerId);
+    const customer = customers.find((c) => c.id === customerId);
     if (customer) {
       setInvoiceType(customer.type === 'Company' ? 'VAT' : 'Non-VAT');
     }
@@ -340,11 +683,11 @@ const InvoicePage: React.FC = () => {
     return `212WG${String(index + 1).padStart(5, '0')}`;
   };
 
-  const generateDescription = (brand: string, model: string, type: MachineType): string => {
-    if (brand === 'Juki' && (model.includes('LK1900A-SS') || model.includes('LX-1900B-SS'))) {
-      return `${brand.toUpperCase()} ${model}-ELECTRONIC BAR TACK MACHINE`;
+  const generateDescription = (brandName: string, modelName: string, typeName: string): string => {
+    if (brandName && modelName && typeName) {
+      return `${brandName.toUpperCase()} ${modelName} - ${typeName.toUpperCase()}`;
     }
-    return `${brand.toUpperCase()} ${model} - ${type}`;
+    return '';
   };
 
   const addItem = () => {
@@ -355,7 +698,7 @@ const InvoicePage: React.FC = () => {
         description: '',
         brand: '',
         model: '',
-        type: 'Domestic',
+        type: 'Industrial',
         numberOfMachines: 1,
         monthlyRentPerMachine: 0,
       },
@@ -364,6 +707,14 @@ const InvoicePage: React.FC = () => {
 
   const removeItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
+    // Clean up brand/model state for this item
+    const newSelectedBrandIds = { ...selectedBrandIds };
+    const newAvailableModels = { ...availableModelsPerItem };
+    delete newSelectedBrandIds[index];
+    delete newAvailableModels[index];
+    setSelectedBrandIds(newSelectedBrandIds);
+    setAvailableModelsPerItem(newAvailableModels);
+    
     // Regenerate item codes
     const updatedItems = items.filter((_, i) => i !== index).map((item, idx) => ({
       ...item,
@@ -376,8 +727,20 @@ const InvoicePage: React.FC = () => {
     const updatedItems = [...items];
     updatedItems[index] = { ...updatedItems[index], [field]: value };
     
-    // If brand or model changes, update description
-    if (field === 'brand' || field === 'model' || field === 'type') {
+    // Handle brand change
+    if (field === 'brand') {
+      const brand = brands.find(b => b.name === value);
+      if (brand) {
+        setSelectedBrandIds(prev => ({ ...prev, [index]: brand.id }));
+        loadModelsForBrand(brand.id, index);
+        // Reset model when brand changes
+        updatedItems[index].model = '';
+        updatedItems[index].description = '';
+      }
+    }
+    
+    // Handle model or type change - update description
+    if (field === 'model' || field === 'type') {
       if (updatedItems[index].brand && updatedItems[index].model && updatedItems[index].type) {
         updatedItems[index].description = generateDescription(
           updatedItems[index].brand,
@@ -387,17 +750,7 @@ const InvoicePage: React.FC = () => {
       }
     }
     
-    // If brand changes, reset model
-    if (field === 'brand') {
-      updatedItems[index].model = '';
-      updatedItems[index].description = '';
-    }
-    
     setItems(updatedItems);
-  };
-
-  const getAvailableModels = (brand: string): string[] => {
-    return mockModels[brand] || ['Other'];
   };
 
   const calculateItemSubtotal = (item: Omit<InvoiceItem, 'id' | 'subtotal'>): number => {
@@ -430,9 +783,6 @@ const InvoicePage: React.FC = () => {
 
     if (!paymentMethod) errors.paymentMethod = 'Payment Method is required';
     if (!paymentDate) errors.paymentDate = 'Payment Date is required';
-    if (!receiptFile && !receiptNumber) {
-      errors.receipt = 'Payment receipt (file or receipt number) is required before dispatch';
-    }
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -445,47 +795,54 @@ const InvoicePage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const customer = mockCustomers.find((c) => c.id === customerId);
+      const customer = customers.find((c) => c.id === customerId);
       const { subtotal, vatAmount, totalAmount } = calculateTotals();
       
-      const invoiceItems: InvoiceItem[] = items.map((item, index) => ({
-        id: String(index + 1),
-        ...item,
-        subtotal: calculateItemSubtotal(item),
-      }));
+      // Prepare line items for API
+      const lineItems = items.map((item, index) => {
+        const brand = brands.find(b => b.name === item.brand);
+        const model = availableModelsPerItem[index]?.find(m => m.name === item.model);
+        const type = machineTypes.find(t => t.name === item.type);
+        
+        return {
+          description: item.description,
+          quantity: item.numberOfMachines,
+          unitPrice: item.monthlyRentPerMachine,
+          machineId: null, // Optional, can be set if you have machine IDs
+          brand: item.brand,
+          model: item.model,
+          type: item.type,
+          brandId: brand?.id,
+          modelId: model?.id,
+          machineTypeId: type?.id,
+          itemCode: item.itemCode,
+          serialNumber: item.serialNumber,
+          vatRate: invoiceType === 'VAT' ? 0.18 : 0,
+        };
+      });
 
-      const newInvoice: Invoice = {
-        id: invoices.length > 0 ? Math.max(...invoices.map(i => i.id)) + 1 : 1,
-        invoiceNumber: String(invoices.length + 1).padStart(5, '0'),
-        invoiceType,
-        customerName: customer?.name || '',
-        customerAddress: customer?.address || '',
-        vatTinNic: customer?.vatTinNic || '',
-        invoiceDate,
-        periodFrom,
-        periodTo,
-        items: invoiceItems,
-        subtotal,
-        vatAmount,
-        totalAmount,
-        paymentDetails: {
-          paymentMethod,
-          paymentDate,
-          receiptNumber: receiptNumber || undefined,
-          receiptFile: receiptFile?.name || undefined,
-          amount: totalAmount,
-          status: 'paid' as const,
-        },
-        status: 'issued' as const,
+      const invoicePayload = {
+        customerId: customerId,
+        type: 'RENTAL', // or appropriate invoice type
+        taxCategory: invoiceType === 'VAT' ? 'VAT' : 'NON_VAT',
+        lineItems: lineItems,
+        issueDate: invoiceDate,
+        dueDate: periodTo,
+        subtotal: subtotal,
+        vatAmount: vatAmount,
+        grandTotal: totalAmount,
       };
 
-      setInvoices([...invoices, newInvoice]);
-      console.log('Create invoice payload:', newInvoice);
-      alert(`Invoice created successfully.`);
-      handleCloseCreateModal();
-    } catch (error) {
+      const newInvoice = await createInvoice(invoicePayload);
+      
+      if (newInvoice) {
+        setInvoices([newInvoice, ...invoices]);
+        alert('Invoice created successfully.');
+        handleCloseCreateModal();
+      }
+    } catch (error: any) {
       console.error('Error creating invoice:', error);
-      alert('Failed to create invoice. Please try again.');
+      alert(error.message || 'Failed to create invoice. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -520,18 +877,21 @@ const InvoicePage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const updatedInvoice: Invoice = {
-        ...selectedInvoice,
-        status: invoiceStatus,
+      const updatePayload = {
+        status: mapFrontendStatusToApi(invoiceStatus),
+        paymentStatus: invoiceStatus === 'paid' ? 'PAID' : invoiceStatus === 'overdue' ? 'OVERDUE' : 'PENDING',
       };
 
-      setInvoices(invoices.map(inv => inv.id === selectedInvoice.id ? updatedInvoice : inv));
-      console.log('Update invoice payload:', updatedInvoice);
-      alert(`Invoice status updated successfully.`);
-      handleCloseUpdateModal();
-    } catch (error) {
+      const updatedInvoice = await updateInvoice(selectedInvoice.id, updatePayload);
+      
+      if (updatedInvoice) {
+        setInvoices(invoices.map(inv => inv.id === selectedInvoice.id ? updatedInvoice : inv));
+        alert('Invoice status updated successfully.');
+        handleCloseUpdateModal();
+      }
+    } catch (error: any) {
       console.error('Error updating invoice:', error);
-      alert('Failed to update invoice. Please try again.');
+      alert(error.message || 'Failed to update invoice. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -579,8 +939,8 @@ const InvoicePage: React.FC = () => {
         return {
           item,
           originalRate,
-          proratedRate,
-          proratedSubtotal,
+          proratedRate: Math.round(proratedRate * 100) / 100,
+          proratedSubtotal: Math.round(proratedSubtotal * 100) / 100,
         };
       });
 
@@ -646,59 +1006,56 @@ const InvoicePage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const newInvoices: Invoice[] = [];
-      let nextInvoiceNumber = invoices.length > 0 ? Math.max(...invoices.map(i => parseInt(i.invoiceNumber))) + 1 : 1;
-      let nextId = invoices.length > 0 ? Math.max(...invoices.map(i => i.id)) + 1 : 1;
+      const generatedInvoices: Invoice[] = [];
 
-      Array.from(selectedMonths).sort().forEach(index => {
+      for (const index of Array.from(selectedMonths).sort()) {
         const preview = monthlyInvoicePreviews[index];
         
-        const invoiceItems: InvoiceItem[] = preview.proratedItems.map((pi, idx) => ({
-          id: String(idx + 1),
-          itemCode: pi.item.itemCode,
-          description: pi.item.description,
-          serialNumber: pi.item.serialNumber,
-          brand: pi.item.brand,
-          model: pi.item.model,
-          type: pi.item.type,
-          numberOfMachines: pi.item.numberOfMachines,
-          monthlyRentPerMachine: Math.round(pi.proratedRate * 100) / 100,
-          subtotal: Math.round(pi.proratedSubtotal * 100) / 100,
-        }));
+        const lineItems = preview.proratedItems.map((pi, idx) => {
+          const brand = brands.find(b => b.name === pi.item.brand);
+          const type = machineTypes.find(t => t.name === pi.item.type);
+          
+          return {
+            description: pi.item.description,
+            quantity: pi.item.numberOfMachines,
+            unitPrice: pi.proratedRate,
+            brand: pi.item.brand,
+            model: pi.item.model,
+            type: pi.item.type,
+            brandId: brand?.id,
+            machineTypeId: type?.id,
+            itemCode: pi.item.itemCode,
+            serialNumber: pi.item.serialNumber,
+            vatRate: selectedInvoice.invoiceType === 'VAT' ? 0.18 : 0,
+          };
+        });
 
-        const newInvoice: Invoice = {
-          id: nextId++,
-          invoiceNumber: String(nextInvoiceNumber++).padStart(5, '0'),
-          invoiceType: selectedInvoice.invoiceType,
-          customerName: selectedInvoice.customerName,
-          customerAddress: selectedInvoice.customerAddress,
-          vatTinNic: selectedInvoice.vatTinNic,
-          invoiceDate: new Date().toISOString().split('T')[0],
-          periodFrom: preview.periodFrom,
-          periodTo: preview.periodTo,
-          items: invoiceItems,
-          subtotal: Math.round(preview.subtotal * 100) / 100,
-          vatAmount: Math.round(preview.vatAmount * 100) / 100,
-          totalAmount: Math.round(preview.totalAmount * 100) / 100,
-          paymentDetails: {
-            paymentMethod: '',
-            paymentDate: '',
-            amount: Math.round(preview.totalAmount * 100) / 100,
-            status: 'pending',
-          },
-          status: 'draft',
+        const invoicePayload = {
+          customerId: customers.find(c => c.name === selectedInvoice.customerName)?.id,
+          type: 'RENTAL',
+          taxCategory: selectedInvoice.invoiceType === 'VAT' ? 'VAT' : 'NON_VAT',
+          lineItems: lineItems,
+          issueDate: preview.periodFrom,
+          dueDate: preview.periodTo,
+          subtotal: preview.subtotal,
+          vatAmount: preview.vatAmount,
+          grandTotal: preview.totalAmount,
         };
 
-        newInvoices.push(newInvoice);
-      });
+        const newInvoice = await createInvoice(invoicePayload);
+        if (newInvoice) {
+          generatedInvoices.push(newInvoice);
+        }
+      }
 
-      setInvoices([...invoices, ...newInvoices]);
-      console.log('Generated monthly invoices:', newInvoices);
-      alert(`Successfully generated ${newInvoices.length} monthly invoice(s).`);
-      handleCloseMonthlyInvoiceModal();
-    } catch (error) {
+      if (generatedInvoices.length > 0) {
+        setInvoices([...generatedInvoices, ...invoices]);
+        alert(`Successfully generated ${generatedInvoices.length} monthly invoice(s).`);
+        handleCloseMonthlyInvoiceModal();
+      }
+    } catch (error: any) {
       console.error('Error generating monthly invoices:', error);
-      alert('Failed to generate invoices. Please try again.');
+      alert(error.message || 'Failed to generate invoices. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -740,22 +1097,9 @@ const InvoicePage: React.FC = () => {
       new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     return (
-      <div className="space-y-4 print:space-y-3" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-        {/* Invoice number and date — right-aligned (matches letterhead invoice layout) */}
-        <div className="text-right text-sm print:text-xs text-gray-700">
-          <div className="mb-0.5">
-            <span className="text-gray-600">Invoice: </span>
-            <span className="font-medium text-gray-900">{invoice.invoiceNumber}</span>
-          </div>
-          <div>
-            <span className="text-gray-600">Date of Issue: </span>
-            <span className="font-medium text-gray-900">{dateStr(invoice.invoiceDate)}</span>
-          </div>
-        </div>
-        <div className="border-b border-gray-800" />
-
-        {/* Customer and period */}
-        <div className="text-sm print:text-xs text-gray-900">
+      <div>
+        {/* Customer and period info */}
+        <div className="mb-4 text-sm print:text-xs">
           <div className="mb-1">
             <span className="text-gray-600 font-medium">Customer: </span>
             <span>{invoice.customerName}</span>
@@ -783,6 +1127,7 @@ const InvoicePage: React.FC = () => {
             </div>
           )}
         </div>
+
         <div className="border-b border-gray-800" />
 
         {/* Items table — Non-VAT: Description | Serial No | Monthly Rental (matches image); VAT: full columns */}
@@ -802,37 +1147,37 @@ const InvoicePage: React.FC = () => {
                     <td className="py-2 pr-4 text-sm text-gray-900 print:text-xs">
                       {item.numberOfMachines} {item.description}
                     </td>
-                    <td className="py-2 px-2 text-sm text-gray-900 print:text-xs text-center">
-                      {item.serialNumber || '-'}
+                    <td className="py-2 px-2 text-sm text-center text-gray-900 print:text-xs">
+                      {item.serialNumber || '—'}
                     </td>
-                    <td className="py-2 pl-4 text-sm text-gray-900 print:text-xs text-right">
-                      {item.monthlyRentPerMachine.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    <td className="py-2 pl-4 text-sm text-right text-gray-900 print:text-xs">
+                      {item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
-            <table className="w-full border-collapse border border-gray-300 print:text-xs">
+            <table className="w-full border-collapse print:text-xs">
               <thead>
-                <tr className="bg-gray-100">
-                  <th className="border border-gray-300 px-3 py-2 text-left text-xs font-semibold text-gray-700">Item</th>
-                  <th className="border border-gray-300 px-3 py-2 text-left text-xs font-semibold text-gray-700">Description</th>
-                  <th className="border border-gray-300 px-3 py-2 text-right text-xs font-semibold text-gray-700">Rate</th>
-                  <th className="border border-gray-300 px-3 py-2 text-right text-xs font-semibold text-gray-700">Qty</th>
-                  <th className="border border-gray-300 px-3 py-2 text-right text-xs font-semibold text-gray-700">Amount</th>
+                <tr className="border-b border-gray-800">
+                  <th className="text-left py-2 pr-2 text-xs font-semibold text-gray-700">Item</th>
+                  <th className="text-left py-2 px-2 text-xs font-semibold text-gray-700">Description</th>
+                  <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700">Rate</th>
+                  <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700">Qty</th>
+                  <th className="text-right py-2 pl-2 text-xs font-semibold text-gray-700">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {invoice.items.map((item, index) => (
-                  <tr key={index}>
-                    <td className="border border-gray-300 px-3 py-2 text-sm text-gray-900 print:text-xs">{item.itemCode}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-sm text-gray-900 print:text-xs">{item.description}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-sm text-gray-900 text-right print:text-xs">
+                  <tr key={index} className="border-b border-gray-200">
+                    <td className="py-2 pr-2 text-sm text-gray-900 print:text-xs">{item.itemCode}</td>
+                    <td className="py-2 px-2 text-sm text-gray-900 print:text-xs">{item.description}</td>
+                    <td className="py-2 px-2 text-sm text-center text-gray-900 print:text-xs">
                       {item.monthlyRentPerMachine.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="border border-gray-300 px-3 py-2 text-sm text-gray-900 text-right print:text-xs">{item.numberOfMachines}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-sm text-gray-900 text-right font-medium print:text-xs">
+                    <td className="py-2 px-2 text-sm text-center text-gray-900 print:text-xs">{item.numberOfMachines}</td>
+                    <td className="py-2 pl-2 text-sm text-right text-gray-900 print:text-xs">
                       {item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -840,25 +1185,27 @@ const InvoicePage: React.FC = () => {
               </tbody>
             </table>
           )}
+        </div>
 
-          {/* Total row — matches image: "Total Amount" left, amount right */}
-          <div className={`flex justify-between items-center mt-2 ${!isVAT ? 'border-t border-gray-800 pt-2' : ''}`}>
-            <span className="text-sm font-bold text-gray-900 print:text-xs">Total Amount</span>
-            <span className="text-sm font-bold text-gray-900 print:text-xs">
+        <div className="border-b border-gray-800" />
+
+        {/* Totals */}
+        <div className="mt-3 space-y-1 text-sm print:text-xs">
+          <div className="flex justify-between items-baseline">
+            <span className="font-bold text-gray-900">Total Amount</span>
+            <span className="font-bold text-gray-900 text-base print:text-sm">
               {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
             </span>
           </div>
-          {isVAT && (subtotal !== totalAmount || vatAmount > 0) && (
-            <div className="mt-2 space-y-1 text-sm print:text-xs text-gray-700">
-              <div className="flex justify-end gap-4">
-                <span>Sub Amount: Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+          {isVAT && vatAmount > 0 && (
+            <>
+              <div className="flex justify-end text-sm text-gray-700">
+                Sub Amount: Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
               </div>
-              {vatAmount > 0 && (
-                <div className="flex justify-end gap-4">
-                  <span>VAT (18%): Rs. {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
-                </div>
-              )}
-            </div>
+              <div className="flex justify-end text-sm text-gray-700">
+                VAT (18%): Rs. {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -917,7 +1264,7 @@ const InvoicePage: React.FC = () => {
   // Create form content — layout matches printed TAX INVOICE for familiar UX
   const renderInvoiceForm = () => {
     const { subtotal, vatAmount, totalAmount } = calculateTotals();
-    const selectedCustomer = mockCustomers.find((c) => c.id === customerId);
+    const selectedCustomer = customers.find((c) => c.id === customerId);
 
     const inputBase = 'bg-white dark:bg-slate-700 dark:border-slate-500 dark:text-white dark:placeholder-gray-400';
     const inputError = 'border-red-500 dark:border-red-400';
@@ -934,40 +1281,40 @@ const InvoicePage: React.FC = () => {
           <div className="text-right text-sm text-gray-700 dark:text-gray-300 mb-1">
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Invoice: </span>
-              <span className="font-medium text-gray-900 dark:text-white">(Auto-generated on save)</span>
+              <span className="text-gray-900 dark:text-white">Auto-generated</span>
             </div>
-            <div className="mt-1">
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Date of Issue: </span>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Date: </span>
               <input
                 type="date"
                 value={invoiceDate}
                 onChange={(e) => setInvoiceDate(e.target.value)}
-                className={`inline-block ml-1 px-2 py-1 border rounded ${inputBase} ${
+                className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
                   formErrors.invoiceDate ? inputError : inputBorder
                 } ${focusRing}`}
               />
+              {formErrors.invoiceDate && (
+                <span className="block text-xs text-red-500 dark:text-red-400 mt-0.5">{formErrors.invoiceDate}</span>
+              )}
             </div>
-            {formErrors.invoiceDate && (
-              <p className="text-right text-xs text-red-500 dark:text-red-400 mt-0.5">{formErrors.invoiceDate}</p>
-            )}
           </div>
-          <div className="border-b border-gray-800 dark:border-slate-600 my-3" />
+          <div className="border-b border-gray-800 dark:border-slate-600 my-2" />
 
-          {/* Customer block — left-aligned (matches print) */}
-          <div className="text-sm text-gray-900 dark:text-gray-100 space-y-1">
+          {/* Customer and period info */}
+          <div className="mb-3 text-sm text-gray-700 dark:text-gray-300 space-y-1.5">
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Customer: </span>
               <select
                 value={customerId}
                 onChange={(e) => handleCustomerChange(e.target.value)}
-                className={`inline-block min-w-[200px] px-2 py-1 border rounded ${inputBase} ${
+                className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
                   formErrors.customerId ? inputError : inputBorder
                 } ${focusRing}`}
               >
                 <option value="">Select Customer</option>
-                {mockCustomers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name} ({customer.type})
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>
@@ -980,27 +1327,29 @@ const InvoicePage: React.FC = () => {
               <span className="text-gray-900 dark:text-white">{selectedCustomer?.address || '—'}</span>
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Period: </span>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Period From: </span>
               <input
                 type="date"
                 value={periodFrom}
                 onChange={(e) => setPeriodFrom(e.target.value)}
-                className={`inline-block w-32 px-2 py-1 border rounded ${inputBase} ${
+                className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
                   formErrors.periodFrom ? inputError : inputBorder
-                } ${focusRing}`}
-              />
-              <span className="mx-1 text-gray-600 dark:text-gray-400"> to </span>
-              <input
-                type="date"
-                value={periodTo}
-                onChange={(e) => setPeriodTo(e.target.value)}
-                className={`inline-block w-32 px-2 py-1 border rounded ${inputBase} ${
-                  formErrors.periodTo ? inputError : inputBorder
                 } ${focusRing}`}
               />
               {formErrors.periodFrom && (
                 <span className="ml-2 text-xs text-red-500 dark:text-red-400">{formErrors.periodFrom}</span>
               )}
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Period To: </span>
+              <input
+                type="date"
+                value={periodTo}
+                onChange={(e) => setPeriodTo(e.target.value)}
+                className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
+                  formErrors.periodTo ? inputError : inputBorder
+                } ${focusRing}`}
+              />
               {formErrors.periodTo && (
                 <span className="ml-2 text-xs text-red-500 dark:text-red-400">{formErrors.periodTo}</span>
               )}
@@ -1034,22 +1383,22 @@ const InvoicePage: React.FC = () => {
                 No items added. Click &quot;Add Item&quot; to add items to the invoice.
               </div>
             ) : (
-              <table className="w-full border-collapse border border-gray-300 dark:border-slate-600 text-sm">
+              <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="bg-gray-100 dark:bg-slate-700">
-                    <th className="border border-gray-300 dark:border-slate-600 px-2 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Item</th>
-                    <th className="border border-gray-300 dark:border-slate-600 px-2 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Description</th>
-                    <th className="border border-gray-300 dark:border-slate-600 px-2 py-2 text-right font-semibold text-gray-700 dark:text-gray-300">Rate</th>
-                    <th className="border border-gray-300 dark:border-slate-600 px-2 py-2 text-center font-semibold text-gray-700 dark:text-gray-300">Qty</th>
-                    <th className="border border-gray-300 dark:border-slate-600 px-2 py-2 text-right font-semibold text-gray-700 dark:text-gray-300">Amount</th>
-                    <th className="border border-gray-300 dark:border-slate-600 px-2 py-2 w-10" />
+                  <tr className="border-b border-gray-800 dark:border-slate-600">
+                    <th className="text-left py-2 pr-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Item</th>
+                    <th className="text-left py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Description</th>
+                    <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Rate</th>
+                    <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Qty</th>
+                    <th className="text-right py-2 pl-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Amount</th>
+                    <th className="w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
                     <React.Fragment key={index}>
-                      <tr className="border-b border-gray-200 dark:border-slate-600">
-                        <td className="border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-gray-900 dark:text-white align-top">
+                      <tr className="border-b border-gray-200 dark:border-slate-700">
+                        <td className="py-2 pr-2 align-top">
                           <input
                             type="text"
                             value={item.itemCode}
@@ -1057,7 +1406,7 @@ const InvoicePage: React.FC = () => {
                             className="w-full bg-gray-50 dark:bg-slate-700/50 border-0 p-0 text-gray-900 dark:text-white text-sm"
                           />
                         </td>
-                        <td className="border border-gray-300 dark:border-slate-600 px-2 py-1.5 align-top">
+                        <td className="py-2 px-2 align-top">
                           <input
                             type="text"
                             value={item.description}
@@ -1073,8 +1422,8 @@ const InvoicePage: React.FC = () => {
                               } ${focusRing}`}
                             >
                               <option value="">Brand</option>
-                              {mockBrands.map((b) => (
-                                <option key={b} value={b}>{b}</option>
+                              {brands.map((b) => (
+                                <option key={b.id} value={b.name}>{b.name}</option>
                               ))}
                             </select>
                             <select
@@ -1084,8 +1433,8 @@ const InvoicePage: React.FC = () => {
                               className={`px-1.5 py-0.5 border rounded ${inputBase} ${inputBorder} ${focusRing} disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:opacity-70`}
                             >
                               <option value="">Model</option>
-                              {item.brand && getAvailableModels(item.brand).map((m) => (
-                                <option key={m} value={m}>{m}</option>
+                              {item.brand && availableModelsPerItem[index]?.map((m) => (
+                                <option key={m.id} value={m.name}>{m.name}</option>
                               ))}
                             </select>
                             <select
@@ -1095,8 +1444,8 @@ const InvoicePage: React.FC = () => {
                                 formErrors[`item_${index}_type`] ? inputError : inputBorder
                               } ${focusRing}`}
                             >
-                              {mockTypes.map((t) => (
-                                <option key={t.value} value={t.value}>{t.label}</option>
+                              {machineTypes.map((t) => (
+                                <option key={t.id} value={t.name}>{t.name}</option>
                               ))}
                             </select>
                             {invoiceType === 'Non-VAT' && (
@@ -1104,54 +1453,43 @@ const InvoicePage: React.FC = () => {
                                 type="text"
                                 value={item.serialNumber || ''}
                                 onChange={(e) => updateItem(index, 'serialNumber', e.target.value)}
-                                placeholder="Serial"
-                                className={`w-20 px-1.5 py-0.5 border rounded text-xs ${inputBase} ${inputBorder} ${focusRing}`}
+                                placeholder="Serial No"
+                                className={`px-1.5 py-0.5 border rounded ${inputBase} ${inputBorder} ${focusRing}`}
                               />
                             )}
                           </div>
-                          {(formErrors[`item_${index}_brand`] || formErrors[`item_${index}_model`] || formErrors[`item_${index}_type`]) && (
-                            <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
-                              {formErrors[`item_${index}_brand`] || formErrors[`item_${index}_model`] || formErrors[`item_${index}_type`]}
-                            </p>
-                          )}
                         </td>
-                        <td className="border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-right align-top">
+                        <td className="py-2 px-2 text-center align-top">
                           <input
                             type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.monthlyRentPerMachine || ''}
-                            onChange={(e) => updateItem(index, 'monthlyRentPerMachine', parseFloat(e.target.value) || 0)}
-                            className={`w-20 text-right px-1.5 py-0.5 border rounded ${inputBase} ${
+                            value={item.monthlyRentPerMachine}
+                            onChange={(e) => updateItem(index, 'monthlyRentPerMachine', Number(e.target.value))}
+                            className={`w-20 px-1.5 py-0.5 border rounded text-center ${inputBase} ${
                               formErrors[`item_${index}_rent`] ? inputError : inputBorder
                             } ${focusRing}`}
+                            min="0"
+                            step="0.01"
                           />
-                          {formErrors[`item_${index}_rent`] && (
-                            <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{formErrors[`item_${index}_rent`]}</p>
-                          )}
                         </td>
-                        <td className="border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-center align-top">
+                        <td className="py-2 px-2 text-center align-top">
                           <input
                             type="number"
-                            min="1"
                             value={item.numberOfMachines}
-                            onChange={(e) => updateItem(index, 'numberOfMachines', parseInt(e.target.value) || 0)}
-                            className={`w-14 text-center px-1.5 py-0.5 border rounded ${inputBase} ${
+                            onChange={(e) => updateItem(index, 'numberOfMachines', Number(e.target.value))}
+                            className={`w-16 px-1.5 py-0.5 border rounded text-center ${inputBase} ${
                               formErrors[`item_${index}_machines`] ? inputError : inputBorder
                             } ${focusRing}`}
+                            min="1"
                           />
-                          {formErrors[`item_${index}_machines`] && (
-                            <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{formErrors[`item_${index}_machines`]}</p>
-                          )}
                         </td>
-                        <td className="border border-gray-300 dark:border-slate-600 px-2 py-1.5 text-right font-medium text-gray-900 dark:text-white align-top">
+                        <td className="py-2 pl-2 text-right align-top text-gray-900 dark:text-white">
                           {calculateItemSubtotal(item).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="border border-gray-300 dark:border-slate-600 px-1 py-1.5 align-top">
+                        <td className="py-2 text-center align-top">
                           <button
                             type="button"
                             onClick={() => removeItem(index)}
-                            className="p-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 focus:outline-none focus:ring-1 focus:ring-red-400 rounded"
+                            className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
                             aria-label="Remove item"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1199,68 +1537,73 @@ const InvoicePage: React.FC = () => {
           </div>
           <div className="border-b border-gray-300 dark:border-slate-600 my-2" />
 
-          {/* Payment & Billing — compact section (required for validation) */}
-          <div className="mt-4 p-3 bg-gray-50 dark:bg-slate-700/40 rounded-lg border border-gray-200 dark:border-slate-600">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Payment & Billing Details</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          {/* Payment Details Section */}
+          <div className="mt-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-300 dark:border-slate-600 pb-1">
+              Payment Details
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5">Payment Method <span className="text-red-500 dark:text-red-400">*</span></label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Payment Method<span className="text-red-500">*</span>
+                </label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className={`w-full px-2 py-1.5 border rounded ${inputBase} ${
+                  className={`w-full px-2 py-1.5 border rounded text-sm ${inputBase} ${
                     formErrors.paymentMethod ? inputError : inputBorder
                   } ${focusRing}`}
                 >
-                  <option value="">Select</option>
+                  <option value="">Select Method</option>
                   <option value="Cash">Cash</option>
                   <option value="Bank Transfer">Bank Transfer</option>
                   <option value="Cheque">Cheque</option>
-                  <option value="Credit Card">Credit Card</option>
+                  <option value="Card">Card</option>
                 </select>
                 {formErrors.paymentMethod && (
-                  <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{formErrors.paymentMethod}</p>
+                  <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.paymentMethod}</p>
                 )}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5">Payment Date <span className="text-red-500 dark:text-red-400">*</span></label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Payment Date<span className="text-red-500">*</span>
+                </label>
                 <input
                   type="date"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
-                  className={`w-full px-2 py-1.5 border rounded ${inputBase} ${
+                  className={`w-full px-2 py-1.5 border rounded text-sm ${inputBase} ${
                     formErrors.paymentDate ? inputError : inputBorder
                   } ${focusRing}`}
                 />
                 {formErrors.paymentDate && (
-                  <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{formErrors.paymentDate}</p>
+                  <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.paymentDate}</p>
                 )}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5">Receipt Number</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Receipt Number
+                </label>
                 <input
                   type="text"
                   value={receiptNumber}
                   onChange={(e) => setReceiptNumber(e.target.value)}
-                  placeholder="Optional"
-                  className={`w-full px-2 py-1.5 border rounded ${inputBase} ${inputBorder} ${focusRing}`}
+                  placeholder="Enter receipt number"
+                  className={`w-full px-2 py-1.5 border rounded text-sm ${inputBase} ${inputBorder} ${focusRing}`}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5">Receipt (File) <span className="text-red-500 dark:text-red-400">*</span></label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Receipt File
+                </label>
                 <input
                   type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
                   onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                  className={`w-full px-2 py-1.5 border rounded text-xs ${inputBase} ${
-                    formErrors.receipt ? inputError : inputBorder
-                  } ${focusRing} file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 dark:file:bg-indigo-900/30 dark:file:text-indigo-200`}
+                  accept="image/*,.pdf"
+                  className={`w-full px-2 py-1.5 border rounded text-sm ${inputBase} ${inputBorder} ${focusRing} file:mr-2 file:py-1 file:px-2 file:border-0 file:text-sm file:font-medium file:bg-blue-50 dark:file:bg-indigo-900/30 file:text-blue-700 dark:file:text-indigo-300 hover:file:bg-blue-100 dark:hover:file:bg-indigo-900/50`}
                 />
-                {receiptFile && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{receiptFile.name}</p>
-                )}
                 {formErrors.receipt && (
-                  <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{formErrors.receipt}</p>
+                  <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.receipt}</p>
                 )}
               </div>
             </div>
@@ -1274,19 +1617,19 @@ const InvoicePage: React.FC = () => {
   const renderUpdateForm = () => {
     if (!selectedInvoice) return null;
 
-    const customer = mockCustomers.find((c) => c.name === selectedInvoice.customerName);
+    const customer = customers.find((c) => c.name === selectedInvoice.customerName);
 
     return (
-      <div className="space-y-6">
-        {/* Customer Information - Read Only */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-4">
+        {/* Read-only fields */}
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Company/Individual Name
+              Invoice Number
             </label>
             <input
               type="text"
-              value={selectedInvoice.customerName}
+              value={selectedInvoice.invoiceNumber}
               disabled
               className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
             />
@@ -1294,11 +1637,11 @@ const InvoicePage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Customer Address
+              Customer Name
             </label>
             <input
               type="text"
-              value={selectedInvoice.customerAddress}
+              value={selectedInvoice.customerName}
               disabled
               className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
             />
@@ -1330,60 +1673,25 @@ const InvoicePage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Invoice Date
+              Total Amount
             </label>
             <input
               type="text"
-              value={new Date(selectedInvoice.invoiceDate).toLocaleDateString('en-LK', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
+              value={`LKR ${selectedInvoice.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
               disabled
               className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
             />
           </div>
 
+          {/* Editable Status Field */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Period From
-            </label>
-            <input
-              type="text"
-              value={new Date(selectedInvoice.periodFrom).toLocaleDateString('en-LK', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-              disabled
-              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Period To
-            </label>
-            <input
-              type="text"
-              value={new Date(selectedInvoice.periodTo).toLocaleDateString('en-LK', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-              disabled
-              className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Status <span className="text-red-500">*</span>
+              Status<span className="text-red-500 ml-1">*</span>
             </label>
             <select
               value={invoiceStatus}
               onChange={(e) => setInvoiceStatus(e.target.value as 'draft' | 'issued' | 'paid' | 'overdue')}
-              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-500 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-400"
             >
               <option value="draft">Draft</option>
               <option value="issued">Issued</option>
@@ -1430,101 +1738,50 @@ const InvoicePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Monthly Breakdown Table */}
-        <div className="border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-100 dark:bg-slate-700 sticky top-0">
-                <tr>
-                  <th className="px-3 py-2 text-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedMonths.size === monthlyInvoicePreviews.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedMonths(new Set(monthlyInvoicePreviews.map((_, idx) => idx)));
-                        } else {
-                          setSelectedMonths(new Set());
-                        }
-                      }}
-                      className="rounded border-gray-300 dark:border-slate-600"
-                    />
-                  </th>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Month</th>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">Period</th>
-                  <th className="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-300">Days</th>
-                  <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300">Subtotal</th>
-                  <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300">VAT</th>
-                  <th className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-300">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
-                {monthlyInvoicePreviews.map((preview, index) => (
-                  <tr 
-                    key={index} 
-                    className={`${
-                      selectedMonths.has(index) 
-                        ? 'bg-green-50 dark:bg-green-900/20' 
-                        : 'bg-white dark:bg-slate-800'
-                    } hover:bg-gray-50 dark:hover:bg-slate-750 transition-colors`}
-                  >
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedMonths.has(index)}
-                        onChange={() => toggleMonthSelection(index)}
-                        className="rounded border-gray-300 dark:border-slate-600"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-gray-900 dark:text-white font-medium">
-                      {preview.month} {preview.year}
-                      {preview.isPartialMonth && (
-                        <span className="ml-2 text-xs px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded-full">
-                          Prorated
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300 text-xs">
-                      {dateStr(preview.periodFrom)} - {dateStr(preview.periodTo)}
-                    </td>
-                    <td className="px-3 py-2 text-center text-gray-700 dark:text-gray-300">
-                      {preview.daysInPeriod}/{preview.daysInMonth}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-900 dark:text-white">
-                      LKR {preview.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">
-                      LKR {preview.vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold text-gray-900 dark:text-white">
-                      LKR {preview.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Summary of Selection */}
-        {selectedMonths.size > 0 && (
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-green-900 dark:text-green-200">
-                  {selectedMonths.size} invoice{selectedMonths.size > 1 ? 's' : ''} selected
-                </p>
-                <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                  Total Amount: LKR {Array.from(selectedMonths)
-                    .reduce((sum, idx) => sum + monthlyInvoicePreviews[idx].totalAmount, 0)
-                    .toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                </p>
+        {/* Monthly Invoice Previews */}
+        <div className="space-y-3 max-h-[500px] overflow-y-auto">
+          {monthlyInvoicePreviews.map((preview, index) => (
+            <div
+              key={index}
+              className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                selectedMonths.has(index)
+                  ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20'
+                  : 'border-gray-300 dark:border-slate-600 hover:border-gray-400 dark:hover:border-slate-500'
+              }`}
+              onClick={() => toggleMonthSelection(index)}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-base font-semibold text-gray-900 dark:text-white">
+                  {preview.month} {preview.year}
+                </h4>
+                <input
+                  type="checkbox"
+                  checked={selectedMonths.has(index)}
+                  onChange={() => toggleMonthSelection(index)}
+                  className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <div>
+                  <span className="font-medium">Period:</span> {dateStr(preview.periodFrom)} to {dateStr(preview.periodTo)}
+                </div>
+                <div>
+                  <span className="font-medium">Days:</span> {preview.daysInPeriod}/{preview.daysInMonth}
+                  {preview.isPartialMonth && <span className="ml-1 text-orange-600 dark:text-orange-400">(Prorated)</span>}
+                </div>
+                <div>
+                  <span className="font-medium">Subtotal:</span> LKR {preview.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </div>
+                <div>
+                  <span className="font-medium">Total:</span> LKR {preview.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
 
-        {/* Information Note */}
+        {/* Note about prorated invoices */}
         <div className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-3">
           <p className="text-xs text-gray-600 dark:text-gray-400">
             <span className="font-semibold">Note:</span> Prorated invoices are calculated as: 
@@ -1534,6 +1791,17 @@ const InvoicePage: React.FC = () => {
       </div>
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-indigo-500"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading invoices...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1595,83 +1863,43 @@ const InvoicePage: React.FC = () => {
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create Invoice</h2>
                 <button
                   onClick={handleCloseCreateModal}
-                  className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                   aria-label="Close"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
 
-              {/* Modal Content — scrollable invoice-style form */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-100/50 dark:bg-slate-900/60">
+              {/* Modal Body — scrollable form */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                 {renderInvoiceForm()}
               </div>
 
-              {/* Modal Footer — actions */}
-              <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800">
+              {/* Modal Footer */}
+              <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
                 <button
-                  type="button"
                   onClick={handleCloseCreateModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded border border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
-                  type="button"
                   onClick={handleSubmitCreate}
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-500 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 hover:bg-blue-700 dark:hover:bg-indigo-700 rounded border border-blue-700 dark:border-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  {isSubmitting ? 'Creating...' : 'Create Invoice'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Update Invoice Modal - Simplified */}
-        {isUpdateModalOpen && selectedInvoice && (
-          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-                <div>
-                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Update Invoice</h2>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                    Invoice Number: {selectedInvoice.invoiceNumber}
-                  </p>
-                </div>
-                <button
-                  onClick={handleCloseUpdateModal}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Modal Content - Scrollable */}
-              <div className="flex-1 overflow-y-auto p-6">
-                {renderUpdateForm()}
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={handleCloseUpdateModal}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmitUpdate}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? 'Updating...' : 'Update Invoice'}
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4" />
+                      Create Invoice
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1688,21 +1916,22 @@ const InvoicePage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handlePrint}
-                    className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
+                    className="px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-indigo-400 border border-blue-600 dark:border-indigo-400 rounded hover:bg-blue-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-1.5"
                   >
                     <Printer className="w-4 h-4" />
-                    <span>Print</span>
+                    Print
                   </button>
                   <button
                     onClick={handleCloseViewModal}
-                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                    className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                    aria-label="Close"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                   </button>
                 </div>
               </div>
 
-              {/* Modal Content - Scrollable invoice; header and Print stay fixed above */}
+              {/* Modal Body - Scrollable invoice content */}
               <div className="flex-1 overflow-y-auto p-6">
                 {renderInvoiceDetails()}
               </div>
@@ -1710,63 +1939,71 @@ const InvoicePage: React.FC = () => {
           </div>
         )}
 
+        {/* Update Invoice Modal */}
+        {isUpdateModalOpen && selectedInvoice && (
+          <UpdateForm
+            title="Update Invoice Status"
+            isOpen={isUpdateModalOpen}
+            onClose={handleCloseUpdateModal}
+            onSubmit={handleSubmitUpdate}
+            isSubmitting={isSubmitting}
+          >
+            {renderUpdateForm()}
+          </UpdateForm>
+        )}
+
         {/* Monthly Invoice Generation Modal */}
         {isMonthlyInvoiceModalOpen && selectedInvoice && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/30 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-700">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-600">
               {/* Modal Header */}
-              <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-700 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    Generate Monthly Invoices
-                  </h2>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                    Invoice: {selectedInvoice.invoiceNumber} | {selectedInvoice.customerName}
-                  </p>
-                </div>
+              <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Generate Monthly Invoices</h2>
                 <button
                   onClick={handleCloseMonthlyInvoiceModal}
-                  className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                   aria-label="Close"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
 
-              {/* Modal Content — scrollable monthly breakdown */}
+              {/* Modal Body */}
               <div className="flex-1 overflow-y-auto p-6">
                 {renderMonthlyInvoiceModal()}
               </div>
 
-              {/* Modal Footer — actions */}
-              <div className="flex-shrink-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
-                <button
-                  type="button"
-                  onClick={handleCloseMonthlyInvoiceModal}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGenerateSelectedInvoices}
-                  disabled={isSubmitting || selectedMonths.size === 0}
-                  className="px-6 py-2 text-sm font-medium text-white bg-green-600 dark:bg-green-600 rounded-lg hover:bg-green-700 dark:hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-4 h-4" />
-                      Generate {selectedMonths.size > 0 ? `${selectedMonths.size} ` : ''}Invoice{selectedMonths.size !== 1 ? 's' : ''}
-                    </>
-                  )}
-                </button>
+              {/* Modal Footer */}
+              <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {selectedMonths.size} of {monthlyInvoicePreviews.length} month(s) selected
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleCloseMonthlyInvoiceModal}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded border border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleGenerateSelectedInvoices}
+                    disabled={isSubmitting || selectedMonths.size === 0}
+                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded border border-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4" />
+                        Generate {selectedMonths.size > 0 ? `${selectedMonths.size} ` : ''}Invoice{selectedMonths.size !== 1 ? 's' : ''}
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

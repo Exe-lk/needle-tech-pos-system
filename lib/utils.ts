@@ -22,7 +22,7 @@ export function parseQueryParams(searchParams: URLSearchParams) {
     page: Math.max(1, page),
     limit: Math.min(100, Math.max(1, limit)),
     sortBy,
-    sortOrder: sortOrder === 'asc' ? 1 : -1,
+     sortOrder: (sortOrder === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
     search,
   };
 }

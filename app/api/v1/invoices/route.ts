@@ -33,7 +33,7 @@ import prisma from '@/lib/prisma';
  *         schema:
  *           type: string
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -109,60 +109,10 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *               totalAmount:
  *                 type: number
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest, context: any) => {
   try {
     const body = await request.json();
-    const { customerId, rentalId, totalAmount = 0, notes = '' } = body;
-    
-    if (!customerId || !rentalId) {
-      return validationErrorResponse('Missing required fields', {
-        customerId: !customerId ? ['Customer ID is required'] : [],
-        rentalId: !rentalId ? ['Rental ID is required'] : [],
-      });
-    }
-    
-    // Verify customer and rental exist
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-    const rental = await prisma.rental.findUnique({ where: { id: rentalId } });
-    
-    if (!customer || !rental) {
-      return validationErrorResponse('Invalid customer or rental', {
-        customerId: !customer ? ['Customer not found'] : [],
-        rentalId: !rental ? ['Rental not found'] : [],
-      });
-    }
-    
-    const newInvoice = await prisma.invoice.create({
-      data: {
-        customerId,
-        rentalId,
-        totalAmount,
-        status: 'DRAFT',
-        notes,
-      },
-      include: { customer: true, rental: true }
-    });
-    
-    return successResponse(newInvoice, 'Invoice created successfully', 201);
-  } catch (error: any) {
-    console.error('Error creating invoice:', error);
-    return errorResponse('Failed to create invoice', 500);
-  }
-});
-        ...(rentalIdFilter && { rentalId: rentalIdFilter }),
-        ...(paymentStatusFilter && { paymentStatus: paymentStatusFilter }),
-      }
-    );
-  } catch (error: any) {
-    console.error('Error fetching invoices:', error);
-    return errorResponse('Failed to retrieve invoices', 500);
-  }
-});
-
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
-  try {
-    const body = await request.json();
-    const { customerId, rentalId, type, lineItems, issueDate, dueDate } = body;
+    const { customerId, rentalId, type, taxCategory, lineItems, issueDate, dueDate, subtotal, vatAmount, grandTotal } = body;
     
     if (!customerId || !type || !lineItems || !Array.isArray(lineItems) || lineItems.length === 0) {
       return validationErrorResponse('Missing required fields', {
@@ -172,6 +122,7 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
       });
     }
     
+    // Verify customer exists
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
     if (!customer) {
       return validationErrorResponse('Customer not found', {
@@ -179,10 +130,10 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
       });
     }
     
-    let rentalCheck = null;
+    // Verify rental if provided
     if (rentalId) {
-      rentalCheck = await prisma.rental.findUnique({ where: { id: rentalId } });
-      if (!rentalCheck) {
+      const rental = await prisma.rental.findUnique({ where: { id: rentalId } });
+      if (!rental) {
         return validationErrorResponse('Rental not found', {
           rentalId: ['Rental not found'],
         });
@@ -190,14 +141,25 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
     }
     
     const now = new Date();
+    const invoiceNumber = `INV-${Date.now()}`;
+    const userId = context.user?.id || 'system';
+    
     const newInvoice = await prisma.invoice.create({
       data: {
+        invoiceNumber,
         customerId,
         rentalId: rentalId || null,
         type,
-        status: 'ISSUED',
+        taxCategory: taxCategory || 'STANDARD',
+        status: 'DRAFT',
         issueDate: issueDate ? new Date(issueDate) : now,
         dueDate: dueDate ? new Date(dueDate) : now,
+        lineItems,
+        subtotal: subtotal || 0,
+        vatAmount: vatAmount || 0,
+        grandTotal: grandTotal || 0,
+        balance: grandTotal || 0,
+        createdByUserId: userId,
       },
       include: { customer: true, rental: true }
     });

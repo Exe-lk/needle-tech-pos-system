@@ -79,22 +79,3 @@ export const DELETE = withAuthAndRole(['ADMIN'], async (
     return errorResponse('Failed to delete rental', 500);
   }
 });
-    };
-    
-    if (body.status !== undefined) updateData.status = body.status;
-    if (body.expectedEndDate !== undefined) updateData.expectedEndDate = new Date(body.expectedEndDate);
-    if (body.actualEndDate !== undefined) updateData.actualEndDate = new Date(body.actualEndDate);
-    
-    await db.collection('rentals').updateOne(
-      { _id: rentalId },
-      { $set: updateData }
-    );
-    
-    const updatedRental = await db.collection('rentals').findOne({ _id: rentalId });
-    
-    return successResponse(sanitizeObject(updatedRental!), 'Rental updated successfully');
-  } catch (error: any) {
-    console.error('Error updating rental:', error);
-    return errorResponse('Failed to update rental', 500);
-  }
-});
