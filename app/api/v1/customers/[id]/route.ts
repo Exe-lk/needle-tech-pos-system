@@ -108,24 +108,4 @@ export const DELETE = withAuthAndRole(['ADMIN'], async (
     console.error('Error deleting customer:', error);
     return errorResponse('Failed to delete customer', 500);
   }
-};
-      return notFoundResponse('Customer not found');
-    }
-    
-    // Soft delete
-    await db.collection('customers').updateOne(
-      { _id: customerId },
-      { 
-        $set: { 
-          status: 'INACTIVE',
-          updatedAt: new Date(),
-        } 
-      }
-    );
-    
-    return successResponse(null, 'Customer deleted successfully', 200);
-  } catch (error: any) {
-    console.error('Error deleting customer:', error);
-    return errorResponse('Failed to delete customer', 500);
-  }
 });

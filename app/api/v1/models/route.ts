@@ -120,34 +120,3 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
     return errorResponse('Failed to create model', 500);
   }
 });
-        name: ['Model with this name already exists for this brand'],
-      });
-    }
-    
-    const now = new Date();
-    const newModel = {
-      name: name.trim(),
-      brandName: finalBrandName,
-      code: modelCode,
-      description: description || '',
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-    
-    const result = await db.collection('models').insertOne(newModel);
-    const createdModel = await db.collection('models').findOne({ _id: result.insertedId });
-    
-    // Populate brand
-    const brand = await db.collection('brands').findOne({ name: finalBrandName });
-    const populatedModel = {
-      ...createdModel,
-      brand: sanitizeObject(brand),
-    };
-    
-    return successResponse(sanitizeObject(populatedModel), 'Model created successfully', 201);
-  } catch (error: any) {
-    console.error('Error creating model:', error);
-    return errorResponse('Failed to create model', 500);
-  }
-});

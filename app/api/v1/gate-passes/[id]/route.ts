@@ -79,30 +79,4 @@ export const DELETE = withAuthAndRole(['ADMIN'], async (
     return errorResponse('Failed to delete gate pass', 500);
   }
 });
-    
-    const existingGatePass = await db.collection('gatePasses').findOne({ _id: gatePassId });
-    if (!existingGatePass) {
-      return notFoundResponse('Gate pass not found');
-    }
-    
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
-    
-    if (body.status !== undefined) updateData.status = body.status;
-    if (body.arrivalTime !== undefined) updateData.arrivalTime = new Date(body.arrivalTime);
-    if (body.printedAt !== undefined) updateData.printedAt = new Date(body.printedAt);
-    
-    await db.collection('gatePasses').updateOne(
-      { _id: gatePassId },
-      { $set: updateData }
-    );
-    
-    const updatedGatePass = await db.collection('gatePasses').findOne({ _id: gatePassId });
-    
-    return successResponse(sanitizeObject(updatedGatePass!), 'Gate pass updated successfully');
-  } catch (error: any) {
-    console.error('Error updating gate pass:', error);
-    return errorResponse('Failed to update gate pass', 500);
-  }
-});
+

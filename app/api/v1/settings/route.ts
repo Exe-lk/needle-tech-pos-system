@@ -68,48 +68,23 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *               defaultVatRate:
  *                 type: number
  */
-export async function PUT(request: NextRequest) {
-  return withAuthAndRole(['ADMIN'], async (req: NextRequest) => {
-    try {
-      const body = await req.json();
-      const { companyName, companyAddress, currency, defaultVatRate, ...otherFields } = body;
-
-      const updated = await prisma.settings.update({
-        where: { id: 'global' },
-        data: {
-          ...(companyName !== undefined && { companyName }),
-          ...(companyAddress !== undefined && { companyAddress }),
-          ...(currency !== undefined && { currency }),
-          ...(defaultVatRate !== undefined && { defaultVatRate: new Decimal(defaultVatRate) }),
-          ...otherFields,
-        }
-      });
-
-      return successResponse(updated, 'Settings updated successfully');
-    } catch (error: any) {
-      console.error('Error updating settings:', error);
-      return errorResponse('Failed to update settings', 500);
-    }
-  })(request);
-}
-
 export const PUT = withAuthAndRole(['ADMIN'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    
-    const updatedSettings = await prisma.settings.update({
+    const { companyName, companyAddress, currency, defaultVatRate, ...otherFields } = body;
+
+    const updated = await prisma.settings.update({
       where: { id: 'global' },
       data: {
-        ...(body.company && { company: body.company }),
-        ...(body.tax && { tax: body.tax }),
-        ...(body.creditPolicy && { creditPolicy: body.creditPolicy }),
-        ...(body.alertSchedule && { alertSchedule: body.alertSchedule }),
-        ...(body.invoiceSettings && { invoiceSettings: body.invoiceSettings }),
-        ...(body.rentalSettings && { rentalSettings: body.rentalSettings }),
+        ...(companyName !== undefined && { companyName }),
+        ...(companyAddress !== undefined && { companyAddress }),
+        ...(currency !== undefined && { currency }),
+        ...(defaultVatRate !== undefined && { defaultVatRate: new Decimal(defaultVatRate) }),
+        ...otherFields,
       }
     });
-    
-    return successResponse(updatedSettings, 'Settings updated successfully');
+
+    return successResponse(updated, 'Settings updated successfully');
   } catch (error: any) {
     console.error('Error updating settings:', error);
     return errorResponse('Failed to update settings', 500);
