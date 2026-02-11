@@ -155,6 +155,7 @@ model Customer {
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
   // Relations
+  purchaseOrders  PurchaseOrder[]
   rentals         Rental[]
   invoices        Invoice[]
   payments        Payment[]
@@ -368,11 +369,91 @@ enum ToolCondition {
   POOR
 }
 
+// ============ Purchase Orders (Purchase Requests) ============
+
+model PurchaseOrder {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestNumber   String   @unique
+  customerId      String   @db.Uuid
+  requestDate     DateTime @db.Timestamptz(6)
+  totalAmount     Decimal  @db.Decimal(15, 2)
+  status          PurchaseOrderStatus @default(PENDING)
+  
+  // Purchase request machines (stored as JSON for flexibility)
+  machines        Json[] // Array of machine requests with quantities
+  
+  notes           String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  rentals         Rental[] @relation("PurchaseOrderRentals")
+
+  @@index([requestNumber])
+  @@index([customerId])
+  @@index([status])
+  @@index([requestDate])
+  @@map("purchase_orders")
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+  PARTIALLY_FULFILLED
+}
+
+// ============ Bincard (Stock Movements) ============
+
+model BincardEntry {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date            DateTime @db.Timestamptz(6)
+  transactionType StockTransactionType
+  
+  // Machine identification (denormalized for easier querying)
+  brand           String
+  model           String
+  machineType     String?
+  
+  // Transaction details
+  reference       String? // PO number, rental number, etc.
+  quantityIn      Int     @default(0)
+  quantityOut     Int     @default(0)
+  balance         Int
+  location        String?
+  
+  performedBy     String?
+  notes           String?
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([date(sort: Desc)])
+  @@index([brand])
+  @@index([model])
+  @@index([transactionType])
+  @@map("bincard_entries")
+}
+
+enum StockTransactionType {
+  STOCK_IN
+  STOCK_OUT
+  RENTAL_OUT
+  RETURN_IN
+  MAINTENANCE_OUT
+  MAINTENANCE_IN
+  RETIRED
+  ADJUSTMENT
+}
+
 
 model Rental {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   agreementNumber String   @unique
   customerId      String   @db.Uuid
+  purchaseOrderId String?  @db.Uuid
   status          RentalStatus @default(ACTIVE)
   agreementType   String   @default("RENTAL")
   
@@ -400,6 +481,7 @@ model Rental {
 
   // Relations
   customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder? @relation("PurchaseOrderRentals", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   createdBy       User      @relation("RentalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   
   machines        RentalMachine[]
@@ -410,6 +492,7 @@ model Rental {
 
   @@index([agreementNumber])
   @@index([customerId])
+  @@index([purchaseOrderId])
   @@index([status])
   @@index([startDate])
   @@index([createdByUserId])
