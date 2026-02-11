@@ -69,22 +69,22 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *                 type: number
  */
 export const PUT = withAuthAndRole(['ADMIN'], async (request: NextRequest) => {
-  try {
+    try {
     const body = await request.json();
-    const { companyName, companyAddress, currency, defaultVatRate, ...otherFields } = body;
+      const { companyName, companyAddress, currency, defaultVatRate, ...otherFields } = body;
 
-    const updated = await prisma.settings.update({
-      where: { id: 'global' },
-      data: {
-        ...(companyName !== undefined && { companyName }),
-        ...(companyAddress !== undefined && { companyAddress }),
-        ...(currency !== undefined && { currency }),
-        ...(defaultVatRate !== undefined && { defaultVatRate: new Decimal(defaultVatRate) }),
-        ...otherFields,
-      }
-    });
+      const updated = await prisma.settings.update({
+        where: { id: 'global' },
+        data: {
+          ...(companyName !== undefined && { companyName }),
+          ...(companyAddress !== undefined && { companyAddress }),
+          ...(currency !== undefined && { currency }),
+          ...(defaultVatRate !== undefined && { defaultVatRate: new Decimal(defaultVatRate) }),
+          ...otherFields,
+        }
+      });
 
-    return successResponse(updated, 'Settings updated successfully');
+      return successResponse(updated, 'Settings updated successfully');
   } catch (error: any) {
     console.error('Error updating settings:', error);
     return errorResponse('Failed to update settings', 500);

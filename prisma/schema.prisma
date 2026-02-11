@@ -287,6 +287,10 @@ model Machine {
   lastRentalId       String?   @db.Uuid
   totalRentalDays    Int       @default(0)
   
+  // Pricing
+  unitPrice          Decimal?  @db.Decimal(10, 2)
+  monthlyRentalFee   Decimal?  @db.Decimal(10, 2)
+  
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
@@ -315,6 +319,53 @@ enum MachineStatus {
   DAMAGED
   MAINTENANCE
   RETIRED
+}
+
+// ============ Tools Management ============
+
+model Tool {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  toolName        String
+  toolType        String
+  brand           String?
+  model           String?
+  serialNumber    String?
+  quantity        Int
+  unitPrice       Decimal? @db.Decimal(10, 2)
+  status          ToolStatus @default(AVAILABLE)
+  location        String
+  purchaseDate    DateTime? @db.Timestamptz(6)
+  condition       ToolCondition @default(GOOD)
+  notes           String?
+  toolPhotoUrls   String[] // Array of photo URLs
+  
+  // Soft delete
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime? @db.Timestamptz(6)
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([toolName])
+  @@index([toolType])
+  @@index([status])
+  @@index([location])
+  @@index([isDeleted])
+  @@map("tools")
+}
+
+enum ToolStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  RETIRED
+}
+
+enum ToolCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
 }
 
 

@@ -33,7 +33,7 @@ import prisma from '@/lib/prisma';
  *         schema:
  *           type: string
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -109,7 +109,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
  *               totalAmount:
  *                 type: number
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest, context: any) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest, context: any) => {
   try {
     const body = await request.json();
     const { customerId, rentalId, type, taxCategory, lineItems, issueDate, dueDate, subtotal, vatAmount, grandTotal } = body;
