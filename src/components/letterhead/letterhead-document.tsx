@@ -97,16 +97,7 @@ export function LetterheadDocument({
 
       {/* Footer - simple: address, tel/fax, email (Hiring Agreement); full: + cheque + importer */}
       <div className="border-t border-gray-300 dark:border-slate-600 pt-4 mt-6 print:mt-4 print:border-gray-300">
-        {useFullFooter && (
-          <>
-            <p className="text-sm text-gray-700 dark:text-slate-300 text-center mb-3 print:text-xs print:text-gray-700">
-              All Cheques should be drawn in favor of &quot;{info.chequePayableTo}&quot;
-            </p>
-            <div className="text-[10px] sm:text-xs text-gray-700 dark:text-slate-300 text-center mb-2 px-2 print:text-[10px] print:text-gray-700 leading-tight">
-              {info.importerInfo}
-            </div>
-          </>
-        )}
+        
         <div className="text-xs text-gray-700 dark:text-slate-300 text-center space-y-1 px-2 print:text-xs print:text-gray-700">
           <div>{info.address}</div>
           <div>Tel: {info.telephone.map((t) => t.replace(/-/g, '')).join(', ')} Fax: 2487623</div>

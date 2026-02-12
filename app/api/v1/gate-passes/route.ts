@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse, validationErrorRespo
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import type { AuthUser } from '@/lib/auth-supabase';
 
 /**
  * @swagger
@@ -13,7 +14,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -36,14 +37,32 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
     
     const totalItems = await prisma.gatePass.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
     
     const gatePasses = await prisma.gatePass.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { [sortBy]: sortOrder_ },
-      include: { rental: true }
+      orderBy: { [sortBy]: sortOrder },
+      include: { 
+        rental: {
+          include: {
+            customer: true,
+          }
+        },
+        customer: true,
+        issuedBy: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              }
+            }
+          }
+        }
+      }
     });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
@@ -52,7 +71,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
       gatePasses,
       pagination,
       'Gate passes retrieved successfully',
-      { sortBy, sortOrder: sortOrder_ },
+      { sortBy, sortOrder },
       search || undefined,
       {
         ...(statusFilter && { status: statusFilter }),
@@ -74,7 +93,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { rentalId, driverName, vehicleNumber, departureTime, returnTime, notes } = body;
@@ -87,7 +106,23 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
       });
     }
     
-    const rental = await prisma.rental.findUnique({ where: { id: rentalId } });
+    const rental = await prisma.rental.findUnique({ 
+      where: { id: rentalId },
+      include: { 
+        customer: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              }
+            }
+          }
+        }
+      }
+    });
     
     if (!rental) {
       return validationErrorResponse('Rental not found', {
@@ -95,17 +130,66 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
       });
     }
     
+    // Get settings for gate pass number generation
+    const settings = await prisma.settings.findUnique({ where: { id: 'global' } });
+    const prefix = settings?.gatePassPrefix || 'GP';
+    const startNumber = settings?.gatePassStartNumber || 1000;
+    
+    // Get the last gate pass number
+    const lastGatePass = await prisma.gatePass.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { gatePassNumber: true }
+    });
+    
+    let nextNumber = startNumber;
+    if (lastGatePass?.gatePassNumber) {
+      const lastNumberMatch = lastGatePass.gatePassNumber.match(/\d+$/);
+      if (lastNumberMatch) {
+        nextNumber = parseInt(lastNumberMatch[0]) + 1;
+      }
+    }
+    
+    const gatePassNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+    
+    // Create gate pass with machines
     const newGatePass = await prisma.gatePass.create({
       data: {
+        gatePassNumber,
         rentalId,
+        customerId: rental.customerId,
         driverName: driverName.trim(),
         vehicleNumber: vehicleNumber.trim(),
         departureTime: departureTime ? new Date(departureTime) : new Date(),
-        returnTime: returnTime ? new Date(returnTime) : null,
-        status: 'ACTIVE',
-        notes: notes || '',
+        arrivalTime: returnTime ? new Date(returnTime) : null,
+        status: 'PENDING',
+        issuedByUserId: auth.id,
+        machines: {
+          create: rental.machines.map(m => ({
+            machineId: m.machineId,
+            quantity: 1,
+          }))
+        }
       },
-      include: { rental: true }
+      include: { 
+        rental: {
+          include: {
+            customer: true,
+          }
+        },
+        customer: true,
+        issuedBy: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              }
+            }
+          }
+        }
+      }
     });
     
     return successResponse(newGatePass, 'Gate pass created successfully', 201);

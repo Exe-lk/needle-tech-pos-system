@@ -13,7 +13,26 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     const gatePass = await prisma.gatePass.findUnique({
       where: { id },
-      include: { rental: true }
+      include: { 
+        rental: {
+          include: {
+            customer: true,
+          }
+        },
+        customer: true,
+        issuedBy: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              }
+            }
+          }
+        }
+      }
     });
     
     if (!gatePass) {
@@ -46,9 +65,30 @@ export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
       data: {
         ...(body.status && { status: body.status }),
         ...(body.returnTime && { returnTime: new Date(body.returnTime) }),
-        ...(body.notes && { notes: body.notes }),
+        ...(body.arrivalTime && { arrivalTime: new Date(body.arrivalTime) }),
+        ...(body.driverName && { driverName: body.driverName }),
+        ...(body.vehicleNumber && { vehicleNumber: body.vehicleNumber }),
       },
-      include: { rental: true }
+      include: { 
+        rental: {
+          include: {
+            customer: true,
+          }
+        },
+        customer: true,
+        issuedBy: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              }
+            }
+          }
+        }
+      }
     });
     
     return successResponse(updatedGatePass, 'Gate pass updated successfully');

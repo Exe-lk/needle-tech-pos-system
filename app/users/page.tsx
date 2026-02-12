@@ -279,6 +279,38 @@ const deleteUser = async (userId: string): Promise<{ success: boolean; error?: s
   }
 };
 
+const createRole = async (roleData: {
+  name: string;
+  description?: string;
+  permissions: string[];
+}): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/roles`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(roleData),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: result.message || 'Failed to create role',
+      };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error creating role:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+};
+
 // ============================================================================
 // TABLE CONFIGURATION
 // ============================================================================
@@ -372,6 +404,7 @@ const UserManagementPage: React.FC = () => {
   
   // Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [activeCreateTab, setActiveCreateTab] = useState<'user' | 'roles'>('user');
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -458,14 +491,56 @@ const UserManagementPage: React.FC = () => {
     window.location.href = '/';
   };
 
-  // Create User Handlers
+  // Create User / Role Handlers
   const handleCreateUser = () => {
     setIsCreateModalOpen(true);
+    setActiveCreateTab('user');
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
+    setActiveCreateTab('user');
     setError(null);
+  };
+
+  const handleRoleSubmit = async (data: Record<string, any>) => {
+    const name = (data.roleName || '').trim();
+    if (!name) {
+      setError('Role name is required.');
+      return;
+    }
+    const permissions = (data.permissionsText || '')
+      .split('\n')
+      .map((p: string) => p.trim())
+      .filter(Boolean);
+    if (permissions.length === 0) {
+      setError('At least one permission is required (e.g. * or users:read).');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const result = await createRole({
+        name,
+        description: (data.roleDescription || '').trim() || undefined,
+        permissions,
+      });
+
+      if (result.success) {
+        alert(`Role "${name}" created successfully.`);
+        handleCloseCreateModal();
+        await loadRoles();
+      } else {
+        setError(result.error || 'Failed to create role');
+      }
+    } catch (err: any) {
+      console.error('Error creating role:', err);
+      setError('Failed to create role. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleUserSubmit = async (data: Record<string, any>) => {
@@ -764,6 +839,32 @@ const UserManagementPage: React.FC = () => {
     },
   ];
 
+  const roleFields: FormField[] = [
+    {
+      name: 'roleName',
+      label: 'Role Name',
+      type: 'text',
+      placeholder: 'e.g. MANAGER, OPERATOR',
+      required: true,
+    },
+    {
+      name: 'roleDescription',
+      label: 'Description',
+      type: 'textarea',
+      placeholder: 'Enter role description (optional)',
+      required: false,
+      rows: 2,
+    },
+    {
+      name: 'permissionsText',
+      label: 'Permissions',
+      type: 'textarea',
+      placeholder: 'One permission per line (e.g. users:read, users:write, *)',
+      required: true,
+      rows: 5,
+    },
+  ];
+
   // ============================================================================
   // HELPER METHODS
   // ============================================================================
@@ -962,7 +1063,7 @@ const UserManagementPage: React.FC = () => {
               searchable
               filterable
               onCreateClick={handleCreateUser}
-              createButtonLabel="Create User"
+              createButtonLabel="Create"
               getRowClassName={getRowClassName}
               emptyMessage="No users found."
             />
@@ -970,13 +1071,13 @@ const UserManagementPage: React.FC = () => {
         </div>
       </main>
 
-      {/* Create User Modal */}
+      {/* Create Modal (User + Roles tabs) */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Create User
+                Create
               </h2>
               <Tooltip content="Close">
                 <button
@@ -988,23 +1089,68 @@ const UserManagementPage: React.FC = () => {
               </Tooltip>
             </div>
 
+            {/* Tabs */}
+            <div className="border-b border-gray-200 dark:border-slate-700 px-6">
+              <div className="flex space-x-4">
+                <Tooltip content="Create a new user account">
+                  <button
+                    onClick={() => setActiveCreateTab('user')}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeCreateTab === 'user'
+                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    User
+                  </button>
+                </Tooltip>
+                <Tooltip content="Create a new role with permissions">
+                  <button
+                    onClick={() => setActiveCreateTab('roles')}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeCreateTab === 'roles'
+                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    Roles
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+
+            {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               {error && (
                 <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
                   <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
                 </div>
               )}
-              <CreateForm
-                title="User Details"
-                fields={userFields}
-                onSubmit={handleUserSubmit}
-                onClear={handleClear}
-                submitButtonLabel="Create User"
-                clearButtonLabel="Clear"
-                loading={isSubmitting}
-                enableDynamicSpecs={false}
-                className="shadow-none border-0 p-0"
-              />
+              {activeCreateTab === 'user' ? (
+                <CreateForm
+                  title="User Details"
+                  fields={userFields}
+                  onSubmit={handleUserSubmit}
+                  onClear={handleClear}
+                  submitButtonLabel="Create User"
+                  clearButtonLabel="Clear"
+                  loading={isSubmitting}
+                  enableDynamicSpecs={false}
+                  className="shadow-none border-0 p-0"
+                />
+              ) : (
+                <CreateForm
+                  title="Role Details"
+                  fields={roleFields}
+                  onSubmit={handleRoleSubmit}
+                  onClear={handleClear}
+                  submitButtonLabel="Create Role"
+                  clearButtonLabel="Clear"
+                  loading={isSubmitting}
+                  enableDynamicSpecs={false}
+                  className="shadow-none border-0 p-0"
+                />
+              )}
             </div>
           </div>
         </div>

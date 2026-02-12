@@ -8,8 +8,10 @@ import {
   CheckCircle2,
   FileText,
   ImagePlus,
+  Moon,
   Package,
   Scan,
+  Sun,
   Trash2,
   X,
   RotateCcw,
@@ -290,6 +292,10 @@ const ReturnQRPage: React.FC = () => {
   const [agreementError, setAgreementError] = useState<string | null>(null);
   const [selectedAgreement, setSelectedAgreement] = useState<RentalAgreement | null>(null);
 
+  // Theme (light / dark) – same pattern as gatepass-qr-page
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
   // Machines + return state
   const [machines, setMachines] = useState<MachineReturnState[]>([]);
   const [currentMachineIndex, setCurrentMachineIndex] = useState<number | null>(null);
@@ -332,6 +338,33 @@ const ReturnQRPage: React.FC = () => {
       machines.forEach((m) => m.photoPreviews?.forEach((p) => URL.revokeObjectURL(p)));
     };
   }, [machines]);
+
+  // Theme init from localStorage + system preference (same as gatepass-qr-page)
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldBeDark = savedTheme === 'dark' || (savedTheme !== 'light' && systemPrefersDark);
+    if (shouldBeDark) {
+      document.documentElement.classList.add('dark');
+      setIsDarkMode(true);
+    } else {
+      document.documentElement.classList.remove('dark');
+      setIsDarkMode(false);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const nextDark = !isDarkMode;
+    setIsDarkMode(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   const showFeedback = useCallback((fb: { type: ScanResultType; title: string; message: string }) => {
     setLastFeedback(fb);
@@ -608,10 +641,10 @@ const ReturnQRPage: React.FC = () => {
     if (!lastFeedback) return null;
     const styles =
       lastFeedback.type === 'success'
-        ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-100'
+        ? 'bg-emerald-100 dark:bg-emerald-950/60 border-emerald-400 dark:border-emerald-500/60 text-emerald-800 dark:text-emerald-100'
         : lastFeedback.type === 'duplicate'
-        ? 'bg-amber-950/60 border-amber-500/60 text-amber-100'
-        : 'bg-red-950/60 border-red-500/60 text-red-100';
+        ? 'bg-amber-100 dark:bg-amber-950/60 border-amber-400 dark:border-amber-500/60 text-amber-800 dark:text-amber-100'
+        : 'bg-red-100 dark:bg-red-950/60 border-red-400 dark:border-red-500/60 text-red-800 dark:text-red-100';
     return (
       <div
         className={`p-3 rounded-xl border ${styles} shadow-lg backdrop-blur-sm`}
@@ -645,32 +678,32 @@ const ReturnQRPage: React.FC = () => {
     };
 
     return (
-      <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm">
-        <div className="w-full sm:max-w-md bg-slate-950 rounded-t-2xl sm:rounded-2xl border border-slate-700 max-h-[85vh] flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-            <p className="text-xs font-semibold text-slate-100">Machine return details</p>
+      <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/50 dark:bg-black/70 backdrop-blur-sm">
+        <div className="w-full sm:max-w-md bg-white dark:bg-slate-950 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-slate-700 max-h-[85vh] flex flex-col shadow-xl">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-slate-700">
+            <p className="text-xs font-semibold text-gray-900 dark:text-slate-100">Machine return details</p>
             <button
               type="button"
               onClick={handleClose}
-              className="p-1.5 rounded-md hover:bg-slate-800"
+              className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-slate-300"
             >
-              <X className="w-4 h-4 text-slate-300" />
+              <X className="w-4 h-4" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             <div>
-              <p className="text-xs font-medium text-slate-300">
+              <p className="text-xs font-medium text-gray-600 dark:text-slate-300">
                 Serial:{' '}
-                <span className="font-mono text-slate-50 break-all">{machine.serialNumber}</span>
+                <span className="font-mono text-gray-900 dark:text-slate-50 break-all">{machine.serialNumber}</span>
               </p>
-              <p className="text-xs font-medium text-slate-400 mt-1">
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mt-1">
                 Box:{' '}
-                <span className="font-mono text-slate-100 break-all">{machine.boxNumber}</span>
+                <span className="font-mono text-gray-800 dark:text-slate-100 break-all">{machine.boxNumber}</span>
               </p>
             </div>
 
             <div>
-              <p className="block text-xs font-semibold text-slate-300 mb-2">Return type</p>
+              <p className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-2">Return type</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {(['Good', 'Standard', 'Damage', 'Missing', 'Exchange'] as ReturnCondition[]).map(
                   (type) => (
@@ -680,8 +713,8 @@ const ReturnQRPage: React.FC = () => {
                       onClick={() => handleReturnTypeChange(currentMachineIndex, type)}
                       className={`min-h-[40px] px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
                         machine.returnType === type
-                          ? 'border-blue-400 bg-blue-600/30 text-blue-100 shadow-sm'
-                          : 'border-slate-600 bg-slate-800/60 text-slate-200 hover:border-blue-500/70'
+                          ? 'border-blue-500 bg-blue-600/20 dark:bg-blue-600/30 text-blue-800 dark:text-blue-100 shadow-sm'
+                          : 'border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-800/60 text-gray-800 dark:text-slate-200 hover:border-blue-400 dark:hover:border-blue-500/70'
                       }`}
                     >
                       {type}
@@ -694,7 +727,7 @@ const ReturnQRPage: React.FC = () => {
             {isDamage && (
               <>
                 <div>
-                  <p className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  <p className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
                     Damage / missing note (required)
                   </p>
                   <textarea
@@ -702,12 +735,12 @@ const ReturnQRPage: React.FC = () => {
                     onChange={(e) => handleDamageNoteChange(currentMachineIndex, e.target.value)}
                     rows={3}
                     placeholder="Describe the damage or missing parts..."
-                    className="w-full min-h-[80px] px-3 py-2 border border-slate-600 rounded-xl bg-slate-900/60 text-xs text-slate-50 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                    className="w-full min-h-[80px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-xl bg-gray-50 dark:bg-slate-900/60 text-xs text-gray-900 dark:text-slate-50 placeholder:text-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
                   />
                 </div>
 
                 <div>
-                  <p className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  <p className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
                     Photos (required, use camera or gallery)
                   </p>
 
@@ -732,14 +765,14 @@ const ReturnQRPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-2">
                     <label
                       htmlFor={cameraId}
-                      className="min-h-[40px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-600 bg-slate-900/70 text-xs font-medium text-slate-100 cursor-pointer hover:border-blue-400 hover:bg-slate-900"
+                      className="min-h-[40px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-900/70 text-xs font-medium text-gray-800 dark:text-slate-100 cursor-pointer hover:border-blue-400 hover:bg-gray-100 dark:hover:bg-slate-900"
                     >
                       <Camera className="w-4 h-4" />
                       Take photo
                     </label>
                     <label
                       htmlFor={uploadId}
-                      className="min-h-[40px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-600 bg-slate-900/70 text-xs font-medium text-slate-100 cursor-pointer hover:border-blue-400 hover:bg-slate-900"
+                      className="min-h-[40px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-900/70 text-xs font-medium text-gray-800 dark:text-slate-100 cursor-pointer hover:border-blue-400 hover:bg-gray-100 dark:hover:bg-slate-900"
                     >
                       <ImagePlus className="w-4 h-4" />
                       Gallery
@@ -754,7 +787,7 @@ const ReturnQRPage: React.FC = () => {
                           <img
                             src={src}
                             alt={`Proof ${idx + 1}`}
-                            className="w-full h-full object-cover rounded-lg border border-slate-700"
+                            className="w-full h-full object-cover rounded-lg border border-gray-300 dark:border-slate-700"
                           />
                           <button
                             type="button"
@@ -771,14 +804,14 @@ const ReturnQRPage: React.FC = () => {
               </>
             )}
           </div>
-          <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-between gap-2">
+          <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex items-center justify-between gap-2">
             <button
               type="button"
               onClick={() => {
                 clearMachineState(currentMachineIndex);
                 handleClose();
               }}
-              className="min-h-[40px] px-3 py-2 rounded-xl border border-slate-700 text-xs font-medium text-slate-300 flex items-center gap-1.5 hover:bg-slate-900"
+              className="min-h-[40px] px-3 py-2 rounded-xl border border-gray-300 dark:border-slate-700 text-xs font-medium text-gray-700 dark:text-slate-300 flex items-center gap-1.5 hover:bg-gray-100 dark:hover:bg-slate-900"
             >
               <RotateCcw className="w-3 h-3" />
               Clear
@@ -803,35 +836,47 @@ const ReturnQRPage: React.FC = () => {
 
   if (step === 1) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors">
         {/* Header */}
-        <div className="bg-slate-950/80 backdrop-blur-sm border-b border-slate-800 px-4 py-4 flex items-center">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="p-2 mr-2 hover:bg-slate-900 rounded-lg transition-colors"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="w-5 h-5 text-slate-100" />
-          </button>
-          <div>
-            <h1 className="text-lg font-bold text-white flex items-center gap-2">
-              <Scan className="w-5 h-5" />
-              Return Machine QR
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              Enter rental agreement number to start the return process
-            </p>
+        <div className="bg-white/90 dark:bg-slate-950/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center min-w-0">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="p-2 mr-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-slate-100"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Scan className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                Return Machine QR
+              </h1>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                Enter rental agreement number to start the return process
+              </p>
+            </div>
           </div>
+          {mounted && (
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors flex-shrink-0"
+              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          )}
         </div>
 
         {/* Content */}
         <div className="px-4 py-8">
           <div className="max-w-md mx-auto space-y-4">
-            <div className="bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-slate-700/70 p-6 space-y-4 shadow-xl shadow-slate-950/60">
+            <div className="bg-white dark:bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-gray-200 dark:border-slate-700/70 p-6 space-y-4 shadow-sm dark:shadow-xl dark:shadow-slate-950/60">
               <label
                 htmlFor="agreement-input"
-                className="block text-sm font-medium text-slate-200"
+                className="block text-sm font-medium text-gray-700 dark:text-slate-200"
               >
                 Rental agreement number
               </label>
@@ -846,12 +891,12 @@ const ReturnQRPage: React.FC = () => {
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleFindAgreement()}
                 placeholder="e.g. AGR-2024-001"
-                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-slate-800/80 text-slate-50 border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-500"
+                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-800/80 text-gray-900 dark:text-slate-50 border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
                 autoFocus
               />
               {agreementError && (
-                <p className="text-sm text-red-400 flex items-center gap-2" role="alert">
-                  <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
+                <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2" role="alert">
+                  <span className="w-1.5 h-1.5 bg-red-500 dark:bg-red-400 rounded-full" />
                   {agreementError}
                 </p>
               )}
@@ -859,7 +904,7 @@ const ReturnQRPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleFindAgreement}
-                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
                 <Scan className="w-5 h-5" />
                 Find Agreement
@@ -877,47 +922,59 @@ const ReturnQRPage: React.FC = () => {
 
   if (step === 2 && view === 'menu' && selectedAgreement) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors">
         {/* Header */}
-        <div className="bg-slate-950/80 backdrop-blur-sm border-b border-slate-800 px-4 py-4 flex items-center">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="p-2 mr-2 hover:bg-slate-900 rounded-lg transition-colors"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="w-5 h-5 text-slate-100" />
-          </button>
-          <div>
-            <h1 className="text-lg font-bold text-white flex items-center gap-2">
-              <Scan className="w-5 h-5" />
-              Return Machine QR
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              Agreement {selectedAgreement.id} · {selectedAgreement.customerName}
-            </p>
+        <div className="bg-white/90 dark:bg-slate-950/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center min-w-0">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="p-2 mr-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-slate-100"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Scan className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                Return Machine QR
+              </h1>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                Agreement {selectedAgreement.id} · {selectedAgreement.customerName}
+              </p>
+            </div>
           </div>
+          {mounted && (
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors flex-shrink-0"
+              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          )}
         </div>
 
         {/* Content */}
         <div className="px-4 py-8">
           <div className="max-w-md mx-auto space-y-4">
-            <div className="bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-slate-700/70 p-5 space-y-3 shadow-xl shadow-slate-950/60">
-              <p className="text-sm font-semibold text-slate-100">What would you like to do?</p>
-              <p className="text-xs text-slate-400">
+            <div className="bg-white dark:bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-gray-200 dark:border-slate-700/70 p-5 space-y-3 shadow-sm dark:shadow-xl dark:shadow-slate-950/60">
+              <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">What would you like to do?</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">
                 You can first review agreement details, or start scanning machine QR codes.
               </p>
 
               <button
                 type="button"
                 onClick={() => setView('details')}
-                className="w-full min-h-[48px] px-4 py-3 text-sm font-semibold text-slate-100 bg-slate-800 rounded-xl border border-slate-700 hover:bg-slate-750 active:scale-[0.98] transition-all flex items-center justify-between gap-2"
+                className="w-full min-h-[48px] px-4 py-3 text-sm font-semibold text-gray-900 dark:text-slate-100 bg-gray-100 dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 hover:bg-gray-200 dark:hover:bg-slate-700 active:scale-[0.98] transition-all flex items-center justify-between gap-2"
               >
                 <span className="flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
+                  <FileText className="w-4 h-4 text-gray-600 dark:text-slate-300" />
                   View agreement details
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-gray-500 dark:text-slate-400">
                   {machines.length} machine{machines.length !== 1 ? 's' : ''}
                 </span>
               </button>
@@ -928,7 +985,7 @@ const ReturnQRPage: React.FC = () => {
                   setView('scan');
                   setScannerKey((k) => k + 1);
                 }}
-                className="w-full min-h-[52px] px-4 py-3 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                className="w-full min-h-[52px] px-4 py-3 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
                 <Camera className="w-5 h-5" />
                 Start QR Scan
@@ -948,45 +1005,55 @@ const ReturnQRPage: React.FC = () => {
     const progressPct = totalMachines > 0 ? (scannedCount / totalMachines) * 100 : 0;
 
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col transition-colors">
         {/* Header */}
-        <div className="bg-slate-950/85 backdrop-blur-sm border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+        <div className="bg-white/90 dark:bg-slate-950/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
           <button
             type="button"
             onClick={handleBack}
-            className="p-2 hover:bg-slate-900 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-white"
             aria-label="Go back to menu"
           >
-            <ArrowLeft className="w-5 h-5 text-white" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 text-center">
-            <h1 className="text-lg font-bold text-white">Agreement details</h1>
-            <p className="text-xs text-slate-400">#{selectedAgreement.id}</p>
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Agreement details</h1>
+            <p className="text-xs text-gray-500 dark:text-slate-400">#{selectedAgreement.id}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Package className="w-5 h-5 text-blue-300" />
+            {mounted && (
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            )}
+            <Package className="w-5 h-5 text-blue-600 dark:text-blue-300" />
           </div>
         </div>
 
-        <div className="flex-1 bg-slate-900/40 backdrop-blur-sm px-4 py-4 overflow-y-auto">
+        <div className="flex-1 bg-gray-50/80 dark:bg-slate-900/40 backdrop-blur-sm px-4 py-4 overflow-y-auto">
           <div className="max-w-3xl mx-auto space-y-4">
             {/* Summary */}
-            <div className="bg-slate-900/80 border border-slate-700 rounded-2xl p-4 space-y-2">
-              <p className="text-sm font-semibold text-slate-100">
+            <div className="bg-white dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-2 shadow-sm dark:shadow-none">
+              <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
                 {selectedAgreement.customerName}
               </p>
-              <p className="text-xs text-slate-400">{selectedAgreement.customerAddress}</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-gray-500 dark:text-slate-400">{selectedAgreement.customerAddress}</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">
                 Period: {selectedAgreement.rentalStartDate} → {selectedAgreement.rentalEndDate}
               </p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-gray-500 dark:text-slate-400">
                 Machines: {machines.length} · Verified: {scannedCount}/{totalMachines}
               </p>
               <div className="mt-2">
-                <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-gray-200 dark:bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                   <div
                     className={`h-1.5 rounded-full transition-all duration-500 ${
-                      allDone ? 'bg-emerald-400' : 'bg-blue-500'
+                      allDone ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-blue-500'
                     }`}
                     style={{ width: `${progressPct}%` }}
                   />
@@ -995,10 +1062,10 @@ const ReturnQRPage: React.FC = () => {
             </div>
 
             {/* Machine list */}
-            <div className="bg-slate-900/80 border border-slate-700 rounded-2xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-                <p className="text-xs font-semibold text-slate-100">Machines</p>
-                <p className="text-[11px] text-slate-400">
+            <div className="bg-white dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm dark:shadow-none">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-900 dark:text-slate-100">Machines</p>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400">
                   {scannedCount}/{totalMachines} verified
                 </p>
               </div>
@@ -1006,35 +1073,35 @@ const ReturnQRPage: React.FC = () => {
                 {machines.map((m, idx) => (
                   <div
                     key={m.id}
-                    className="px-4 py-3 flex items-center justify-between gap-3 border-b border-slate-800/80 last:border-b-0"
+                    className="px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800/80 last:border-b-0"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-[11px] text-slate-300">
+                      <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center text-[11px] text-gray-600 dark:text-slate-300">
                         {idx + 1}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-100 truncate">
+                        <p className="text-xs font-medium text-gray-900 dark:text-slate-100 truncate">
                           {m.serialNumber}
                         </p>
-                        <p className="text-[11px] text-slate-400 truncate">
+                        <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
                           Box {m.boxNumber || '—'}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {m.scanned && m.returnType ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[10px] text-emerald-200 border border-emerald-500/40">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-[10px] text-emerald-700 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-500/40">
                           <CheckCircle2 className="w-3 h-3" />
                           {m.returnType}
                         </span>
                       ) : (
-                        <span className="text-[10px] text-slate-400">Pending</span>
+                        <span className="text-[10px] text-gray-500 dark:text-slate-400">Pending</span>
                       )}
                     </div>
                   </div>
                 ))}
                 {machines.length === 0 && (
-                  <div className="py-6 px-4 text-center text-xs text-slate-500">
+                  <div className="py-6 px-4 text-center text-xs text-gray-500 dark:text-slate-500">
                     No machines found for this agreement.
                   </div>
                 )}
@@ -1049,8 +1116,8 @@ const ReturnQRPage: React.FC = () => {
                 disabled={!canSubmit}
                 className={`w-full min-h-[52px] px-5 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
                   canSubmit
-                    ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-900/40 active:scale-[0.98]'
-                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-900/30 dark:shadow-emerald-900/40 active:scale-[0.98]'
+                    : 'bg-gray-300 dark:bg-slate-700 text-gray-500 dark:text-slate-400 cursor-not-allowed'
                 }`}
               >
                 {isSubmitting ? (
@@ -1066,7 +1133,7 @@ const ReturnQRPage: React.FC = () => {
                 )}
               </button>
               {!allDone && (
-                <p className="mt-2 text-[11px] text-slate-400 text-center">
+                <p className="mt-2 text-[11px] text-gray-500 dark:text-slate-400 text-center">
                   All machines must be scanned and have a return type before submitting.
                 </p>
               )}
@@ -1085,32 +1152,42 @@ const ReturnQRPage: React.FC = () => {
     const progressPct = totalMachines > 0 ? (scannedCount / totalMachines) * 100 : 0;
 
     return (
-      <div className="min-h-screen w-full bg-black flex flex-col">
+      <div className="min-h-screen w-full bg-gray-900 dark:bg-black flex flex-col transition-colors">
         {/* Header */}
-        <div className="bg-black/80 backdrop-blur-sm border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+        <div className="bg-white/90 dark:bg-black/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
           <button
             type="button"
             onClick={handleBack}
-            className="p-2 hover:bg-slate-900 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-white"
             aria-label="Back to menu"
           >
-            <ArrowLeft className="w-5 h-5 text-white" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 text-center">
-            <h1 className="text-sm font-semibold text-white">Scan machine QR</h1>
-            <p className="text-[11px] text-slate-400">
+            <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Scan machine QR</h1>
+            <p className="text-[11px] text-gray-500 dark:text-slate-400">
               {scannedCount}/{totalMachines} verified
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Camera className="w-5 h-5 text-blue-300" />
+            {mounted && (
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            )}
+            <Camera className="w-5 h-5 text-blue-600 dark:text-blue-300" />
           </div>
         </div>
 
         {/* Scanner full screen */}
         <div
           ref={step2TopRef}
-          className="relative flex-1 bg-black"
+          className="relative flex-1 bg-gray-900 dark:bg-black"
         >
           <QRScannerComponent
             key={scannerKey}
@@ -1122,15 +1199,15 @@ const ReturnQRPage: React.FC = () => {
             embedded
           />
           <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center px-4">
-            <p className="text-sm text-slate-100 font-medium">Align QR code inside the frame</p>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-sm text-gray-100 dark:text-slate-100 font-medium">Align QR code inside the frame</p>
+            <p className="text-xs text-gray-400 dark:text-slate-400 mt-1">
               When a machine is detected, a pop-up will appear to select return type.
             </p>
           </div>
 
           {/* Progress strip at bottom */}
           <div className="absolute bottom-4 left-0 right-0 px-4 space-y-2">
-            <div className="w-full bg-slate-800/70 rounded-full h-1.5 overflow-hidden">
+            <div className="w-full bg-gray-700 dark:bg-slate-800/70 rounded-full h-1.5 overflow-hidden">
               <div
                 className={`h-1.5 rounded-full transition-all duration-500 ${
                   allDone ? 'bg-emerald-400' : 'bg-blue-500'
@@ -1138,7 +1215,7 @@ const ReturnQRPage: React.FC = () => {
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-            <p className="text-[11px] text-slate-300 text-center">
+            <p className="text-[11px] text-gray-300 dark:text-slate-300 text-center">
               For damaged or missing machines, add note and photos in the pop-up.
             </p>
           </div>

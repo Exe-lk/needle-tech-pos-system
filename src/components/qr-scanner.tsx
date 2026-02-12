@@ -379,7 +379,7 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
       )}
 
       {/* Success Display */}
-      {lastScanResult && !scanning && (
+      {/* {lastScanResult && !scanning && (
         <div className="max-w-md w-full mb-4 bg-green-100 dark:bg-green-900/30 border-2 border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 rounded-xl p-4 z-10 shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex items-start space-x-3">
             <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -400,7 +400,7 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Scanner Container - when embedded: outer flex-1 centers inner square; when standalone: single box */}
       {embedded ? (

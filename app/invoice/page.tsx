@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
@@ -514,7 +514,7 @@ const columns: TableColumn[] = [
   },
   {
     key: 'totalAmount',
-    label: 'Total Amount',
+    label: 'Monthly Amount',
     sortable: true,
     filterable: false,
     render: (value: number, row: Invoice) => (
@@ -556,6 +556,9 @@ const InvoicePage: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [monthlyInvoicePreviews, setMonthlyInvoicePreviews] = useState<MonthlyInvoicePreview[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set());
+  /** When set, a hidden print-only div shows multi-month invoice and print is triggered */
+  const [monthlyPrintPreviews, setMonthlyPrintPreviews] = useState<MonthlyInvoicePreview[] | null>(null);
+  const monthlyPrintTriggeredRef = useRef(false);
 
   // API Data
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -986,6 +989,7 @@ const InvoicePage: React.FC = () => {
     setSelectedInvoice(null);
     setMonthlyInvoicePreviews([]);
     setSelectedMonths(new Set());
+    setMonthlyPrintPreviews(null);
   };
 
   const toggleMonthSelection = (index: number) => {
@@ -998,68 +1002,43 @@ const InvoicePage: React.FC = () => {
     setSelectedMonths(newSelected);
   };
 
-  const handleGenerateSelectedInvoices = async () => {
+  const selectAllMonths = () => {
+    setSelectedMonths(new Set(monthlyInvoicePreviews.map((_, idx) => idx)));
+  };
+
+  const deselectAllMonths = () => {
+    setSelectedMonths(new Set());
+  };
+
+  const isAllMonthsSelected =
+    monthlyInvoicePreviews.length > 0 && selectedMonths.size === monthlyInvoicePreviews.length;
+  const isNoMonthSelected = selectedMonths.size === 0;
+  const handleSelectAllCheckbox = () => {
+    if (isAllMonthsSelected) deselectAllMonths();
+    else selectAllMonths();
+  };
+
+  /** Print selected months as one document: per-month calculations + final total (no API call). */
+  const handlePrintMonthlyInvoices = () => {
     if (!selectedInvoice || selectedMonths.size === 0) {
-      alert('Please select at least one month to generate invoices.');
+      alert('Please select at least one month to print.');
       return;
     }
-
-    setIsSubmitting(true);
-    try {
-      const generatedInvoices: Invoice[] = [];
-
-      for (const index of Array.from(selectedMonths).sort()) {
-        const preview = monthlyInvoicePreviews[index];
-        
-        const lineItems = preview.proratedItems.map((pi, idx) => {
-          const brand = brands.find(b => b.name === pi.item.brand);
-          const type = machineTypes.find(t => t.name === pi.item.type);
-          
-          return {
-            description: pi.item.description,
-            quantity: pi.item.numberOfMachines,
-            unitPrice: pi.proratedRate,
-            brand: pi.item.brand,
-            model: pi.item.model,
-            type: pi.item.type,
-            brandId: brand?.id,
-            machineTypeId: type?.id,
-            itemCode: pi.item.itemCode,
-            serialNumber: pi.item.serialNumber,
-            vatRate: selectedInvoice.invoiceType === 'VAT' ? 0.18 : 0,
-          };
-        });
-
-        const invoicePayload = {
-          customerId: customers.find(c => c.name === selectedInvoice.customerName)?.id,
-          type: 'RENTAL',
-          taxCategory: selectedInvoice.invoiceType === 'VAT' ? 'VAT' : 'NON_VAT',
-          lineItems: lineItems,
-          issueDate: preview.periodFrom,
-          dueDate: preview.periodTo,
-          subtotal: preview.subtotal,
-          vatAmount: preview.vatAmount,
-          grandTotal: preview.totalAmount,
-        };
-
-        const newInvoice = await createInvoice(invoicePayload);
-        if (newInvoice) {
-          generatedInvoices.push(newInvoice);
-        }
-      }
-
-      if (generatedInvoices.length > 0) {
-        setInvoices([...generatedInvoices, ...invoices]);
-        alert(`Successfully generated ${generatedInvoices.length} monthly invoice(s).`);
-        handleCloseMonthlyInvoiceModal();
-      }
-    } catch (error: any) {
-      console.error('Error generating monthly invoices:', error);
-      alert(error.message || 'Failed to generate invoices. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    const ordered = Array.from(selectedMonths).sort().map((i) => monthlyInvoicePreviews[i]);
+    setMonthlyPrintPreviews(ordered);
+    monthlyPrintTriggeredRef.current = true;
   };
+
+  // When monthly print content is set, render then trigger print and clear
+  useEffect(() => {
+    if (!monthlyPrintPreviews?.length || !monthlyPrintTriggeredRef.current) return;
+    monthlyPrintTriggeredRef.current = false;
+    const t = setTimeout(() => {
+      window.print();
+      setMonthlyPrintPreviews(null);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [monthlyPrintPreviews]);
 
   // Action buttons
   const actions: ActionButton[] = [
@@ -1084,7 +1063,7 @@ const InvoicePage: React.FC = () => {
       icon: <Calendar className="w-4 h-4" />,
       variant: 'primary',
       onClick: handleGenerateMonthlyInvoices,
-      tooltip: 'Generate Monthly Invoices',
+      tooltip: 'Print Monthly Invoices',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-green-600 dark:bg-green-600 text-white hover:bg-green-700 dark:hover:bg-green-700 focus:ring-green-500 dark:focus:ring-green-500',
     },
   ];
@@ -1240,6 +1219,158 @@ const InvoicePage: React.FC = () => {
           className="print:p-0"
         >
           {renderInvoiceBodyContent(invoice)}
+        </LetterheadDocument>
+      </div>
+    );
+  };
+
+  /** Multi-month print: one document with per-month sections (rate × qty × months), each month subtotal/VAT/total, then grand total. */
+  const renderMultiMonthInvoiceForPrint = (invoice: Invoice, previews: MonthlyInvoicePreview[]) => {
+    if (!previews.length) return null;
+    const dateStr = (d: string) =>
+      new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const isVAT = invoice.invoiceType === 'VAT';
+    const periodFrom = previews[0].periodFrom;
+    const periodTo = previews[previews.length - 1].periodTo;
+    const grandTotal = previews.reduce((sum, p) => sum + p.totalAmount, 0);
+    const grandSubtotal = previews.reduce((sum, p) => sum + p.subtotal, 0);
+    const grandVat = previews.reduce((sum, p) => sum + p.vatAmount, 0);
+
+    return (
+      <div className="bg-white text-black max-w-[210mm] mx-auto p-6 sm:p-8 print:p-8 print:max-w-none" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+        <LetterheadDocument
+          documentTitle={isVAT ? 'TAX INVOICE' : 'INVOICE'}
+          footerStyle="full"
+          footerContent={renderInvoiceSignatures()}
+          className="print:p-0"
+        >
+          <div>
+            <div className="mb-4 text-sm print:text-xs">
+              <div className="mb-1">
+                <span className="text-gray-600 font-medium">Customer: </span>
+                <span>{invoice.customerName}</span>
+              </div>
+              <div className="mb-1">
+                <span className="text-gray-600 font-medium">Address: </span>
+                <span>{invoice.customerAddress}</span>
+              </div>
+              <div className="mb-1">
+                <span className="text-gray-600 font-medium">Period: </span>
+                <span>{dateStr(periodFrom)} to {dateStr(periodTo)}</span>
+              </div>
+              {isVAT && (
+                <div className="mt-1">
+                  <span className="text-gray-600 font-medium">Customer VAT No: </span>
+                  <span>{invoice.vatTinNic}</span>
+                </div>
+              )}
+              {!isVAT && invoice.vatTinNic && (
+                <div className="mt-1">
+                  <span className="text-gray-600 font-medium">NIC: </span>
+                  <span>{invoice.vatTinNic}</span>
+                </div>
+              )}
+            </div>
+            <div className="border-b border-gray-800" />
+
+            {previews.map((preview, sectionIndex) => (
+              <div key={sectionIndex} className="mt-6 print:mt-4 print:break-inside-avoid">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2 print:text-xs">
+                  {preview.month} {preview.year} — Period: {dateStr(preview.periodFrom)} to {dateStr(preview.periodTo)}
+                  {preview.isPartialMonth && (
+                    <span className="ml-1 font-normal text-gray-600">(Prorated: {preview.daysInPeriod}/{preview.daysInMonth} days)</span>
+                  )}
+                </h3>
+                {!isVAT ? (
+                  <table className="w-full border-collapse print:text-xs mb-2">
+                    <thead>
+                      <tr className="border-b border-gray-800">
+                        <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-700">Description</th>
+                        <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700">Serial No</th>
+                        <th className="text-right py-2 pl-4 text-xs font-semibold text-gray-700">Monthly Rental</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.proratedItems.map((pi, idx) => (
+                        <tr key={idx} className="border-b border-gray-200">
+                          <td className="py-2 pr-4 text-sm text-gray-900 print:text-xs">
+                            {pi.item.numberOfMachines} {pi.item.description}
+                          </td>
+                          <td className="py-2 px-2 text-sm text-center text-gray-900 print:text-xs">
+                            {pi.item.serialNumber || '—'}
+                          </td>
+                          <td className="py-2 pl-4 text-sm text-right text-gray-900 print:text-xs">
+                            {pi.proratedSubtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full border-collapse print:text-xs mb-2">
+                    <thead>
+                      <tr className="border-b border-gray-800">
+                        <th className="text-left py-2 pr-2 text-xs font-semibold text-gray-700">Item</th>
+                        <th className="text-left py-2 px-2 text-xs font-semibold text-gray-700">Description</th>
+                        <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700">Rate</th>
+                        <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700">Qty</th>
+                        <th className="text-right py-2 pl-2 text-xs font-semibold text-gray-700">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.proratedItems.map((pi, idx) => (
+                        <tr key={idx} className="border-b border-gray-200">
+                          <td className="py-2 pr-2 text-sm text-gray-900 print:text-xs">{pi.item.itemCode}</td>
+                          <td className="py-2 px-2 text-sm text-gray-900 print:text-xs">{pi.item.description}</td>
+                          <td className="py-2 px-2 text-sm text-center text-gray-900 print:text-xs">
+                            {pi.proratedRate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-2 text-sm text-center text-gray-900 print:text-xs">{pi.item.numberOfMachines}</td>
+                          <td className="py-2 pl-2 text-sm text-right text-gray-900 print:text-xs">
+                            {pi.proratedSubtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <div className="flex justify-end gap-4 text-sm print:text-xs mb-1">
+                  <span className="text-gray-700">Subtotal ({preview.month}):</span>
+                  <span className="font-medium text-gray-900">{preview.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+                </div>
+                {isVAT && preview.vatAmount > 0 && (
+                  <div className="flex justify-end gap-4 text-sm print:text-xs mb-1">
+                    <span className="text-gray-700">VAT (18%):</span>
+                    <span className="font-medium text-gray-900">{preview.vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-4 text-sm print:text-xs font-semibold text-gray-900 mb-2">
+                  <span>Total ({preview.month} {preview.year}):</span>
+                  <span>{preview.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="border-b border-gray-300" />
+              </div>
+            ))}
+
+            <div className="mt-4 pt-3 border-t-2 border-gray-800 print:break-inside-avoid">
+              {isVAT && grandVat > 0 && (
+                <>
+                  <div className="flex justify-end text-sm text-gray-700 mb-1">
+                    Sub Amount: Rs. {grandSubtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="flex justify-end text-sm text-gray-700 mb-1">
+                    VAT (18%): Rs. {grandVat.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between items-baseline mt-2">
+                <span className="font-bold text-gray-900">Grand Total</span>
+                <span className="font-bold text-gray-900 text-base print:text-sm">
+                  {grandTotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
         </LetterheadDocument>
       </div>
     );
@@ -1738,6 +1869,19 @@ const InvoicePage: React.FC = () => {
           </div>
         </div>
 
+        {/* Select all months checkbox */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isAllMonthsSelected}
+              onChange={handleSelectAllCheckbox}
+              className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+            />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Select all months</span>
+          </label>
+        </div>
+
         {/* Monthly Invoice Previews */}
         <div className="space-y-3 max-h-[500px] overflow-y-auto">
           {monthlyInvoicePreviews.map((preview, index) => (
@@ -1805,10 +1949,16 @@ const InvoicePage: React.FC = () => {
 
   return (
     <>
-      {/* Print-only invoice in letterhead — hidden on screen, visible when printing */}
-      {selectedInvoice && (
+      {/* Print-only: single invoice (View modal) — hidden on screen, visible when printing */}
+      {selectedInvoice && !monthlyPrintPreviews?.length && (
         <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white print:p-0 print:m-0">
           {renderInvoiceWithLetterhead(selectedInvoice)}
+        </div>
+      )}
+      {/* Print-only: multi-month invoice (Print Monthly modal) — full document, can span multiple pages */}
+      {selectedInvoice && monthlyPrintPreviews && monthlyPrintPreviews.length > 0 && (
+        <div className="hidden print:block print:z-[9999] print:bg-white print:w-full print:min-h-0">
+          {renderMultiMonthInvoiceForPrint(selectedInvoice, monthlyPrintPreviews)}
         </div>
       )}
 
@@ -1952,13 +2102,13 @@ const InvoicePage: React.FC = () => {
           </UpdateForm>
         )}
 
-        {/* Monthly Invoice Generation Modal */}
+        {/* Print Monthly Invoices Modal */}
         {isMonthlyInvoiceModalOpen && selectedInvoice && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/30 z-50 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-600">
               {/* Modal Header */}
               <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Generate Monthly Invoices</h2>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Print Monthly Invoices</h2>
                 <button
                   onClick={handleCloseMonthlyInvoiceModal}
                   className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -1982,26 +2132,16 @@ const InvoicePage: React.FC = () => {
                   <button
                     onClick={handleCloseMonthlyInvoiceModal}
                     className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded border border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                    disabled={isSubmitting}
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={handleGenerateSelectedInvoices}
-                    disabled={isSubmitting || selectedMonths.size === 0}
+                    onClick={handlePrintMonthlyInvoices}
+                    disabled={selectedMonths.size === 0}
                     className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded border border-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    {isSubmitting ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="w-4 h-4" />
-                        Generate {selectedMonths.size > 0 ? `${selectedMonths.size} ` : ''}Invoice{selectedMonths.size !== 1 ? 's' : ''}
-                      </>
-                    )}
+                    <Printer className="w-4 h-4" />
+                    Print {selectedMonths.size > 0 ? `(${selectedMonths.size} month${selectedMonths.size !== 1 ? 's' : ''})` : ''}
                   </button>
                 </div>
               </div>

@@ -21,16 +21,111 @@ import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 
-interface GatePassItem {
+// API Configuration
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
+
+// Helper Functions
+const getAuthHeaders = () => {
+  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
+};
+
+// API Response Types – Rental with assigned machines (RentalMachine[] + nested Machine)
+interface ApiRental {
+  id: string;
+  agreementNumber: string;
+  customerId: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  startDate: string;
+  customer?: {
+    id: string;
+    name: string;
+    code: string;
+    billingAddressLine1?: string;
+    billingAddressLine2?: string;
+    billingCity?: string;
+    billingRegion?: string;
+    billingPostalCode?: string;
+    billingCountry?: string;
+  };
+  machines?: {
+    id: string;
+    rentalId: string;
+    machineId: string;
+    machine?: {
+      id: string;
+      serialNumber: string;
+      boxNumber?: string;
+      brand?: { name: string };
+      model?: { name: string };
+      type?: { name: string };
+    };
+  }[];
+}
+
+interface ApiGatePass {
+  id: string;
+  gatePassNumber: string;
+  rentalId: string;
+  customerId: string;
+  driverName?: string;
+  vehicleNumber?: string;
+  departureTime: string;
+  arrivalTime?: string;
+  status: 'PENDING' | 'DEPARTED' | 'RETURNED';
+  issuedByUserId: string;
+  rental?: ApiRental;
+  customer?: {
+    id: string;
+    name: string;
+    code: string;
+    billingAddressLine1?: string;
+    billingAddressLine2?: string;
+    billingCity?: string;
+    billingRegion?: string;
+    billingPostalCode?: string;
+    billingCountry?: string;
+  };
+  machines?: {
+    id: string;
+    machineId: string;
+    machine?: {
+      id: string;
+      serialNumber: string;
+      boxNumber?: string;
+      brand?: {
+        name: string;
+      };
+      model?: {
+        name: string;
+      };
+      type?: {
+        name: string;
+      };
+    };
+  }[];
+  issuedBy?: {
+    id: string;
+    fullName: string;
+    username: string;
+  };
+}
+
+interface GatePassMachine {
   id: string;
   description: string;
   status: string;
   serialNo: string;
   motorBoxNo: string;
+  machineId?: string;
 }
 
 interface GatePass {
-  id: number;
+  id: string;
   gatepassNo: string;
   agreementReference: string;
   dateOfIssue: string;
@@ -41,188 +136,226 @@ interface GatePass {
   toAddress: string;
   vehicleNumber: string;
   driverName: string;
-  items: GatePassItem[];
+  items: GatePassMachine[];
   issuedBy?: string;
   receivedBy?: string;
+  rentalId?: string;
+  customerId?: string;
+  status?: 'PENDING' | 'DEPARTED' | 'RETURNED';
 }
 
-// Mock rental agreements for dropdown (you can fetch from API later)
-const mockRentalAgreements = [
-  {
-    id: 'RA-2024-001',
-    customerName: 'ABC Holdings (Pvt) Ltd',
-    customerAddress: '123 Main Street, Colombo 05',
-  },
-  {
-    id: 'RA-2024-002',
-    customerName: 'John Perera',
-    customerAddress: '456 Galle Road, Mount Lavinia',
-  },
-  {
-    id: 'RA-2024-003',
-    customerName: 'XYZ Engineering',
-    customerAddress: '789 Kandy Road, Peradeniya',
-  },
-  {
-    id: 'RA-2024-004',
-    customerName: 'Kamal Silva',
-    customerAddress: '321 Negombo Road, Wattala',
-  },
-  {
-    id: 'RA-2024-005',
-    customerName: 'Mega Constructions',
-    customerAddress: '654 High Level Road, Maharagama',
-  },
-  {
-    id: 'RA-2024-006',
-    customerName: 'VIHANGA SHADE STRUCTURES',
-    customerAddress: '317/2, NEW KANDY ROAD, BIYAGAMA',
-  },
-];
+// Rental Agreement Option Type
+interface RentalOption {
+  id: string;
+  agreementNumber: string;
+  customerName: string;
+  customerAddress: string;
+  machines: GatePassMachine[];
+}
 
-/** Machines (items) per agreement – used to auto-populate items when an agreement is selected. */
-type AgreementMachineItem = Omit<GatePassItem, 'id'>;
-const mockAgreementMachines: Record<string, AgreementMachineItem[]> = {
-  'RA-2024-001': [
-    { description: 'JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE', status: 'GOOD', serialNo: '2LIDH01733', motorBoxNo: 'NMBDH01171' },
-    { description: 'JUKI DDL-8700 - HIGH-SPEED LOCKSTITCH MACHINE', status: 'GOOD', serialNo: '2LIDH01734', motorBoxNo: 'NMBDH01172' },
-    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'FAIR', serialNo: 'BR-2024-001', motorBoxNo: 'BOX-2024-001' },
-    { description: 'SINGER 4423 - HEAVY DUTY SEWING MACHINE', status: 'GOOD', serialNo: 'SG-2024-001', motorBoxNo: 'BOX-2024-002' },
-    { description: 'JUKI MO-2516 - OVERLOCK MACHINE', status: 'GOOD', serialNo: '2LIDH01735', motorBoxNo: 'NMBDH01173' },
-  ],
-  'RA-2024-002': [
-    { description: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE', status: 'GOOD', serialNo: 'BR-2024-002', motorBoxNo: 'BOX-2024-003' },
-    { description: 'JUKI DDL-5550N - INDUSTRIAL SEWING MACHINE', status: 'GOOD', serialNo: '2LIDH01736', motorBoxNo: 'NMBDH01174' },
-    { description: 'SINGER 9960 - QUANTUM STYLIST MACHINE', status: 'GOOD', serialNo: 'SG-2024-002', motorBoxNo: 'BOX-2024-004' },
-    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'FAIR', serialNo: 'BR-2024-003', motorBoxNo: 'BOX-2024-005' },
-    { description: 'JUKI MO-6700S - OVERLOCK MACHINE', status: 'GOOD', serialNo: '2LIDH01737', motorBoxNo: 'NMBDH01175' },
-  ],
-  'RA-2024-003': [
-    { description: 'JUKI DDL-8700 - HIGH-SPEED LOCKSTITCH MACHINE', status: 'GOOD', serialNo: '2LIDH01740', motorBoxNo: 'NMBDH01180' },
-    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'GOOD', serialNo: 'BR-2024-010', motorBoxNo: 'BOX-2024-010' },
-  ],
-  'RA-2024-004': [
-    { description: 'SINGER 4423 - HEAVY DUTY SEWING MACHINE', status: 'GOOD', serialNo: 'SG-2024-020', motorBoxNo: 'BOX-2024-020' },
-    { description: 'JUKI MO-2516 - OVERLOCK MACHINE', status: 'GOOD', serialNo: '2LIDH01741', motorBoxNo: 'NMBDH01181' },
-  ],
-  'RA-2024-005': [
-    { description: 'JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE', status: 'GOOD', serialNo: '2LIDH01742', motorBoxNo: 'NMBDH01182' },
-    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'FAIR', serialNo: 'BR-2024-030', motorBoxNo: 'BOX-2024-030' },
-    { description: 'SINGER 4423 - HEAVY DUTY SEWING MACHINE', status: 'GOOD', serialNo: 'SG-2024-030', motorBoxNo: 'BOX-2024-031' },
-  ],
-  'RA-2024-006': [
-    { description: 'JUKI DDL-8700 - HIGH-SPEED LOCKSTITCH MACHINE', status: 'GOOD', serialNo: '2LIDH01743', motorBoxNo: 'NMBDH01183' },
-    { description: 'JUKI MO-2516 - OVERLOCK MACHINE', status: 'GOOD', serialNo: '2LIDH01744', motorBoxNo: 'NMBDH01184' },
-    { description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE', status: 'GOOD', serialNo: 'BR-2024-040', motorBoxNo: 'BOX-2024-040' },
-  ],
+// Build customer address helper
+const buildCustomerAddress = (customer: any): string => {
+  const parts = [
+    customer.billingAddressLine1,
+    customer.billingAddressLine2,
+    customer.billingCity,
+    customer.billingRegion,
+    customer.billingPostalCode,
+    customer.billingCountry || 'Sri Lanka'
+  ].filter(Boolean);
+  
+  return parts.join(', ');
 };
 
-// Mock gate pass data with minimum 5 items each
-const mockGatePasses: GatePass[] = [
-  {
-    id: 1,
-    gatepassNo: '016633',
-    agreementReference: 'RA-2024-001',
-    dateOfIssue: '2024-01-20',
-    returnable: true,
-    entry: 'OUT',
+// Map API GatePass to Frontend GatePass
+const mapApiGatePassToFrontend = (apiGatePass: ApiGatePass): GatePass => {
+  const customer = apiGatePass.customer || apiGatePass.rental?.customer;
+  const machines = apiGatePass.machines || [];
+  
+  return {
+    id: apiGatePass.id,
+    gatepassNo: apiGatePass.gatePassNumber,
+    agreementReference: apiGatePass.rental?.agreementNumber || '',
+    dateOfIssue: apiGatePass.departureTime?.split('T')[0] || new Date().toISOString().split('T')[0],
+    returnable: apiGatePass.rental?.status === 'ACTIVE',
+    entry: apiGatePass.status === 'RETURNED' ? 'IN' : 'OUT',
     from: 'Needle Technologies',
-    to: 'ABC Holdings (Pvt) Ltd',
-    toAddress: '123 Main Street, Colombo 05',
-    vehicleNumber: 'ABC-1234',
-    driverName: 'Nimal Perera',
-    items: [
-      {
-        id: '1',
-        description: 'JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01733',
-        motorBoxNo: 'NMBDH01171',
-      },
-      {
-        id: '2',
-        description: 'JUKI DDL-8700 - HIGH-SPEED LOCKSTITCH MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01734',
-        motorBoxNo: 'NMBDH01172',
-      },
-      {
-        id: '3',
-        description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE',
-        status: 'FAIR',
-        serialNo: 'BR-2024-001',
-        motorBoxNo: 'BOX-2024-001',
-      },
-      {
-        id: '4',
-        description: 'SINGER 4423 - HEAVY DUTY SEWING MACHINE',
-        status: 'GOOD',
-        serialNo: 'SG-2024-001',
-        motorBoxNo: 'BOX-2024-002',
-      },
-      {
-        id: '5',
-        description: 'JUKI MO-2516 - OVERLOCK MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01735',
-        motorBoxNo: 'NMBDH01173',
-      },
-    ],
-    issuedBy: 'Admin User',
-    receivedBy: 'Nimal Perera',
-  },
-  {
-    id: 2,
-    gatepassNo: '016634',
-    agreementReference: 'RA-2024-002',
-    dateOfIssue: '2024-03-05',
-    returnable: false,
-    entry: 'OUT',
-    from: 'Needle Technologies',
-    to: 'John Perera',
-    toAddress: '456 Galle Road, Mount Lavinia',
-    vehicleNumber: 'XYZ-5678',
-    driverName: 'Kamal Silva',
-    items: [
-      {
-        id: '1',
-        description: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE',
-        status: 'GOOD',
-        serialNo: 'BR-2024-002',
-        motorBoxNo: 'BOX-2024-003',
-      },
-      {
-        id: '2',
-        description: 'JUKI DDL-5550N - INDUSTRIAL SEWING MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01736',
-        motorBoxNo: 'NMBDH01174',
-      },
-      {
-        id: '3',
-        description: 'SINGER 9960 - QUANTUM STYLIST MACHINE',
-        status: 'GOOD',
-        serialNo: 'SG-2024-002',
-        motorBoxNo: 'BOX-2024-004',
-      },
-      {
-        id: '4',
-        description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE',
-        status: 'FAIR',
-        serialNo: 'BR-2024-003',
-        motorBoxNo: 'BOX-2024-005',
-      },
-      {
-        id: '5',
-        description: 'JUKI MO-6700S - OVERLOCK MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01737',
-        motorBoxNo: 'NMBDH01175',
-      },
-    ],
-    issuedBy: 'Admin User',
-  },
-];
+    to: customer?.name || '',
+    toAddress: customer ? buildCustomerAddress(customer) : '',
+    vehicleNumber: apiGatePass.vehicleNumber || '',
+    driverName: apiGatePass.driverName || '',
+    items: machines.map((m, idx) => ({
+      id: m.id,
+      description: `${m.machine?.brand?.name || ''} ${m.machine?.model?.name || ''} - ${m.machine?.type?.name || ''}`.trim(),
+      status: 'GOOD',
+      serialNo: m.machine?.serialNumber || '',
+      motorBoxNo: m.machine?.boxNumber || '',
+      machineId: m.machineId,
+    })),
+    issuedBy: apiGatePass.issuedBy?.fullName || '',
+    receivedBy: '',
+    rentalId: apiGatePass.rentalId,
+    customerId: apiGatePass.customerId,
+    status: apiGatePass.status,
+  };
+};
+
+// Map API rental machine (RentalMachine + nested Machine) to GatePassMachine for form
+function mapRentalMachineToGatePassItem(m: NonNullable<ApiRental['machines']>[number]): GatePassMachine {
+  const machine = m.machine;
+  const desc = [machine?.brand?.name, machine?.model?.name, machine?.type?.name].filter(Boolean).join(' ').trim();
+  return {
+    id: m.id,
+    description: desc || '—',
+    status: 'GOOD',
+    serialNo: machine?.serialNumber ?? '',
+    motorBoxNo: machine?.boxNumber ?? '',
+    machineId: m.machineId,
+  };
+}
+
+// API Functions
+const fetchRentals = async (): Promise<RentalOption[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rentals?status=ACTIVE&limit=1000`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch rentals');
+    }
+
+    const data = await response.json();
+    const apiRentals: ApiRental[] = data.data?.items || [];
+
+    return apiRentals.map(rental => ({
+      id: rental.id,
+      agreementNumber: rental.agreementNumber,
+      customerName: rental.customer?.name || '',
+      customerAddress: rental.customer ? buildCustomerAddress(rental.customer) : '',
+      machines: (rental.machines || []).map(mapRentalMachineToGatePassItem),
+    }));
+  } catch (error) {
+    console.error('Error fetching rentals:', error);
+    return [];
+  }
+};
+
+// Fetch a single rental by ID with full machine details (fallback when list didn't include machines)
+const fetchRentalById = async (rentalId: string): Promise<RentalOption | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rentals/${rentalId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const rental: ApiRental = data.data;
+    if (!rental) return null;
+
+    return {
+      id: rental.id,
+      agreementNumber: rental.agreementNumber,
+      customerName: rental.customer?.name || '',
+      customerAddress: rental.customer ? buildCustomerAddress(rental.customer) : '',
+      machines: (rental.machines || []).map(mapRentalMachineToGatePassItem),
+    };
+  } catch (error) {
+    console.error('Error fetching rental by ID:', error);
+    return null;
+  }
+};
+
+const fetchGatePasses = async (): Promise<GatePass[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/gate-passes?limit=1000`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch gate passes');
+    }
+
+    const data = await response.json();
+    const apiGatePasses: ApiGatePass[] = data.data?.items || [];
+
+    return apiGatePasses.map(mapApiGatePassToFrontend);
+  } catch (error) {
+    console.error('Error fetching gate passes:', error);
+    return [];
+  }
+};
+
+const createGatePass = async (gatePassData: any): Promise<GatePass | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/gate-passes`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(gatePassData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to create gate pass');
+    }
+
+    const data = await response.json();
+    return mapApiGatePassToFrontend(data.data);
+  } catch (error) {
+    console.error('Error creating gate pass:', error);
+    throw error;
+  }
+};
+
+const updateGatePass = async (gatePassId: string, updateData: any): Promise<GatePass | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/gate-passes/${gatePassId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(updateData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to update gate pass');
+    }
+
+    const data = await response.json();
+    return mapApiGatePassToFrontend(data.data);
+  } catch (error) {
+    console.error('Error updating gate pass:', error);
+    throw error;
+  }
+};
+
+const deleteGatePass = async (gatePassId: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/gate-passes/${gatePassId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to delete gate pass');
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error deleting gate pass:', error);
+    throw error;
+  }
+};
 
 // Table column configuration
 const columns: TableColumn[] = [
@@ -269,6 +402,24 @@ const columns: TableColumn[] = [
     },
   },
   {
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    filterable: true,
+    render: (value: 'PENDING' | 'DEPARTED' | 'RETURNED') => {
+      const statusStyles = {
+        PENDING: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+        DEPARTED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+        RETURNED: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+      };
+      return (
+        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusStyles[value] || statusStyles.PENDING}`}>
+          {value || 'PENDING'}
+        </span>
+      );
+    },
+  },
+  {
     key: 'entry',
     label: 'Entry',
     sortable: true,
@@ -288,7 +439,7 @@ const columns: TableColumn[] = [
   },
 ];
 
-const MIN_ITEMS = 5;
+const MIN_ITEMS = 1;
 
 type ScanResultType = 'success' | 'failed' | 'duplicate';
 
@@ -367,6 +518,33 @@ const GatePassPage: React.FC = () => {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedGatePass, setSelectedGatePass] = useState<GatePass | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Data from API
+  const [gatePasses, setGatePasses] = useState<GatePass[]>([]);
+  const [rentalAgreements, setRentalAgreements] = useState<RentalOption[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  // Fetch data on component mount
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    setIsLoadingData(true);
+    try {
+      const [gatePassesData, rentalsData] = await Promise.all([
+        fetchGatePasses(),
+        fetchRentals(),
+      ]);
+      setGatePasses(gatePassesData);
+      setRentalAgreements(rentalsData);
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      alert('Failed to load data. Please refresh the page.');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
 
   // Security approval modal: Step 1 = enter gatepass number, Step 2 = scan QR + approve
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
@@ -422,15 +600,14 @@ const GatePassPage: React.FC = () => {
     console.log('Logout clicked');
   };
 
-  // Create form state - Initialize with 5 items
+  // Create form state - Initialize with 1 item (will be populated from rental selection)
   const [agreementReference, setAgreementReference] = useState('');
   const [dateOfIssue, setDateOfIssue] = useState('');
   const [returnable, setReturnable] = useState(true);
   const [entry, setEntry] = useState<'IN' | 'OUT'>('OUT');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [driverName, setDriverName] = useState('');
-  const [items, setItems] = useState<GatePassItem[]>(() => {
-    // Initialize with 1 empty item (user can add more; minimum MIN_ITEMS required on submit)
+  const [items, setItems] = useState<GatePassMachine[]>(() => {
     return Array.from({ length: 1 }, (_, i) => ({
       id: `item-${i + 1}`,
       description: '',
@@ -488,15 +665,35 @@ const GatePassPage: React.FC = () => {
     setFormErrors({});
   };
 
-  /** When agreement is selected, auto-populate items from that agreement's machines. */
-  const handleAgreementChange = (agreementId: string) => {
-    setAgreementReference(agreementId);
-    const machines = agreementId ? (mockAgreementMachines[agreementId] ?? []) : [];
-    if (machines.length > 0) {
+  /** When agreement is selected, auto-populate items (machines) assigned to that agreement. */
+  const handleAgreementChange = async (rentalId: string) => {
+    setAgreementReference(rentalId);
+    if (!rentalId) {
+      setItems([{ id: `item-${Date.now()}-1`, description: '', status: 'GOOD', serialNo: '', motorBoxNo: '' }]);
+      return;
+    }
+
+    let rental = rentalAgreements.find((r) => r.id === rentalId);
+
+    // If not in cache or machines missing, fetch this rental with full machine details
+    if (!rental || (rental.machines && rental.machines.length === 0)) {
+      const fetched = await fetchRentalById(rentalId);
+      if (fetched) {
+        rental = fetched;
+        // Optionally refresh the cached list so next time we have it
+        setRentalAgreements((prev) => {
+          const idx = prev.findIndex((r) => r.id === rentalId);
+          if (idx >= 0) return prev.map((r, i) => (i === idx ? fetched : r));
+          return [...prev, fetched];
+        });
+      }
+    }
+
+    if (rental?.machines && rental.machines.length > 0) {
       setItems(
-        machines.map((m, i) => ({
+        rental.machines.map((m, i) => ({
           ...m,
-          id: `item-${Date.now()}-${i + 1}`,
+          id: m.id || `item-${Date.now()}-${i + 1}`,
         }))
       );
     } else {
@@ -526,7 +723,7 @@ const GatePassPage: React.FC = () => {
     }
   };
 
-  const handleItemChange = (id: string, field: keyof GatePassItem, value: string) => {
+  const handleItemChange = (id: string, field: keyof GatePassMachine, value: string) => {
     setItems(items.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
@@ -578,10 +775,15 @@ const GatePassPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const agreement = mockRentalAgreements.find((a) => a.id === agreementReference);
-      const gatepassNo = generateGatepassNo();
+      const rental = rentalAgreements.find((r) => r.id === agreementReference);
+      
+      if (!rental) {
+        alert('Selected rental agreement not found');
+        setIsSubmitting(false);
+        return;
+      }
 
-      // Filter out empty items and ensure at least 5 items
+      // Filter out empty items and ensure at least MIN_ITEMS items
       const validItems = items.filter((item) => item.description.trim() !== '');
 
       if (validItems.length < MIN_ITEMS) {
@@ -590,29 +792,27 @@ const GatePassPage: React.FC = () => {
         return;
       }
 
-      const payload: GatePass = {
-        id: Date.now(),
-        gatepassNo,
-        agreementReference,
-        dateOfIssue,
-        returnable,
-        entry,
-        from: 'Needle Technologies',
-        to: agreement?.customerName || '',
-        toAddress: agreement?.customerAddress || '',
-        vehicleNumber,
-        driverName,
-        items: validItems,
-        issuedBy: issuedBy || 'System',
-        receivedBy: receivedBy || '',
+      // Prepare API payload
+      const payload = {
+        rentalId: agreementReference,
+        driverName: driverName.trim(),
+        vehicleNumber: vehicleNumber.trim(),
+        departureTime: new Date(dateOfIssue).toISOString(),
+        notes: `Issued by: ${issuedBy || 'System'}, Received by: ${receivedBy || 'N/A'}`,
       };
 
-      console.log('Create gate pass payload:', payload);
-      alert(`Gate Pass ${gatepassNo} created successfully (frontend only).`);
-      handleCloseCreateModal();
-    } catch (error) {
+      const createdGatePass = await createGatePass(payload);
+      
+      if (createdGatePass) {
+        alert(`Gate Pass ${createdGatePass.gatepassNo} created successfully!`);
+        // Reload gate passes
+        const updatedGatePasses = await fetchGatePasses();
+        setGatePasses(updatedGatePasses);
+        handleCloseCreateModal();
+      }
+    } catch (error: any) {
       console.error('Error creating gate pass:', error);
-      alert('Failed to create gate pass. Please try again.');
+      alert(error.message || 'Failed to create gate pass. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -666,7 +866,7 @@ const GatePassPage: React.FC = () => {
       setSecurityGatePassLookupError('Please enter a gatepass number.');
       return;
     }
-    const found = mockGatePasses.find((g) => g.gatepassNo === trimmed || g.gatepassNo === trimmed.padStart(6, '0'));
+    const found = gatePasses.find((g) => g.gatepassNo === trimmed || g.gatepassNo === trimmed.padStart(6, '0'));
     if (!found) {
       setSecurityGatePassLookupError('Gatepass not found. Please check the number.');
       return;
@@ -817,59 +1017,49 @@ const GatePassPage: React.FC = () => {
     restartScannerSoon();
   };
 
-  const handleApproveGatePass = () => {
+  const handleApproveGatePass = async () => {
     if (!securityGatePass) return;
     if (!canApprove) {
       alert('Cannot approve: Please ensure all serial numbers are matched and there are no failed scans.');
       return;
     }
 
-    alert(
-      `Gate Pass ${securityGatePass.gatepassNo} approved by Security Officer (frontend only).`
-    );
-    handleCloseSecurityModal();
+    try {
+      setIsSubmitting(true);
+      // Update gate pass status to DEPARTED
+      await updateGatePass(securityGatePass.id, {
+        status: 'DEPARTED',
+      });
+
+      alert(
+        `Gate Pass ${securityGatePass.gatepassNo} approved by Security Officer and marked as DEPARTED.`
+      );
+      
+      // Reload gate passes
+      const updatedGatePasses = await fetchGatePasses();
+      setGatePasses(updatedGatePasses);
+      
+      handleCloseSecurityModal();
+    } catch (error: any) {
+      console.error('Error approving gate pass:', error);
+      alert(error.message || 'Failed to approve gate pass. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Form fields for Update
   const updateFields = [
     {
-      name: 'agreementReference',
-      label: 'Agreement Reference',
+      name: 'status',
+      label: 'Status',
       type: 'select' as const,
-      placeholder: 'Select agreement reference',
-      required: true,
-      options: mockRentalAgreements.map((agreement) => ({
-        label: `${agreement.id} - ${agreement.customerName}`,
-        value: agreement.id,
-      })),
-    },
-    {
-      name: 'dateOfIssue',
-      label: 'Date of Issue',
-      type: 'date' as const,
-      placeholder: 'Select date of issue',
-      required: true,
-    },
-    {
-      name: 'returnable',
-      label: 'Returnable',
-      type: 'select' as const,
-      placeholder: 'Select returnable status',
+      placeholder: 'Select status',
       required: true,
       options: [
-        { label: 'YES', value: 'true' },
-        { label: 'NO', value: 'false' },
-      ],
-    },
-    {
-      name: 'entry',
-      label: 'Entry',
-      type: 'select' as const,
-      placeholder: 'Select entry type',
-      required: true,
-      options: [
-        { label: 'IN', value: 'IN' },
-        { label: 'OUT', value: 'OUT' },
+        { label: 'PENDING', value: 'PENDING' },
+        { label: 'DEPARTED', value: 'DEPARTED' },
+        { label: 'RETURNED', value: 'RETURNED' },
       ],
     },
     {
@@ -893,32 +1083,58 @@ const GatePassPage: React.FC = () => {
     if (!gatePass) return {};
 
     return {
-      agreementReference: gatePass.agreementReference,
-      dateOfIssue: gatePass.dateOfIssue,
-      returnable: gatePass.returnable ? 'true' : 'false',
-      entry: gatePass.entry,
+      status: gatePass.status || 'PENDING',
       vehicleNumber: gatePass.vehicleNumber,
       driverName: gatePass.driverName,
     };
   };
 
   const handleGatePassUpdate = async (data: Record<string, any>) => {
+    if (!selectedGatePass) return;
+    
     setIsSubmitting(true);
     try {
-      const agreement = mockRentalAgreements.find((a) => a.id === data.agreementReference);
-      const payload = {
-        ...data,
-        returnable: data.returnable === 'true',
-        from: 'Needle Technologies',
-        to: agreement?.customerName || '',
-        toAddress: agreement?.customerAddress || '',
+      const payload: any = {
+        status: data.status,
       };
 
-      console.log('Update gate pass payload:', payload);
-      alert(`Gate Pass "${data.agreementReference}" updated (frontend only).`);
+      // Only include returnTime if status is RETURNED
+      if (data.status === 'RETURNED') {
+        payload.returnTime = new Date().toISOString();
+      }
+
+      await updateGatePass(selectedGatePass.id, payload);
+      
+      alert(`Gate Pass "${selectedGatePass.gatepassNo}" updated successfully!`);
+      
+      // Reload gate passes
+      const updatedGatePasses = await fetchGatePasses();
+      setGatePasses(updatedGatePasses);
+      
       handleCloseUpdateModal();
+    } catch (error: any) {
+      console.error('Error updating gate pass:', error);
+      alert(error.message || 'Failed to update gate pass. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Delete gate pass handler
+  const handleDeleteGatePass = async (gatePass: GatePass) => {
+    const confirmed = confirm(`Are you sure you want to delete Gate Pass "${gatePass.gatepassNo}"? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await deleteGatePass(gatePass.id);
+      alert(`Gate Pass "${gatePass.gatepassNo}" deleted successfully!`);
+      
+      // Reload gate passes
+      const updatedGatePasses = await fetchGatePasses();
+      setGatePasses(updatedGatePasses);
+    } catch (error: any) {
+      console.error('Error deleting gate pass:', error);
+      alert(error.message || 'Failed to delete gate pass. Please try again.');
     }
   };
 
@@ -950,6 +1166,15 @@ const GatePassPage: React.FC = () => {
       tooltip: 'Approve by security officer',
       className:
         'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800',
+    },
+    {
+      label: '',
+      icon: <Trash2 className="w-4 h-4" />,
+      variant: 'danger',
+      onClick: handleDeleteGatePass,
+      tooltip: 'Delete Gate Pass',
+      className:
+        'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800',
     },
   ];
 
@@ -1160,7 +1385,7 @@ const GatePassPage: React.FC = () => {
             {/* Gate Pass table card — horizontal scroll on small screens */}
             <div className="min-h-[300px] w-full overflow-x-auto">
               <Table
-                data={mockGatePasses}
+                data={gatePasses}
                 columns={columns}
                 actions={actions}
                 itemsPerPage={10}
@@ -1168,7 +1393,7 @@ const GatePassPage: React.FC = () => {
                 filterable
                 onCreateClick={handleCreateGatePass}
                 createButtonLabel="Create Gate Pass"
-                emptyMessage="No gate passes found."
+                emptyMessage={isLoadingData ? "Loading gate passes..." : "No gate passes found."}
               />
             </div>
           </div>
@@ -1243,9 +1468,9 @@ const GatePassPage: React.FC = () => {
                             className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 ${formErrors.agreementReference ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           >
                             <option value="">Select Agreement</option>
-                            {mockRentalAgreements.map((agreement) => (
-                              <option key={agreement.id} value={agreement.id}>
-                                {agreement.id} - {agreement.customerName}
+                            {rentalAgreements.map((rental) => (
+                              <option key={rental.id} value={rental.id}>
+                                {rental.agreementNumber} - {rental.customerName}
                               </option>
                             ))}
                           </select>
@@ -1254,13 +1479,23 @@ const GatePassPage: React.FC = () => {
                           )}
                         </div>
                         {agreementReference && (() => {
-                          const agreement = mockRentalAgreements.find((a) => a.id === agreementReference);
-                          return agreement ? (
+                          const rental = rentalAgreements.find((r) => r.id === agreementReference);
+                          return rental ? (
                             <>
                               <div>
                                 <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">TO:</div>
-                                <div className="text-xs sm:text-sm text-gray-900 dark:text-white font-medium">{agreement.customerName}</div>
-                                <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-0.5">{agreement.customerAddress}</div>
+                                <div className="text-xs sm:text-sm text-gray-900 dark:text-white font-medium">{rental.customerName}</div>
+                                <div className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-0.5">{rental.customerAddress}</div>
+                                {items.length > 0 && items.some((it) => it.description && it.description !== '—') && (
+                                  <p className="text-[11px] sm:text-xs text-emerald-600 dark:text-emerald-400 mt-2">
+                                    {items.length} machine(s) from this agreement added below.
+                                  </p>
+                                )}
+                                {agreementReference && items.length <= 1 && (!items[0] || !items[0].description || items[0].description === '—') && (
+                                  <p className="text-[11px] sm:text-xs text-amber-600 dark:text-amber-400 mt-2">
+                                    No machines assigned to this agreement. Select another or add items manually.
+                                  </p>
+                                )}
                               </div>
                             </>
                           ) : null;

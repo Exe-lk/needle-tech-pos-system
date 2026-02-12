@@ -3,7 +3,7 @@ import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-resp
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -13,7 +13,20 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     const rental = await prisma.rental.findUnique({
       where: { id },
-      include: { customer: true, machines: true }
+      include: {
+        customer: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
     });
     
     if (!rental) {
@@ -27,7 +40,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
   }
 });
 
-export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -58,7 +71,7 @@ export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   }
 });
 
-export const DELETE = withAuthAndRole(['ADMIN'], async (
+export const DELETE = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }

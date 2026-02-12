@@ -17,12 +17,12 @@ import {
   ChevronUp,
   CheckCircle2,
   Circle,
-  AlertCircle,
   Truck,
   User,
   FileText,
   XCircle,
-  ListOrdered,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -55,6 +55,13 @@ interface GatePass {
 }
 
 type ScanResultType = 'success' | 'failed' | 'duplicate';
+
+/** Shown in popup after each scan: minimal info + Next to continue */
+interface ScanResultPopupData {
+  serial: string;
+  box: string;
+  result: ScanResultType;
+}
 
 interface SecurityScanLogItem {
   id: string;
@@ -280,6 +287,8 @@ const GatePassQRPage: React.FC = () => {
   const [gatePassNumberInput, setGatePassNumberInput] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [gatePass, setGatePass] = useState<GatePass | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   // Step 2 sub-flow
   const [mode, setMode] = useState<Step2Mode>('menu');
@@ -289,23 +298,45 @@ const GatePassQRPage: React.FC = () => {
   const [matchedPairs, setMatchedPairs] = useState<Set<string>>(new Set());
   /** Historical count of mismatches (for analytics / display) */
   const [mismatchCount, setMismatchCount] = useState(0);
-  const [lastFeedback, setLastFeedback] = useState<{
-    type: ScanResultType;
-    title: string;
-    message: string;
-  } | null>(null);
+  /** Popup after each scan: serial, box, result, user clicks Next to continue */
+  const [scanResultPopup, setScanResultPopup] =
+    useState<ScanResultPopupData | null>(null);
   const [detailsExpanded, setDetailsExpanded] = useState(true);
   const [scanHistoryExpanded, setScanHistoryExpanded] = useState(false);
 
-  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
-      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    let shouldBeDark = savedTheme === 'dark' || (savedTheme !== 'light' && systemPrefersDark);
+    if (shouldBeDark) {
+      document.documentElement.classList.add('dark');
+      setIsDarkMode(true);
+    } else {
+      document.documentElement.classList.remove('dark');
+      setIsDarkMode(false);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const nextDark = !isDarkMode;
+    setIsDarkMode(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   const expectedPairs = useMemo(() => {
     if (!gatePass) return new Set<string>();
@@ -322,26 +353,23 @@ const GatePassQRPage: React.FC = () => {
     [scanLog]
   );
 
-  /** Only failed scans that are still marked as blocking approval */
-  const unresolvedMismatchCount = useMemo(
-    () => scanLog.filter((s) => s.result === 'failed' && s.blocking).length,
-    [scanLog]
-  );
-
   // chronological (first scan = 1)
   const scanLogInOrder = useMemo(() => [...scanLog].reverse(), [scanLog]);
 
   const expectedPairCount = expectedPairs.size;
   const matchedCount = matchedPairs.size;
   const allMatched = expectedPairCount > 0 && matchedCount === expectedPairCount;
-  const canApprove = allMatched && unresolvedMismatchCount === 0;
+  /** Approve only when all items matched and no mismatch (no "resolve" path) */
+  const canApprove = allMatched && failedScans.length === 0;
+  /** Reject when there is at least one mismatch (QR not on gatepass) */
+  const canReject = failedScans.length > 0;
 
   const resetScanSession = useCallback(() => {
     setScannerKey((k) => k + 1);
     setScanLog([]);
     setMatchedPairs(new Set());
     setMismatchCount(0);
-    setLastFeedback(null);
+    setScanResultPopup(null);
   }, []);
 
   const handleContinueFromStep1 = () => {
@@ -373,16 +401,6 @@ const GatePassQRPage: React.FC = () => {
     resetScanSession();
   };
 
-  const showFeedback = (fb: {
-    type: ScanResultType;
-    title: string;
-    message: string;
-  }) => {
-    setLastFeedback(fb);
-    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
-    feedbackTimerRef.current = setTimeout(() => setLastFeedback(null), 2200);
-  };
-
   const restartScannerSoon = () => {
     if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     restartTimerRef.current = setTimeout(
@@ -397,6 +415,7 @@ const GatePassQRPage: React.FC = () => {
 
   const handleScanSuccess = (decodedText: string) => {
     if (!gatePass) return;
+    if (scanResultPopup !== null) return;
 
     const parsed = extractSerialAndBoxFromQR(decodedText);
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -417,12 +436,11 @@ const GatePassQRPage: React.FC = () => {
         },
         ...prev,
       ]);
-      showFeedback({
-        type: 'failed',
-        title: 'Scan failed',
-        message: 'QR must contain serial number and motor box number.',
+      setScanResultPopup({
+        serial: parsed?.serial ?? '—',
+        box: parsed?.box ?? '—',
+        result: 'failed',
       });
-      restartScannerSoon();
       return;
     }
 
@@ -445,12 +463,11 @@ const GatePassQRPage: React.FC = () => {
         },
         ...prev,
       ]);
-      showFeedback({
-        type: 'failed',
-        title: 'Not on gatepass',
-        message: `Serial ${serial || '—'} / Box ${box || '—'} is not on this gatepass. If this was a wrong machine scanned by mistake, you can mark it as resolved below after checking the stock.`,
+      setScanResultPopup({
+        serial: parsed.serial,
+        box: parsed.box,
+        result: 'failed',
       });
-      restartScannerSoon();
       return;
     }
 
@@ -468,12 +485,11 @@ const GatePassQRPage: React.FC = () => {
         },
         ...prev,
       ]);
-      showFeedback({
-        type: 'duplicate',
-        title: 'Already verified',
-        message: `${serial || '—'} / ${box || '—'} was already scanned. Scan the next machine.`,
+      setScanResultPopup({
+        serial: parsed.serial,
+        box: parsed.box,
+        result: 'duplicate',
       });
-      restartScannerSoon();
       return;
     }
 
@@ -495,31 +511,26 @@ const GatePassQRPage: React.FC = () => {
       },
       ...prev,
     ]);
-    showFeedback({
-      type: 'success',
-      title: 'Matched',
-      message: `${serial || '—'} / ${box || '—'} verified. Scan next machine.`,
+    setScanResultPopup({
+      serial: parsed.serial,
+      box: parsed.box,
+      result: 'success',
     });
-    restartScannerSoon();
   };
 
-  /** Mark a failed scan as resolved (e.g. accidental wrong QR), so it stops blocking approval */
-  const handleResolveFailedScan = (id: string) => {
-    setScanLog((prev) =>
-      prev.map((entry) =>
-        entry.id === id && entry.result === 'failed' && entry.blocking
-          ? { ...entry, blocking: false }
-          : entry
-      )
-    );
+  const handleCloseScanPopupAndContinue = () => {
+    setScanResultPopup(null);
+    restartScannerSoon();
   };
 
   const handleApproveGatePass = () => {
     if (!gatePass) return;
     if (!canApprove) {
-      alert(
-        'Cannot approve: Scan and verify all machines on this gatepass. Any unresolved mismatches must be reviewed or marked as resolved first.'
-      );
+      if (failedScans.length > 0) {
+        alert('Cannot approve: One or more scans do not match this gatepass. Reject the gatepass instead.');
+      } else {
+        alert('Scan and verify all machines on this gatepass first.');
+      }
       return;
     }
     alert(
@@ -528,27 +539,13 @@ const GatePassQRPage: React.FC = () => {
     handleBackToStep1();
   };
 
-  const renderFeedbackChip = () => {
-    if (!lastFeedback) return null;
-    const base =
-      lastFeedback.type === 'success'
-        ? 'bg-emerald-900/60 border-emerald-500/80 text-emerald-100'
-        : lastFeedback.type === 'duplicate'
-        ? 'bg-amber-900/60 border-amber-500/80 text-amber-100'
-        : 'bg-red-900/60 border-red-500/80 text-red-100';
-
-    return (
-      <div
-        className={`px-4 py-3 rounded-xl border text-sm shadow-lg shadow-black/30`}
-        role="status"
-        aria-live="polite"
-      >
-        <div className={`font-semibold mb-0.5 ${base.split(' ')[2]}`}>
-          {lastFeedback.title}
-        </div>
-        <div className="text-xs opacity-90">{lastFeedback.message}</div>
-      </div>
+  const handleRejectGatePass = () => {
+    if (!gatePass) return;
+    if (!canReject) return;
+    alert(
+      `Gate Pass ${gatePass.gatepassNo} rejected by Security Officer (frontend only).`
     );
+    handleBackToStep1();
   };
 
   const isItemVerified = useCallback(
@@ -563,27 +560,39 @@ const GatePassQRPage: React.FC = () => {
 
   if (step === 1) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors">
         {/* Header */}
-        <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-4">
-          <div className="max-w-md mx-auto">
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              <QrCode className="w-6 h-6" />
-              Security Verification
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Enter gatepass number to start QR verification
-            </p>
+        <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/50 px-4 py-4">
+          <div className="max-w-md mx-auto flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <QrCode className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                Security Verification
+              </h1>
+              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                Enter gatepass number to start QR verification
+              </p>
+            </div>
+            {mounted && (
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            )}
           </div>
         </div>
 
         {/* Content */}
         <div className="px-4 py-8">
           <div className="max-w-md mx-auto space-y-4">
-            <div className="bg-slate-800/60 backdrop-blur-sm rounded-2xl border border-slate-700/60 p-6 space-y-4">
+            <div className="bg-white dark:bg-slate-800/60 backdrop-blur-sm rounded-2xl border border-gray-200 dark:border-slate-700/60 p-6 space-y-4 shadow-sm dark:shadow-none">
               <label
                 htmlFor="gatepass-input"
-                className="block text-sm font-medium text-slate-300"
+                className="block text-sm font-medium text-gray-700 dark:text-slate-300"
               >
                 Gatepass Number
               </label>
@@ -599,26 +608,26 @@ const GatePassQRPage: React.FC = () => {
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleContinueFromStep1()}
                 placeholder="e.g. 016633"
-                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-slate-900/50 text-white border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-500"
+                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
                 autoFocus
               />
               {lookupError && (
                 <p
-                  className="text-sm text-red-400 flex items-center gap-2"
+                  className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2"
                   role="alert"
                 >
-                  <span className="w-1.5 h-1.5 bg-red-400 rounded-full"></span>
+                  <span className="w-1.5 h-1.5 bg-red-500 dark:bg-red-400 rounded-full"></span>
                   {lookupError}
                 </p>
               )}
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-gray-500 dark:text-slate-500">
                 Try: <span className="font-mono">016633</span> or{' '}
                 <span className="font-mono">016634</span>
               </p>
               <button
                 type="button"
                 onClick={handleContinueFromStep1}
-                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2"
+                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-5 h-5" />
                 Continue
@@ -643,66 +652,77 @@ const GatePassQRPage: React.FC = () => {
 
   if (mode === 'menu') {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
         {/* Header */}
-        <div className="bg-slate-900/85 backdrop-blur-sm border-b border-slate-700/60 px-4 py-3 flex items-center justify-between">
+        <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
             type="button"
             onClick={handleBackToStep1}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white"
             aria-label="Change gatepass"
           >
-            <ArrowLeft className="w-5 h-5 text-white" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 text-center">
-            <h1 className="text-lg font-bold text-white">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">
               Gatepass ready to verify
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-gray-500 dark:text-slate-400">
               Gatepass #{gatePass.gatepassNo}
             </p>
           </div>
-          <div className="w-10" />
+          {mounted ? (
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          ) : (
+            <div className="w-10" />
+          )}
         </div>
 
         {/* Content */}
         <div className="flex-1 px-4 py-6">
           <div className="max-w-md mx-auto space-y-5">
             {/* Compact summary card */}
-            <div className="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-4 space-y-3">
-              <p className="text-xs font-medium text-slate-400 mb-1">
+            <div className="bg-white dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700/80 rounded-2xl p-4 space-y-3 shadow-sm dark:shadow-none">
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
                 Quick summary
               </p>
               <div className="space-y-2 text-xs">
                 <div className="flex items-start gap-2">
-                  <FileText className="w-3.5 h-3.5 text-slate-400 mt-0.5" />
+                  <FileText className="w-3.5 h-3.5 text-gray-500 dark:text-slate-400 mt-0.5" />
                   <div>
-                    <p className="text-slate-400">Agreement</p>
-                    <p className="text-slate-100 font-medium">
+                    <p className="text-gray-500 dark:text-slate-400">Agreement</p>
+                    <p className="text-gray-900 dark:text-slate-100 font-medium">
                       {gatePass.agreementReference}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <User className="w-3.5 h-3.5 text-slate-400 mt-0.5" />
+                  <User className="w-3.5 h-3.5 text-gray-500 dark:text-slate-400 mt-0.5" />
                   <div>
-                    <p className="text-slate-400">To / Driver</p>
-                    <p className="text-slate-100 font-medium">
+                    <p className="text-gray-500 dark:text-slate-400">To / Driver</p>
+                    <p className="text-gray-900 dark:text-slate-100 font-medium">
                       {gatePass.to} · {gatePass.driverName}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <Truck className="w-3.5 h-3.5 text-slate-400 mt-0.5" />
+                  <Truck className="w-3.5 h-3.5 text-gray-500 dark:text-slate-400 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-slate-400">Address · Vehicle</p>
-                    <p className="text-slate-100 font-medium">
+                    <p className="text-gray-500 dark:text-slate-400">Address · Vehicle</p>
+                    <p className="text-gray-900 dark:text-slate-100 font-medium">
                       {gatePass.toAddress} · {gatePass.vehicleNumber}
                     </p>
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-300">
+              <div className="mt-3 flex items-center justify-between text-xs text-gray-600 dark:text-slate-300">
                 <span>
                   Machines on gatepass:{' '}
                   <span className="font-semibold">
@@ -723,15 +743,15 @@ const GatePassQRPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setMode('details')}
-                className="w-full min-h-[56px] px-4 py-3 rounded-2xl bg-slate-900/80 border border-slate-700/80 text-left flex items-center justify-between gap-3 hover:bg-slate-800/80 active:scale-[0.98] transition-all"
+                className="w-full min-h-[56px] px-4 py-3 rounded-2xl bg-white dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700/80 text-left flex items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-slate-800/80 active:scale-[0.98] transition-all shadow-sm dark:shadow-none"
               >
                 <div className="flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-blue-400" />
+                  <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   <div>
-                    <p className="text-sm font-semibold text-slate-100">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
                       View gatepass details
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
                       See all machines and full agreement info
                     </p>
                   </div>
@@ -766,63 +786,75 @@ const GatePassQRPage: React.FC = () => {
 
   if (mode === 'details') {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
         {/* Header */}
-        <div className="bg-slate-900/85 backdrop-blur-sm border-b border-slate-700/60 px-4 py-3 flex items-center justify-between">
+        <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
             type="button"
             onClick={() => setMode('menu')}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white"
             aria-label="Back to actions"
           >
-            <ArrowLeft className="w-5 h-5 text-white" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 text-center">
-            <h1 className="text-lg font-bold text-white">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">
               Gatepass details
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-gray-500 dark:text-slate-400">
               Gatepass #{gatePass.gatepassNo}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setMode('scan')}
-            className="px-3 py-1.5 text-xs font-medium text-slate-100 border border-slate-600/80 rounded-lg hover:bg-slate-800/80 transition-colors"
-          >
-            Start scan
-          </button>
+          <div className="flex items-center gap-1">
+            {mounted && (
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setMode('scan')}
+              className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-100 border border-gray-300 dark:border-slate-600/80 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800/80 transition-colors"
+            >
+              Start scan
+            </button>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 px-4 py-4 overflow-y-auto">
           <div className="max-w-2xl mx-auto space-y-4">
             {/* Info card */}
-            <div className="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-4 space-y-3">
+            <div className="bg-white dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700/80 rounded-2xl p-4 space-y-3 shadow-sm dark:shadow-none">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="flex items-start gap-2">
-                  <FileText className="w-3.5 h-3.5 text-slate-400 mt-0.5" />
+                  <FileText className="w-3.5 h-3.5 text-gray-500 dark:text-slate-400 mt-0.5" />
                   <div>
-                    <p className="text-slate-400">Agreement</p>
-                    <p className="font-medium text-slate-100">
+                    <p className="text-gray-500 dark:text-slate-400">Agreement</p>
+                    <p className="font-medium text-gray-900 dark:text-slate-100">
                       {gatePass.agreementReference}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <User className="w-3.5 h-3.5 text-slate-400 mt-0.5" />
+                  <User className="w-3.5 h-3.5 text-gray-500 dark:text-slate-400 mt-0.5" />
                   <div>
-                    <p className="text-slate-400">To / Driver</p>
-                    <p className="font-medium text-slate-100">
+                    <p className="text-gray-500 dark:text-slate-400">To / Driver</p>
+                    <p className="font-medium text-gray-900 dark:text-slate-100">
                       {gatePass.to} · {gatePass.driverName}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2 sm:col-span-2">
-                  <Truck className="w-3.5 h-3.5 text-slate-400 mt-0.5" />
+                  <Truck className="w-3.5 h-3.5 text-gray-500 dark:text-slate-400 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-slate-400">Address · Vehicle</p>
-                    <p className="font-medium text-slate-100">
+                    <p className="text-gray-500 dark:text-slate-400">Address · Vehicle</p>
+                    <p className="font-medium text-gray-900 dark:text-slate-100">
                       {gatePass.toAddress} · {gatePass.vehicleNumber}
                     </p>
                   </div>
@@ -830,7 +862,7 @@ const GatePassQRPage: React.FC = () => {
               </div>
 
               <div className="pt-2">
-                <p className="text-[11px] text-slate-400 mb-2">
+                <p className="text-[11px] text-gray-500 dark:text-slate-400 mb-2">
                   Machines on this gatepass (green = already verified)
                 </p>
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto">
@@ -841,20 +873,20 @@ const GatePassQRPage: React.FC = () => {
                         key={item.id}
                         className={`flex items-center gap-2 py-2 px-3 rounded-xl border ${
                           verified
-                            ? 'bg-emerald-950/40 border-emerald-700/80'
-                            : 'bg-slate-900/80 border-slate-700/80'
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-700/80'
+                            : 'bg-gray-50 dark:bg-slate-900/80 border-gray-200 dark:border-slate-700/80'
                         }`}
                       >
                         {verified ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                         ) : (
-                          <Circle className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                          <Circle className="w-4 h-4 text-gray-400 dark:text-slate-500 flex-shrink-0" />
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-slate-100 truncate">
+                          <p className="text-xs font-medium text-gray-900 dark:text-slate-100 truncate">
                             {item.description}
                           </p>
-                          <p className="text-[11px] text-slate-400 font-mono">
+                          <p className="text-[11px] text-gray-500 dark:text-slate-400 font-mono">
                             Serial: {item.serialNo} · Box: {item.motorBoxNo}
                           </p>
                         </div>
@@ -865,10 +897,9 @@ const GatePassQRPage: React.FC = () => {
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-400 text-center">
-              Verified {totalVerified} of {totalExpected} machines. When all are
-              verified and any wrong scans are resolved, you can approve from
-              the scan screen.
+            <p className="text-[11px] text-gray-500 dark:text-slate-400 text-center">
+              Verified {totalVerified} of {totalExpected} machines. When all match, approve.
+              If any scan does not match, you must reject the gatepass.
             </p>
           </div>
         </div>
@@ -880,33 +911,85 @@ const GatePassQRPage: React.FC = () => {
 
   // default: mode === 'scan'
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+    <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
+      {/* Post-scan popup: serial, box, result, Next */}
+      {scanResultPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="scan-result-title"
+        >
+          <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <p id="scan-result-title" className="text-sm font-medium text-gray-500 dark:text-slate-400 mb-3">
+              Scanned
+            </p>
+            <p className="font-mono text-lg text-gray-900 dark:text-white mb-1">
+              Serial: {scanResultPopup.serial}
+            </p>
+            <p className="font-mono text-lg text-gray-900 dark:text-white mb-4">
+              Box: {scanResultPopup.box}
+            </p>
+            <p className="text-sm mb-4">
+              {scanResultPopup.result === 'success' && (
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Matched</span>
+              )}
+              {scanResultPopup.result === 'failed' && (
+                <span className="text-red-600 dark:text-red-400 font-medium">Not on gatepass</span>
+              )}
+              {scanResultPopup.result === 'duplicate' && (
+                <span className="text-amber-600 dark:text-amber-400 font-medium">Already scanned</span>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={handleCloseScanPopupAndContinue}
+              className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="bg-slate-900/85 backdrop-blur-sm border-b border-slate-700/60 px-4 py-3 flex items-center justify-between">
+      <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
         <button
           type="button"
           onClick={() => setMode('menu')}
-          className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white"
           aria-label="Back to actions"
         >
-          <ArrowLeft className="w-5 h-5 text-white" />
+          <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 text-center">
-          <h1 className="text-lg font-bold text-white">
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white">
             Verify Gatepass QR
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-gray-500 dark:text-slate-400">
             Gatepass #{gatePass.gatepassNo}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={resetScanSession}
-          className="px-3 py-1.5 text-xs font-medium text-slate-200 border border-slate-600/80 rounded-lg hover:bg-slate-800/80 transition-colors flex items-center gap-1.5"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Reset
-        </button>
+        <div className="flex items-center gap-1.5">
+          {mounted && (
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={resetScanSession}
+            className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 border border-gray-300 dark:border-slate-600/80 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800/80 transition-colors flex items-center gap-1.5"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        </div>
       </div>
 
       {/* Scanner section */}
@@ -921,304 +1004,166 @@ const GatePassQRPage: React.FC = () => {
             autoClose={false}
             showCloseButton={false}
             title="Scan machine QR"
-            subtitle={
-              canApprove
-                ? 'All machines verified — you can approve below'
-                : unresolvedMismatchCount > 0
-                ? `${totalVerified}/${totalExpected} verified · ${unresolvedMismatchCount} unresolved mismatch`
-                : `${totalVerified}/${totalExpected} verified`
-            }
+            subtitle={`${totalVerified} / ${totalExpected}`}
             embedded
           />
           <div className="pointer-events-none absolute inset-10 border-2 border-white/15 rounded-3xl" />
           <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center">
             <p className="text-xs text-slate-200 font-medium">
-              Align QR code inside the frame
-            </p>
-          </div>
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-            <p className="text-[11px] text-slate-300/80">
-              The camera will auto-detect and confirm each machine
+              Point at QR code
             </p>
           </div>
         </div>
       </div>
 
       {/* Content section */}
-      <div className="flex-1 bg-slate-900/60 px-4 py-4 overflow-y-auto">
+      <div className="flex-1 bg-gray-50/80 dark:bg-slate-900/60 px-4 py-4 overflow-y-auto">
         <div className="max-w-2xl mx-auto space-y-4">
-          {/* Progress + small link to details */}
+          {/* Progress: minimal */}
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-100">
-                Verification progress
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Step 2 of 2 · Scan every machine on this gatepass
-              </p>
-              <button
-                type="button"
-                onClick={() => setMode('details')}
-                className="mt-1 text-[11px] text-blue-300 underline underline-offset-2"
-              >
-                View gatepass details
-              </button>
+            <div className="flex items-center gap-3 bg-white dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700/80 rounded-xl px-3 py-2 shadow-sm dark:shadow-none">
+              <span className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">
+                {totalVerified} / {totalExpected}
+              </span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">verified</span>
             </div>
-            <div className="flex items-center gap-3 bg-slate-800/60 border border-slate-700/80 rounded-xl px-3 py-2">
-              <div className="text-center">
-                <div className="text-lg font-bold text-white tabular-nums">
-                  {totalVerified}
-                </div>
-                <div className="text-[10px] text-slate-400">Verified</div>
-              </div>
-              <div className="w-px h-8 bg-slate-700" />
-              <div className="text-center">
-                <div className="text-lg font-bold text-white tabular-nums">
-                  {totalExpected}
-                </div>
-                <div className="text-[10px] text-slate-400">Total</div>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setMode('details')}
+              className="text-xs text-blue-600 dark:text-blue-300 underline underline-offset-2"
+            >
+              View gatepass
+            </button>
           </div>
 
-          {/* Progress bar */}
-          <div className="space-y-2">
-            <div className="w-full bg-slate-800/70 rounded-full h-1.5 overflow-hidden">
-              <div
-                className={`h-1.5 rounded-full transition-all duration-500 ${
-                  canApprove ? 'bg-emerald-400' : 'bg-blue-500'
-                }`}
-                style={{
-                  width:
-                    totalExpected > 0
-                      ? `${(totalVerified / totalExpected) * 100}%`
-                      : '0%',
-                }}
-              />
-            </div>
+          <div className="w-full bg-gray-200 dark:bg-slate-800/70 rounded-full h-1.5 overflow-hidden">
+            <div
+              className={`h-1.5 rounded-full transition-all duration-500 ${
+                canApprove ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-blue-500'
+              }`}
+              style={{
+                width:
+                  totalExpected > 0
+                    ? `${(totalVerified / totalExpected) * 100}%`
+                    : '0%',
+              }}
+            />
           </div>
 
-          {/* Feedback chip (latest scan) */}
-          {lastFeedback && (
-            <div className="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-3">
-              {renderFeedbackChip()}
-            </div>
-          )}
-
-          {/* Failed scans – with "Mark resolved" to handle accidental wrong QR */}
+          {/* Failed scans – mismatch list (no resolve; officer must reject) */}
           {failedScans.length > 0 && (
-            <div className="bg-red-950/40 border border-red-700/80 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <XCircle className="w-4 h-4 text-red-300" />
-                  <p className="text-xs font-semibold text-red-200">
-                    Failed scans ({failedScans.length})
-                  </p>
-                </div>
-                <p className="text-[11px] text-red-200/80">
-                  {unresolvedMismatchCount > 0
-                    ? `${unresolvedMismatchCount} unresolved (blocking approval)`
-                    : 'All marked resolved (not blocking approval)'}
-                </p>
-              </div>
-              <p className="text-[11px] text-red-200/90">
-                If a wrong machine was scanned by mistake, you can mark that
-                entry as resolved after confirming the correct machines are
-                present.
+            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-700/80 rounded-2xl p-3 space-y-2">
+              <p className="text-xs font-semibold text-red-700 dark:text-red-200 flex items-center gap-1.5">
+                <XCircle className="w-4 h-4" />
+                Not on gatepass ({failedScans.length})
               </p>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {failedScans.map((entry, idx) => {
-                  const isBlocking = entry.blocking;
-                  return (
-                    <div
-                      key={entry.id}
-                      className={`flex items-start gap-2 py-2 px-3 rounded-xl border ${
-                        isBlocking
-                          ? 'bg-red-950/70 border-red-800/80'
-                          : 'bg-red-950/20 border-red-800/40 opacity-85'
-                      }`}
-                    >
-                      <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-900 flex items-center justify-center text-[11px] font-semibold text-red-200">
-                        {failedScans.length - idx}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-mono text-xs text-red-50">
-                          Serial: {entry.extractedSerial || '—'} · Box:{' '}
-                          {entry.extractedBox || '—'}
-                        </p>
-                        <p className="text-[11px] text-red-200 mt-0.5">
-                          {entry.reason}
-                        </p>
-                        <p className="text-[11px] text-red-200/80 mt-0.5">
-                          {isBlocking
-                            ? 'Unresolved – still blocking approval.'
-                            : 'Resolved – treated as accidental / external machine.'}
-                        </p>
-                      </div>
-                      {isBlocking && (
-                        <button
-                          type="button"
-                          onClick={() => handleResolveFailedScan(entry.id)}
-                          className="ml-2 px-2 py-1 text-[11px] font-medium rounded-lg bg-red-900/70 text-red-100 border border-red-600/80 hover:bg-red-800/80"
-                        >
-                          Mark resolved
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="space-y-2 max-h-32 overflow-y-auto">
+                {failedScans.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-2 py-2 px-3 rounded-xl border bg-red-100/80 dark:bg-red-950/70 border-red-200 dark:border-red-800/80"
+                  >
+                    <p className="font-mono text-xs text-red-900 dark:text-red-50 flex-1 min-w-0">
+                      {entry.extractedSerial || '—'} · {entry.extractedBox || '—'}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Scan history (collapsible, unchanged detection logic) */}
+          {/* Scan history – minimal list, no long explanation */}
           {scanLogInOrder.length > 0 && (
-            <div className="bg-slate-900/80 border border-slate-700/80 rounded-2xl overflow-hidden">
+            <div className="bg-white dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700/80 rounded-2xl overflow-hidden shadow-sm dark:shadow-none">
               <button
                 type="button"
                 onClick={() => setScanHistoryExpanded((v) => !v)}
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/80 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-slate-800/80 transition-colors"
                 aria-expanded={scanHistoryExpanded}
               >
-                <span className="flex items-center gap-2 text-sm font-medium text-slate-100">
-                  <ListOrdered className="w-4 h-4 text-blue-400" />
-                  Scan history ({scanLogInOrder.length})
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  {matchedCount} verified · {failedScans.length} failed
+                <span className="text-sm font-medium text-gray-900 dark:text-slate-100">
+                  History ({scanLogInOrder.length})
                 </span>
                 {scanHistoryExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                  <ChevronUp className="w-4 h-4 text-gray-500 dark:text-slate-400" />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                  <ChevronDown className="w-4 h-4 text-gray-500 dark:text-slate-400" />
                 )}
               </button>
               {scanHistoryExpanded && (
-                <div className="px-4 pb-4 pt-1 border-t border-slate-800">
-                  <p className="text-[11px] text-slate-400 mb-2">
-                    Scan 1 = first scan, Scan 6 = 6th scan, etc. Use this to
-                    see which QR was wrong or duplicated.
-                  </p>
-                  <div className="space-y-2 max-h-52 overflow-y-auto">
-                    {scanLogInOrder.map((entry, idx) => {
-                      const scanNumber = idx + 1;
-                      const isSuccess = entry.result === 'success';
-                      const isFailed = entry.result === 'failed';
-                      const isDuplicate = entry.result === 'duplicate';
-                      return (
-                        <div
-                          key={entry.id}
-                          className={`flex items-start gap-2 py-2 px-3 rounded-xl border text-left ${
-                            isSuccess
-                              ? 'bg-emerald-950/40 border-emerald-700/80'
-                              : isFailed
-                              ? entry.blocking
-                                ? 'bg-red-950/40 border-red-800/80'
-                                : 'bg-red-950/20 border-red-800/40'
-                              : 'bg-amber-950/40 border-amber-700/80'
-                          }`}
-                        >
-                          <span
-                            className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-                              isSuccess
-                                ? 'bg-emerald-800 text-emerald-100'
-                                : isFailed
-                                ? 'bg-red-800 text-red-100'
-                                : 'bg-amber-800 text-amber-100'
-                            }`}
-                          >
-                            {scanNumber}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            {isSuccess && (
-                              <>
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-200">
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  Matched
-                                </span>
-                                <p className="font-mono text-[11px] text-emerald-50 mt-0.5">
-                                  Serial: {entry.extractedSerial} · Box:{' '}
-                                  {entry.extractedBox}
-                                </p>
-                              </>
-                            )}
-                            {isFailed && (
-                              <>
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-200">
-                                  <XCircle className="w-3.5 h-3.5" />
-                                  {entry.blocking
-                                    ? 'Not on gatepass (unresolved)'
-                                    : 'Not on gatepass (resolved)'}
-                                </span>
-                                <p className="font-mono text-[11px] text-red-50 mt-0.5">
-                                  Scanned: Serial{' '}
-                                  {entry.extractedSerial || '—'} · Box{' '}
-                                  {entry.extractedBox || '—'}
-                                </p>
-                                <p className="text-[11px] text-red-200 mt-0.5">
-                                  {entry.reason}
-                                </p>
-                              </>
-                            )}
-                            {isDuplicate && (
-                              <>
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-200">
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                  Already verified
-                                </span>
-                                <p className="font-mono text-[11px] text-amber-50 mt-0.5">
-                                  Serial: {entry.extractedSerial} · Box:{' '}
-                                  {entry.extractedBox}
-                                </p>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="px-4 pb-4 pt-1 border-t border-gray-200 dark:border-slate-800 space-y-2 max-h-52 overflow-y-auto">
+                  {scanLogInOrder.map((entry, idx) => {
+                    const isSuccess = entry.result === 'success';
+                    const isFailed = entry.result === 'failed';
+                    const isDuplicate = entry.result === 'duplicate';
+                    return (
+                      <div
+                        key={entry.id}
+                        className={`flex items-center gap-2 py-2 px-3 rounded-xl border ${
+                          isSuccess
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-700/80'
+                            : isFailed
+                            ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800/80'
+                            : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-700/80'
+                        }`}
+                      >
+                        <span className="text-xs font-mono text-gray-500 dark:text-slate-300 w-5">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-medium flex-1 min-w-0">
+                          {isSuccess && <span className="text-emerald-700 dark:text-emerald-300">Matched</span>}
+                          {isFailed && <span className="text-red-700 dark:text-red-300">Not on gatepass</span>}
+                          {isDuplicate && <span className="text-amber-700 dark:text-amber-300">Already scanned</span>}
+                        </span>
+                        <span className="font-mono text-[11px] text-gray-500 dark:text-slate-400 truncate">
+                          {entry.extractedSerial} · {entry.extractedBox}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
 
-          {/* Status message */}
-          <p
-            className="text-xs text-center text-slate-300 min-h-[1.25rem]"
-            role="status"
-          >
-            {canApprove ? (
-              <span className="text-emerald-300 font-medium flex items-center justify-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4" />
-                All machines matched and no unresolved mismatches. You can
-                approve this gatepass.
-              </span>
-            ) : unresolvedMismatchCount > 0 ? (
-              <span className="text-red-300 font-medium flex items-center justify-center gap-1.5">
-                <AlertCircle className="w-4 h-4" />
-                There are unresolved mismatches. Review them and either rescan
-                or mark as resolved before approving.
-              </span>
-            ) : (
-              'Scan each machine QR one by one. Order does not matter.'
+          {/* Status – one short line */}
+          <p className="text-xs text-center text-gray-600 dark:text-slate-300 min-h-[1.25rem]" role="status">
+            {canApprove && (
+              <span className="text-emerald-600 dark:text-emerald-300 font-medium">Ready to approve.</span>
+            )}
+            {canReject && (
+              <span className="text-red-600 dark:text-red-300 font-medium">Mismatch. Reject gatepass.</span>
+            )}
+            {!canApprove && !canReject && (
+              <span className="text-gray-500 dark:text-slate-400">Scan each machine.</span>
             )}
           </p>
 
-          {/* Approve button */}
-          <div className="pb-4">
+          {/* Approve / Reject buttons */}
+          <div className="pb-4 space-y-3">
             <button
               type="button"
               onClick={handleApproveGatePass}
               disabled={!canApprove}
               className={`w-full min-h-[56px] px-5 py-3 rounded-2xl text-base font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
                 canApprove
-                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-900/40'
-                  : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-900/30 dark:shadow-emerald-900/40'
+                  : 'bg-gray-300 dark:bg-slate-700 text-gray-500 dark:text-slate-400 cursor-not-allowed'
               }`}
             >
               <ShieldCheck className="w-5 h-5" />
-            Approve Gatepass
+              Approve Gatepass
             </button>
+            {canReject && (
+              <button
+                type="button"
+                onClick={handleRejectGatePass}
+                className="w-full min-h-[52px] px-5 py-3 rounded-2xl text-base font-semibold flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white active:scale-[0.98] transition-all"
+              >
+                <XCircle className="w-5 h-5" />
+                Reject Gatepass
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1229,9 +1174,9 @@ const GatePassQRPage: React.FC = () => {
 // Small internal icon helper for right-chevron
 const ChevronRightIcon: React.FC<{ light?: boolean }> = ({ light }) => (
   <svg
-    className={`w-4 h-4 ${
-      light ? 'text-blue-100' : 'text-slate-400'
-    } flex-shrink-0`}
+    className={`w-4 h-4 flex-shrink-0 ${
+      light ? 'text-blue-100' : 'text-gray-500 dark:text-slate-400'
+    }`}
     viewBox="0 0 20 20"
     fill="currentColor"
   >

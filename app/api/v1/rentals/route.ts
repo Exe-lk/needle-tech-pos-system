@@ -14,7 +14,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -26,7 +26,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     if (search) {
       where.OR = [
-        { rentalNumber: { contains: search, mode: 'insensitive' } },
+        { agreementNumber: { contains: search, mode: 'insensitive' } },
       ];
     }
     
@@ -35,14 +35,27 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     const totalItems = await prisma.rental.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_: 'asc' | 'desc' = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const rentals = await prisma.rental.findMany({
       where,
       skip,
       take: limit,
       orderBy: { [sortBy]: sortOrder_ },
-      include: { customer: true, machines: true }
+      include: {
+        customer: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
     });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
@@ -74,7 +87,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { customerId, startDate, endDate, machineIds = [] } = body;

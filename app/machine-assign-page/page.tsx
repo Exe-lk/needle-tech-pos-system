@@ -10,6 +10,8 @@ import {
   Zap,
   Scan,
   Info,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -231,6 +233,8 @@ type ViewMode = 'menu' | 'details' | 'scan';
 
 const MachineAssignPage: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   // Step 1: agreement input
   const [agreementNumberInput, setAgreementNumberInput] = useState('');
@@ -253,6 +257,32 @@ const MachineAssignPage: React.FC = () => {
   useEffect(() => {
     activeScanCategoryIndexRef.current = activeScanCategoryIndex;
   }, [activeScanCategoryIndex]);
+
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldBeDark = savedTheme === 'dark' || (savedTheme !== 'light' && systemPrefersDark);
+    if (shouldBeDark) {
+      document.documentElement.classList.add('dark');
+      setIsDarkMode(true);
+    } else {
+      document.documentElement.classList.remove('dark');
+      setIsDarkMode(false);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const nextDark = !isDarkMode;
+    setIsDarkMode(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   /** True when all expected categories have reached their required quantity. */
   const isAllCategoriesComplete = (): boolean => {
@@ -486,25 +516,37 @@ const MachineAssignPage: React.FC = () => {
   // -------------------------------------------------------------------------
   if (step === 1) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors">
         {/* Header */}
-        <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-4">
-          <div className="max-w-md mx-auto">
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              <Scan className="w-6 h-6" />
-              Machine Assignment
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Enter the rental agreement number to continue
-            </p>
+        <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/50 px-4 py-4">
+          <div className="max-w-md mx-auto flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Scan className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                Machine Assignment
+              </h1>
+              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                Enter the rental agreement number to continue
+              </p>
+            </div>
+            {mounted && (
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            )}
           </div>
         </div>
 
         {/* Content */}
         <div className="px-4 py-8">
           <div className="max-w-md mx-auto space-y-4">
-            <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6 space-y-4">
-              <label htmlFor="agreement-input" className="block text-sm font-medium text-slate-300">
+            <div className="bg-white dark:bg-slate-800/60 backdrop-blur-sm rounded-2xl border border-gray-200 dark:border-slate-700/60 p-6 space-y-4 shadow-sm dark:shadow-none">
+              <label htmlFor="agreement-input" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Agreement Number
               </label>
               <input
@@ -518,16 +560,16 @@ const MachineAssignPage: React.FC = () => {
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleContinueFromStep1()}
                 placeholder="e.g. RA24010006"
-                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-slate-700/50 text-white border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-500"
+                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
                 autoFocus
               />
               {lookupError && (
-                <p className="text-sm text-red-400 flex items-center gap-2" role="alert">
-                  <span className="w-1.5 h-1.5 bg-red-400 rounded-full"></span>
+                <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2" role="alert">
+                  <span className="w-1.5 h-1.5 bg-red-500 dark:bg-red-400 rounded-full"></span>
                   {lookupError}
                 </p>
               )}
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-gray-500 dark:text-slate-500">
                 Try: RA24010002, RA24010005, RA24010006
               </p>
               <button
@@ -583,48 +625,59 @@ const MachineAssignPage: React.FC = () => {
   if (viewMode === 'menu') {
     const remaining = totalExpected - totalScanned;
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
         {/* Header */}
-        <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
+        <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
             type="button"
             onClick={handleBackToStep1}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white"
             aria-label="Change agreement"
           >
-            <ArrowLeft className="w-5 h-5 text-white" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 text-center">
-            <h1 className="text-lg font-bold text-white">Machine Assignment</h1>
-            <p className="text-xs text-slate-400">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Machine Assignment</h1>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
               Agreement #{selectedAgreement.agreementNo}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-yellow-400" />
-            <Scan className="w-5 h-5 text-white" />
-          </div>
+          {mounted ? (
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-yellow-500 dark:text-yellow-400" />
+              <Scan className="w-5 h-5 text-gray-600 dark:text-white" />
+            </div>
+          )}
         </div>
 
         {/* Content */}
         <div className="flex-1 px-4 py-6">
           <div className="max-w-xl mx-auto space-y-6">
             {/* Agreement summary */}
-            <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+            <div className="bg-white dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700/60 rounded-2xl p-5 space-y-3 shadow-sm dark:shadow-none">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                     Agreement
                   </p>
-                  <p className="text-base font-semibold text-white">
+                  <p className="text-base font-semibold text-gray-900 dark:text-white">
                     {selectedAgreement.agreementNo}
                   </p>
                 </div>
                 <span
                   className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
                     selectedAgreement.status === 'Pending'
-                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/40'
-                      : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40'
+                      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/40'
+                      : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40'
                   }`}
                 >
                   {selectedAgreement.status}
@@ -632,26 +685,26 @@ const MachineAssignPage: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wide">Customer</p>
-                  <p className="text-slate-100 font-medium truncate">
+                  <p className="text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wide">Customer</p>
+                  <p className="text-gray-900 dark:text-slate-100 font-medium truncate">
                     {selectedAgreement.customerName}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wide">Period</p>
-                  <p className="text-slate-100 font-medium">
+                  <p className="text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wide">Period</p>
+                  <p className="text-gray-900 dark:text-slate-100 font-medium">
                     {selectedAgreement.startDate} → {selectedAgreement.endDate ?? 'Ongoing'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wide">Monthly Rent</p>
-                  <p className="text-slate-100 font-medium">
+                  <p className="text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wide">Monthly Rent</p>
+                  <p className="text-gray-900 dark:text-slate-100 font-medium">
                     Rs. {selectedAgreement.monthlyRent.toLocaleString('en-LK')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wide">Machines</p>
-                  <p className="text-slate-100 font-medium">
+                  <p className="text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wide">Machines</p>
+                  <p className="text-gray-900 dark:text-slate-100 font-medium">
                     {totalExpected} planned · {totalScanned} scanned
                   </p>
                 </div>
@@ -659,23 +712,23 @@ const MachineAssignPage: React.FC = () => {
             </div>
 
             {/* Actions */}
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-5 space-y-4">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            <div className="bg-white dark:bg-slate-800/40 border border-gray-200 dark:border-slate-700/60 rounded-2xl p-5 space-y-4 shadow-sm dark:shadow-none">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                 What would you like to do?
               </p>
 
               <button
                 type="button"
                 onClick={() => setViewMode('details')}
-                className="w-full min-h-[56px] px-4 py-3 rounded-xl border border-slate-600 bg-slate-800/70 hover:bg-slate-700/80 transition-all flex items-center justify-between gap-3"
+                className="w-full min-h-[56px] px-4 py-3 rounded-xl border border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-800/70 hover:bg-gray-100 dark:hover:bg-slate-700/80 transition-all flex items-center justify-between gap-3 text-left"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-slate-700/80 flex items-center justify-center">
-                    <Info className="w-5 h-5 text-slate-200" />
+                  <div className="w-9 h-9 rounded-xl bg-gray-200 dark:bg-slate-700/80 flex items-center justify-center">
+                    <Info className="w-5 h-5 text-gray-600 dark:text-slate-200" />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-semibold text-white">View agreement details</p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">View agreement details</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
                       Summary, customer, duration and machine plan
                     </p>
                   </div>
@@ -706,7 +759,7 @@ const MachineAssignPage: React.FC = () => {
                 </div>
               </button>
 
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-gray-500 dark:text-slate-500">
                 You can come back here any time to switch between viewing details and
                 scanning without losing your progress.
               </p>
@@ -722,55 +775,67 @@ const MachineAssignPage: React.FC = () => {
   // -------------------------------------------------------------------------
   if (viewMode === 'details') {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
         {/* Header */}
-        <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
+        <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
             type="button"
             onClick={() => setViewMode('menu')}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 text-xs text-slate-200"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 text-xs text-gray-700 dark:text-slate-200"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
           </button>
           <div className="flex-1 text-center">
-            <h1 className="text-lg font-bold text-white">Agreement details</h1>
-            <p className="text-xs text-slate-400">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Agreement details</h1>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
               #{selectedAgreement.agreementNo}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleStartScanFlow}
-            className="px-3 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-[11px] font-semibold text-white flex items-center gap-1"
-          >
-            <Scan className="w-3.5 h-3.5" />
-            Start scan
-          </button>
+          <div className="flex items-center gap-2">
+            {mounted ? (
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleStartScanFlow}
+              className="px-3 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-[11px] font-semibold text-white flex items-center gap-1"
+            >
+              <Scan className="w-3.5 h-3.5" />
+              Start scan
+            </button>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 px-4 py-6 overflow-y-auto">
           <div className="max-w-2xl mx-auto space-y-6">
             {/* High-level info */}
-            <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+            <div className="bg-white dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700/60 rounded-2xl p-5 space-y-3 shadow-sm dark:shadow-none">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                     Customer
                   </p>
-                  <p className="text-base font-semibold text-white">
+                  <p className="text-base font-semibold text-gray-900 dark:text-white">
                     {selectedAgreement.customerName}
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
                     Customer #{selectedAgreement.customerNo}
                   </p>
                 </div>
                 <span
                   className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
                     selectedAgreement.status === 'Pending'
-                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/40'
-                      : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/40'
+                      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/40'
+                      : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40'
                   }`}
                 >
                   {selectedAgreement.status}
@@ -778,26 +843,26 @@ const MachineAssignPage: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs sm:text-sm">
                 <div>
-                  <p className="text-slate-400 text-[11px] uppercase tracking-wide">Start</p>
-                  <p className="text-slate-100 font-medium">
+                  <p className="text-gray-500 dark:text-slate-400 text-[11px] uppercase tracking-wide">Start</p>
+                  <p className="text-gray-900 dark:text-slate-100 font-medium">
                     {selectedAgreement.startDate}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-[11px] uppercase tracking-wide">End</p>
-                  <p className="text-slate-100 font-medium">
+                  <p className="text-gray-500 dark:text-slate-400 text-[11px] uppercase tracking-wide">End</p>
+                  <p className="text-gray-900 dark:text-slate-100 font-medium">
                     {selectedAgreement.endDate ?? 'Ongoing'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-[11px] uppercase tracking-wide">Monthly Rent</p>
-                  <p className="text-slate-100 font-medium">
+                  <p className="text-gray-500 dark:text-slate-400 text-[11px] uppercase tracking-wide">Monthly Rent</p>
+                  <p className="text-gray-900 dark:text-slate-100 font-medium">
                     Rs. {selectedAgreement.monthlyRent.toLocaleString('en-LK')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-[11px] uppercase tracking-wide">Outstanding</p>
-                  <p className="text-slate-100 font-medium">
+                  <p className="text-gray-500 dark:text-slate-400 text-[11px] uppercase tracking-wide">Outstanding</p>
+                  <p className="text-gray-900 dark:text-slate-100 font-medium">
                     Rs. {selectedAgreement.outstanding.toLocaleString('en-LK')}
                   </p>
                 </div>
@@ -805,18 +870,18 @@ const MachineAssignPage: React.FC = () => {
             </div>
 
             {/* Machine plan */}
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+            <div className="bg-white dark:bg-slate-800/40 border border-gray-200 dark:border-slate-700/60 rounded-2xl p-5 space-y-3 shadow-sm dark:shadow-none">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                   Machine plan
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-gray-500 dark:text-slate-400">
                   {totalScanned} of {totalExpected} machines scanned
                 </p>
               </div>
 
               {categories.length === 0 ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-gray-500 dark:text-slate-500">
                   No planned machine categories defined for this agreement.
                 </p>
               ) : (
@@ -830,25 +895,25 @@ const MachineAssignPage: React.FC = () => {
                     return (
                       <div
                         key={cat.id}
-                        className="bg-slate-900/40 border border-slate-700/60 rounded-xl px-4 py-3 space-y-2"
+                        className="bg-gray-50 dark:bg-slate-900/40 border border-gray-200 dark:border-slate-700/60 rounded-xl px-4 py-3 space-y-2"
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold text-white">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">
                               {[cat.brand, cat.model].filter(Boolean).join(' ') || 'Machine'}
                             </p>
-                            <p className="text-xs text-slate-400">
+                            <p className="text-xs text-gray-500 dark:text-slate-400">
                               {cat.type || 'Category'} • {cat.quantity} machine(s)
                             </p>
                           </div>
                           <div className="text-right text-xs">
-                            <p className="text-slate-400">Scanned</p>
-                            <p className="font-semibold text-slate-100">
+                            <p className="text-gray-500 dark:text-slate-400">Scanned</p>
+                            <p className="font-semibold text-gray-900 dark:text-slate-100">
                               {scanned} / {cat.quantity}
                             </p>
                           </div>
                         </div>
-                        <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                        <div className="w-full bg-gray-200 dark:bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                           <div
                             className={`h-1.5 rounded-full ${
                               scanned >= cat.quantity ? 'bg-emerald-500' : 'bg-blue-500'
@@ -864,19 +929,19 @@ const MachineAssignPage: React.FC = () => {
             </div>
 
             {/* Current scans list */}
-            <div className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+            <div className="bg-white dark:bg-slate-800/40 border border-gray-200 dark:border-slate-700/60 rounded-2xl p-5 space-y-3 shadow-sm dark:shadow-none">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                   Assigned machines (scanned)
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-gray-500 dark:text-slate-400">
                   {totalScanned === 0
                     ? 'No scans yet'
                     : `${totalScanned} machine${totalScanned > 1 ? 's' : ''}`}
                 </p>
               </div>
               {totalScanned === 0 ? (
-                <div className="text-center py-6 text-xs text-slate-500">
+                <div className="text-center py-6 text-xs text-gray-500 dark:text-slate-500">
                   Start scanning to see machines here.
                 </div>
               ) : (
@@ -887,17 +952,17 @@ const MachineAssignPage: React.FC = () => {
                     .map((machine) => (
                       <div
                         key={machine.id}
-                        className="bg-slate-900/40 border border-slate-700/60 rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                        className="bg-gray-50 dark:bg-slate-900/40 border border-gray-200 dark:border-slate-700/60 rounded-xl px-4 py-3 flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center">
-                            <Scan className="w-4 h-4 text-slate-300" />
+                          <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-slate-700/80 flex items-center justify-center">
+                            <Scan className="w-4 h-4 text-gray-600 dark:text-slate-300" />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                               {machine.serialNumber}
                             </p>
-                            <p className="text-xs text-slate-400">
+                            <p className="text-xs text-gray-500 dark:text-slate-400">
                               Box {machine.boxNumber || '—'}
                             </p>
                           </div>
@@ -917,31 +982,43 @@ const MachineAssignPage: React.FC = () => {
   // STEP 2 / VIEW: SCANNING INTERFACE
   // -------------------------------------------------------------------------
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+    <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
       {/* Header */}
-      <div className="bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
+      <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
         <button
           type="button"
           onClick={() => setViewMode('menu')}
-          className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white"
           aria-label="Back to actions"
         >
-          <ArrowLeft className="w-5 h-5 text-white" />
+          <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 text-center">
-          <h1 className="text-lg font-bold text-white">Scan inventory</h1>
-          <p className="text-xs text-slate-400">
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white">Scan inventory</h1>
+          <p className="text-xs text-gray-500 dark:text-slate-400">
             Agreement #{selectedAgreement.agreementNo}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setViewMode('details')}
-          className="px-3 py-1.5 rounded-full bg-slate-800 text-[11px] text-slate-100 border border-slate-700 flex items-center gap-1"
-        >
-          <Info className="w-3.5 h-3.5" />
-          Details
-        </button>
+        <div className="flex items-center gap-2">
+          {mounted && (
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setViewMode('details')}
+            className="px-3 py-1.5 rounded-full bg-gray-200 dark:bg-slate-800 text-[11px] text-gray-700 dark:text-slate-100 border border-gray-300 dark:border-slate-700 flex items-center gap-1"
+          >
+            <Info className="w-3.5 h-3.5" />
+            Details
+          </button>
+        </div>
       </div>
 
       {/* QR Scanner Section - Only show when actively scanning */}
@@ -961,48 +1038,48 @@ const MachineAssignPage: React.FC = () => {
               embedded
             />
             <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center">
-              <p className="text-sm text-slate-300 font-medium">
+              <p className="text-sm text-slate-200 dark:text-slate-300 font-medium">
                 Align QR code within frame
               </p>
             </div>
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-              <p className="text-xs text-slate-400">Auto-detecting...</p>
+              <p className="text-xs text-slate-300 dark:text-slate-400">Auto-detecting...</p>
             </div>
           </div>
         </div>
       )}
 
       {/* Progress Section */}
-      <div className="flex-1 bg-slate-800/30 backdrop-blur-sm px-4 py-4 overflow-y-auto">
+      <div className="flex-1 bg-gray-50/80 dark:bg-slate-800/30 backdrop-blur-sm px-4 py-4 overflow-y-auto">
         <div className="max-w-2xl mx-auto space-y-4">
           {/* Scanning Progress Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold text-white">Scanning progress</h2>
-              <p className="text-xs text-slate-400">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Scanning progress</h2>
+              <p className="text-xs text-gray-500 dark:text-slate-400">
                 Job ID: #{selectedAgreement.agreementNo}
               </p>
             </div>
-            <div className="flex items-center gap-3 bg-slate-800/50 rounded-xl px-4 py-2 border border-slate-700/50">
+            <div className="flex items-center gap-3 bg-white dark:bg-slate-800/50 rounded-xl px-4 py-2 border border-gray-200 dark:border-slate-700/50 shadow-sm dark:shadow-none">
               <div className="text-center">
-                <div className="text-2xl font-bold text-white tabular-nums">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
                   {totalScanned}
                 </div>
-                <div className="text-xs text-slate-400">Scanned</div>
+                <div className="text-xs text-gray-500 dark:text-slate-400">Scanned</div>
               </div>
-              <div className="w-px h-8 bg-slate-700" />
+              <div className="w-px h-8 bg-gray-300 dark:bg-slate-700" />
               <div className="text-center">
-                <div className="text-2xl font-bold text-white tabular-nums">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
                   {totalExpected}
                 </div>
-                <div className="text-xs text-slate-400">Total</div>
+                <div className="text-xs text-gray-500 dark:text-slate-400">Total</div>
               </div>
             </div>
           </div>
 
           {/* Progress Bar */}
           <div className="space-y-2">
-            <div className="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+            <div className="w-full bg-gray-200 dark:bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
               <div
                 className={`h-1.5 rounded-full transition-all duration-500 ${
                   allComplete ? 'bg-green-500' : 'bg-blue-500'
@@ -1016,17 +1093,17 @@ const MachineAssignPage: React.FC = () => {
 
           {/* Latest Scan */}
           {latestMachine && (
-            <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 backdrop-blur-sm border border-emerald-700/50 rounded-xl p-4">
+            <div className="bg-gradient-to-r from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 backdrop-blur-sm border border-emerald-300 dark:border-emerald-700/50 rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="flex-shrink-0 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
                     <CheckCircle2 className="w-6 h-6 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-base font-bold text-emerald-300 truncate">
+                    <p className="text-base font-bold text-emerald-800 dark:text-emerald-300 truncate">
                       {latestMachine.serialNumber}
                     </p>
-                    <p className="text-sm text-emerald-400/80">
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400/80">
                       Box {latestMachine.boxNumber || '—'} • Added
                     </p>
                   </div>
@@ -1034,10 +1111,10 @@ const MachineAssignPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleRemoveMachineFromAgreement(latestMachine.id)}
-                  className="flex-shrink-0 p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
+                  className="flex-shrink-0 p-2 hover:bg-gray-200 dark:hover:bg-slate-800/50 rounded-lg transition-colors text-gray-600 dark:text-slate-400"
                   aria-label="Undo last scan"
                 >
-                  <RotateCcw className="w-5 h-5 text-slate-400" />
+                  <RotateCcw className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -1046,24 +1123,24 @@ const MachineAssignPage: React.FC = () => {
           {/* Previous Scans */}
           {previousMachines.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                 Previous scans
               </h3>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {previousMachines.map((machine) => (
                   <div
                     key={machine.id}
-                    className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-lg p-3 flex items-center justify-between"
+                    className="bg-white dark:bg-slate-800/30 backdrop-blur-sm border border-gray-200 dark:border-slate-700/50 rounded-lg p-3 flex items-center justify-between shadow-sm dark:shadow-none"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex-shrink-0 w-8 h-8 bg-slate-700/50 rounded-lg flex items-center justify-center">
-                        <Scan className="w-4 h-4 text-slate-400" />
+                      <div className="flex-shrink-0 w-8 h-8 bg-gray-200 dark:bg-slate-700/50 rounded-lg flex items-center justify-center">
+                        <Scan className="w-4 h-4 text-gray-500 dark:text-slate-400" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                           {machine.serialNumber}
                         </p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-gray-500 dark:text-slate-400">
                           Box {machine.boxNumber || '—'}
                         </p>
                       </div>
@@ -1071,10 +1148,10 @@ const MachineAssignPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleRemoveMachineFromAgreement(machine.id)}
-                      className="flex-shrink-0 p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
+                      className="flex-shrink-0 p-2 hover:bg-gray-200 dark:hover:bg-slate-700/50 rounded-lg transition-colors text-gray-500 dark:text-slate-400"
                       aria-label="Delete scan"
                     >
-                      <Trash2 className="w-4 h-4 text-slate-400" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ))}
@@ -1124,11 +1201,11 @@ const MachineAssignPage: React.FC = () => {
 
           {totalScanned === 0 && (
             <div className="text-center py-8 px-4">
-              <Scan className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-              <p className="text-sm font-medium text-slate-400">
+              <Scan className="w-12 h-12 text-gray-400 dark:text-slate-600 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500 dark:text-slate-400">
                 No machines scanned yet
               </p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">
                 Tap “Start scanning” to begin assigning machines to this agreement.
               </p>
             </div>

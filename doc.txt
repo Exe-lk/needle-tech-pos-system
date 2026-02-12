@@ -2,7 +2,6 @@
 
 
 
-
 1. GET /customers - List All Customers
 
 Description: Returns a paginated list of customers with search, filter, sort, and pagination support.
@@ -524,6 +523,212 @@ Example Error Response:
 
 
 ================================================================================
+USER MANAGEMENT PAGE
+================================================================================
+
+1. GET /users - List Users
+
+Description: Returns a paginated list of users with pagination support.
+
+Query Parameters:
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10, max: 1000)
+
+Example Request:
+GET /users?limit=1000
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "Users retrieved successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "items": [
+      {
+        "userId": "user-123",
+        "firstName": "John",
+        "lastName": "Doe",
+        "email": "john.doe@example.lk",
+        "phone": "+94 11 2345678",
+        "username": "johndoe",
+        "role": "ADMIN",
+        "isActive": true,
+        "createdDate": "2024-01-15T08:00:00Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalItems": 5,
+      "itemsPerPage": 1000
+    }
+  }
+}
+
+Note: role values - "ADMIN", "SUPER_ADMIN", "MANAGER", "OPERATOR", "USER". Frontend maps these to display names (e.g., "SUPER_ADMIN" → "Super Admin").
+
+
+2. GET /users/:userId - Get User Details
+
+Description: Returns detailed information for a specific user.
+
+URL Parameters:
+- userId (string, required): User ID
+
+Example Request:
+GET /users/user-123
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "User retrieved successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "userId": "user-123",
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john.doe@example.lk",
+    "phone": "+94 11 2345678",
+    "username": "johndoe",
+    "role": "ADMIN",
+    "isActive": true,
+    "createdDate": "2024-01-15T08:00:00Z",
+    "lastLoginAt": "2024-04-15T08:00:00Z"
+  }
+}
+
+
+3. POST /users - Create User
+
+Description: Creates a new user account. Only Admin and Super Admin can create users.
+
+Request Body:
+{
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "email": "jane.smith@example.lk",
+  "phone": "+94 11 9876543",
+  "username": "janesmith",
+  "password": "SecurePass123!",
+  "role": "MANAGER"
+}
+
+Response Body:
+{
+  "status": "success",
+  "code": 201,
+  "message": "User created successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "userId": "user-456",
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "email": "jane.smith@example.lk",
+    "username": "janesmith",
+    "role": "MANAGER",
+    "isActive": true,
+    "createdDate": "2024-04-15T10:00:00Z"
+  }
+}
+
+
+4. PUT /users/:userId - Update User
+
+Description: Updates an existing user's information. Partial updates supported.
+
+URL Parameters:
+- userId (string, required): User ID
+
+Request Body (all fields optional):
+{
+  "firstName": "Jane",
+  "lastName": "Smith-Updated",
+  "email": "jane.updated@example.lk",
+  "phone": "+94 11 9999999",
+  "role": "ADMIN",
+  "isActive": false
+}
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "User updated successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "userId": "user-456",
+    "firstName": "Jane",
+    "lastName": "Smith-Updated",
+    "email": "jane.updated@example.lk",
+    "role": "ADMIN",
+    "isActive": false
+  }
+}
+
+
+5. DELETE /users/:userId - Delete User
+
+Description: Deletes a user and revokes their system access permanently.
+
+URL Parameters:
+- userId (string, required): User ID
+
+Example Request:
+DELETE /users/user-456
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "User deleted successfully",
+  "timestamp": "2024-04-15T10:00:00Z"
+}
+
+
+6. GET /roles - List Roles
+
+Description: Returns available user roles with permissions.
+
+Query Parameters:
+- limit (number, optional): Items per page (default: 10, max: 100)
+
+Example Request:
+GET /roles?limit=100
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "Roles retrieved successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "items": [
+      {
+        "id": "role-1",
+        "name": "ADMIN",
+        "description": "Administrator with full system access",
+        "permissions": ["users.create", "users.read", "users.update", "users.delete", "customers.all", "machines.all"]
+      },
+      {
+        "id": "role-2",
+        "name": "MANAGER",
+        "description": "Manager with limited administrative access",
+        "permissions": ["customers.all", "machines.all", "rentals.all", "invoices.all"]
+      },
+      {
+        "id": "role-3",
+        "name": "OPERATOR",
+        "description": "Operator with basic access",
+        "permissions": ["customers.read", "machines.read", "rentals.create", "rentals.read"]
+      }
+    ]
+  }
+}
+
+
+================================================================================
 DASHBOARD PAGE
 ================================================================================
 
@@ -760,6 +965,101 @@ Response Body:
 {
   "success": true,
   "message": "Machine deleted successfully"
+}
+
+
+8. GET /brands - List Brands
+
+Description: Returns a list of all machine brands.
+
+Example Request:
+GET /brands
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "brands": [
+      {
+        "id": "brand-1",
+        "name": "Brother",
+        "code": "BR",
+        "description": "Brother International",
+        "isActive": true
+      },
+      {
+        "id": "brand-2",
+        "name": "Singer",
+        "code": "SG",
+        "description": "Singer Manufacturing Company",
+        "isActive": true
+      }
+    ]
+  }
+}
+
+
+9. GET /models - List Models
+
+Description: Returns a list of all machine models.
+
+Query Parameters:
+- brandId (string, optional): Filter models by brand ID
+
+Example Request:
+GET /models?brandId=brand-1
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "models": [
+      {
+        "id": "model-1",
+        "name": "XL2600i",
+        "code": "XL2600I",
+        "brandId": "brand-1",
+        "description": "Domestic sewing machine",
+        "isActive": true,
+        "brand": {
+          "id": "brand-1",
+          "name": "Brother",
+          "code": "BR"
+        }
+      }
+    ]
+  }
+}
+
+
+10. GET /machine-types - List Machine Types
+
+Description: Returns a list of all machine types/categories.
+
+Example Request:
+GET /machine-types
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "machineTypes": [
+      {
+        "id": "type-1",
+        "name": "Industrial",
+        "code": "IND",
+        "description": "Industrial sewing machines",
+        "isActive": true
+      },
+      {
+        "id": "type-2",
+        "name": "Domestic",
+        "code": "DOM",
+        "description": "Domestic sewing machines",
+        "isActive": true
+      }
+    ]
+  }
 }
 
 
@@ -1155,7 +1455,51 @@ Response Body:
 }
 
 
-3. POST /rental-agreements - Create Rental Agreement (Standalone)
+3. GET /rental-agreements/by-number - Get Agreement by Number
+
+Description: Lookup rental agreement by agreement number to load machines for return or machine assignment.
+
+Query Parameters:
+- number (string, required): Agreement number (e.g. AGR-2024-001, RA24010001)
+
+Example Request:
+GET /rental-agreements/by-number?number=AGR-2024-001
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": "AGR-2024-001",
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "customerAddress": "123 Main Street, Colombo 05",
+    "customerPhone": "+94 11 2345678",
+    "customerEmail": "contact@abcholdings.lk",
+    "rentalStartDate": "2024-01-15",
+    "rentalEndDate": "2024-07-15",
+    "rentalPeriod": "6 months",
+    "monthlyRate": 25000,
+    "totalAmount": 150000,
+    "paidAmount": 100000,
+    "outstandingAmount": 50000,
+    "securityDeposit": 50000,
+    "dispatchedDate": "2024-01-15",
+    "expectedReturnDate": "2024-07-15",
+    "machines": [
+      {
+        "id": "MACH-001-01",
+        "model": "CAT 320",
+        "serialNumber": "SN-CAT320-2023-001",
+        "boxNumber": "BOX-CAT320-001",
+        "description": "Excavator CAT 320 - Unit 01"
+      }
+    ]
+  }
+}
+
+Note: Used by Returns Create page and Machine Assignment page to lookup agreement details before scanning.
+
+
+4. POST /rental-agreements - Create Rental Agreement (Standalone)
 
 Description: Creates a new rental agreement (customer, machines, add-ons, pricing). Same structure as documented under Customer page (item 11).
 
@@ -1164,7 +1508,7 @@ Request Body: (See Customer Page - item 11 POST /rental-agreements)
 Response Body: (See Customer Page - item 11)
 
 
-4. PUT /rental-agreements/:id - Update Rental Agreement
+5. PUT /rental-agreements/:id - Update Rental Agreement
 
 Description: Updates agreement details or adds machines (e.g. after QR scan). Can include machines array with serialNo, motorBoxNo, description, etc.
 
@@ -1180,8 +1524,10 @@ Response Body:
   "data": { "id": 1, "agreementNo": "RA24010001", "status": "Active", "addedMachines": 2 }
 }
 
+Note: Used by Machine Assignment page to add scanned machines to a Pending agreement. When all expected machines are added, the agreement status changes to Active, and an invoice is auto-generated.
 
-5. GET /rental-agreements/:id/gate-passes - List Gate Passes for Agreement
+
+6. GET /rental-agreements/:id/gate-passes - List Gate Passes for Agreement
 
 Description: Returns gate passes linked to this rental agreement.
 
@@ -1205,6 +1551,28 @@ Response Body:
     ]
   }
 }
+
+
+================================================================================
+MACHINE ASSIGNMENT PAGE (QR Scanner)
+================================================================================
+
+Description: Mobile-first QR scanner page for assigning physical machines to Pending rental agreements by scanning machine QR codes. After scanning all expected machines, the agreement becomes Active and an invoice is auto-generated.
+
+Flow:
+1. User enters rental agreement number
+2. Page displays agreement details and expected machine categories
+3. User scans QR codes (serialNo + motorBoxNo) for each machine
+4. Each scan adds a machine to the agreement
+5. When all expected machines are scanned, user submits to activate agreement
+
+APIs Used:
+- GET /rental-agreements/by-number?number=XXX - Lookup agreement (see Rental Agreement section #3)
+- PUT /rental-agreements/:id - Add scanned machines and update status (see Rental Agreement section #5)
+
+QR Code Format: QR contains JSON with serialNo and motorBoxNo (e.g., {"serialNo": "2LIDH01733", "motorBoxNo": "NMBDH01171"})
+
+Note: This page does not have dedicated APIs; it reuses rental agreement endpoints. Frontend generates invoice locally after activation and stores in localStorage for display on Invoice page.
 
 
 ================================================================================
@@ -1297,12 +1665,15 @@ Response Body:
 }
 
 
-3. GET /gate-passes/by-number?number=016633 - Lookup Gate Pass by Number (Security Approval)
+3. GET /gate-passes/by-number - Lookup Gate Pass by Number (Security Approval)
 
 Description: Used for security approval flow; lookup by gatepass number to get expected items for QR scan.
 
 Query Parameters:
 - number (string, required): Gate pass number (e.g. 016633)
+
+Example Request:
+GET /gate-passes/by-number?number=016633
 
 Response Body: Same as GET /gate-passes/:id data.
 
@@ -1369,7 +1740,10 @@ Response Body:
 
 6. POST /gate-passes/:id/security-approve - Security Approval (QR Scan Verification)
 
-Description: After user scans all expected items via QR, backend marks gate pass as security-approved. Request can include list of scanned (serialNo, motorBoxNo) pairs for audit.
+Description: After security officer scans all expected items via QR, backend marks gate pass as security-approved. Request can include list of scanned (serialNo, motorBoxNo) pairs for audit.
+
+URL Parameters:
+- id (number, required): Gate Pass ID
 
 Request Body (optional):
 {
@@ -1383,6 +1757,29 @@ Response Body:
   "success": true,
   "message": "Gate pass security approved"
 }
+
+
+================================================================================
+GATEPASS QR PAGE (Security Verification)
+================================================================================
+
+Description: Mobile-first QR scanner page for security officers to verify gate passes before allowing machines to leave/enter premises. Scans each machine QR and matches against expected items on the gate pass.
+
+Flow:
+1. Security officer enters gatepass number
+2. Page displays gatepass details and expected machine list
+3. Officer scans QR codes (serialNo + motorBoxNo) for each machine
+4. System verifies each scan matches an expected machine
+5. Failed scans (wrong machines) can be marked as resolved if accidental
+6. When all machines verified and no unresolved mismatches, officer can approve
+
+APIs Used:
+- GET /gate-passes/by-number?number=XXX - Lookup gatepass (see Gatepass section #3)
+- POST /gate-passes/:id/security-approve - Approve gatepass (see Gatepass section #6)
+
+QR Code Format: QR contains JSON with serialNo and motorBoxNo (e.g., {"serialNo": "2LIDH01733", "motorBoxNo": "NMBDH01171"})
+
+Note: Frontend handles all scan validation and tracking. Only final approval call is sent to backend.
 
 
 ================================================================================
@@ -1455,46 +1852,7 @@ Response Body:
 Note: returnType in list is "Standard" | "Damage" | "Missing" | "Exchange". When creating a return, frontend may send "Good" which backend can store/return as "Standard".
 
 
-2. GET /rental-agreements/by-number?number=AGR-2024-001 - Get Agreement by Number (Returns Create - Step 1)
-
-Description: Lookup rental agreement by agreement number to load machines for return.
-
-Query Parameters:
-- number (string, required): Agreement number (e.g. AGR-2024-001)
-
-Response Body:
-{
-  "success": true,
-  "data": {
-    "id": "AGR-2024-001",
-    "customerName": "ABC Holdings (Pvt) Ltd",
-    "customerAddress": "123 Main Street, Colombo 05",
-    "customerPhone": "+94 11 2345678",
-    "customerEmail": "contact@abcholdings.lk",
-    "rentalStartDate": "2024-01-15",
-    "rentalEndDate": "2024-07-15",
-    "rentalPeriod": "6 months",
-    "monthlyRate": 25000,
-    "totalAmount": 150000,
-    "paidAmount": 100000,
-    "outstandingAmount": 50000,
-    "securityDeposit": 50000,
-    "dispatchedDate": "2024-01-15",
-    "expectedReturnDate": "2024-07-15",
-    "machines": [
-      {
-        "id": "MACH-001-01",
-        "model": "CAT 320",
-        "serialNumber": "SN-CAT320-2023-001",
-        "boxNumber": "BOX-CAT320-001",
-        "description": "Excavator CAT 320 - Unit 01"
-      }
-    ]
-  }
-}
-
-
-3. POST /returns - Create Return
+2. POST /returns - Create Return
 
 Description: Creates a return record for an agreement with condition per machine (Good, Standard, Damage, Missing, Exchange) and optional damage notes/photos.
 
@@ -1545,7 +1903,7 @@ Response Body:
 }
 
 
-4. GET /returns/:id - Get Return Detail (View Modal)
+3. GET /returns/:id - Get Return Detail (View Modal)
 
 Description: Returns full return record with machineDetails and rentalDetails for the view modal.
 
@@ -1574,7 +1932,7 @@ Response Body:
 }
 
 
-5. PUT /returns/:id - Update Return (Edit Modal)
+4. PUT /returns/:id - Update Return (Edit Modal)
 
 Description: Updates a return record (status, repairCost, inspectedBy). Used when editing from Returns list page.
 
@@ -1596,6 +1954,28 @@ Response Body:
   "message": "Return updated successfully",
   "data": { "id": 1, "returnNumber": "RET-2024-001", "status": "Completed" }
 }
+
+
+================================================================================
+RETURN QR PAGE (Mobile Scanner)
+================================================================================
+
+Description: Mobile-first QR scanner page for processing machine returns. After looking up agreement, scans each machine QR, collects return condition (Good/Standard/Damage/Missing/Exchange), and captures damage notes + photos for damaged/missing items.
+
+Flow:
+1. User enters rental agreement number
+2. Page displays agreement details and machine list
+3. User scans QR codes for each machine
+4. For each scan, popup appears to select return type and capture damage proof if needed
+5. After all machines scanned, user submits return summary
+
+APIs Used:
+- GET /rental-agreements/by-number?number=XXX - Lookup agreement (see Rental Agreement section #3)
+- POST /returns - Create return (see Returns section #2)
+
+QR Code Format: QR contains JSON with serialNo and motorBoxNo (e.g., {"serialNo": "SN-CAT320-2023-001", "boxNumber": "BOX-CAT320-001"})
+
+Note: Photos are collected as File objects in frontend and included in POST /returns multipart/form-data request or uploaded separately.
 
 
 ================================================================================
@@ -1921,6 +2301,94 @@ Response Body:
 }
 
 
+5. GET /analytics/rental-status-distribution - Get Rental Status Distribution
+
+Description: Returns distribution of rental agreements by status (Active, Completed, Pending, Cancelled) with counts and percentages.
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "rentalStatusDistribution": [
+      { "status": "Active", "count": 42, "percentage": 58 },
+      { "status": "Completed", "count": 24, "percentage": 33 },
+      { "status": "Pending", "count": 4, "percentage": 6 },
+      { "status": "Cancelled", "count": 2, "percentage": 3 }
+    ]
+  }
+}
+
+
+6. GET /analytics/revenue-by-brand - Get Revenue by Brand
+
+Description: Returns revenue breakdown by machine brand with percentages.
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "revenueByBrand": [
+      { "brand": "Brother", "revenue": 1250000, "percentage": 32 },
+      { "brand": "Singer", "revenue": 980000, "percentage": 25 },
+      { "brand": "Janome", "revenue": 850000, "percentage": 22 },
+      { "brand": "Juki", "revenue": 520000, "percentage": 13 },
+      { "brand": "Others", "revenue": 320000, "percentage": 8 }
+    ]
+  }
+}
+
+
+7. GET /analytics/outstanding-aging - Get Outstanding Aging
+
+Description: Returns outstanding balance aging analysis (0-30 days, 31-60 days, 61+ days).
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "outstandingAging": [
+      { "bucket": "0-30 days", "amount": 450000, "count": 12 },
+      { "bucket": "31-60 days", "amount": 280000, "count": 5 },
+      { "bucket": "61+ days", "amount": 180000, "count": 3 }
+    ]
+  }
+}
+
+
+8. GET /analytics/alerts-by-type - Get Alerts by Type
+
+Description: Returns count of outstanding alerts grouped by type and severity.
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "alertsByType": [
+      { "type": "Payment Overdue", "count": 8, "severity": "High" },
+      { "type": "High Balance", "count": 5, "severity": "Medium" },
+      { "type": "Agreement Expiring", "count": 12, "severity": "Low" },
+      { "type": "Credit Limit Exceeded", "count": 2, "severity": "Critical" }
+    ]
+  }
+}
+
+
+9. GET /analytics/gatepass-volume - Get Gatepass Volume
+
+Description: Returns count of inbound and outbound gate passes.
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "gatepassVolume": [
+      { "entry": "OUT", "count": 156, "label": "Outbound" },
+      { "entry": "IN", "count": 142, "label": "Inbound" }
+    ]
+  }
+}
+
+
 ================================================================================
 OUTSTANDING ALERTS PAGE
 ================================================================================
@@ -2119,6 +2587,15 @@ No request/response bodies for backend; backend may store scan audit logs if nee
 
 
 ================================================================================
+LETTER HEAD PAGE
+================================================================================
+
+Description: A print-only page for generating company letterhead. No API calls. Displays company logo, contact information, and blank content area for printing.
+
+Note: Frontend component renders letterhead template with company info (name, address, phone, email) and footer. Print via browser print dialog.
+
+
+================================================================================
 REFERENCE DATA / DROPDOWNS (Shared by multiple pages)
 ================================================================================
 
@@ -2127,10 +2604,70 @@ The following list endpoints are used by the frontend for dropdowns and selector
 - GET /customers - Used by: Rental Agreement (create - customer select), Purchase Order Create (customer select), Invoice (customer select). Frontend needs: id, name, type, status. Optional: address (for display in agreement/invoice). Filter: status = Active for create flows.
 - GET /rental-agreements - Used by: Gatepass (create/update - agreement reference select). Frontend needs: id (or agreementNo as identifier), customerName, customerAddress (or link to customer). Gatepass form sends agreementReference (agreement id or agreement number string).
 - GET /inventory - Used by: Purchase Order Create (brand/model/type/availableStock for machine rows). Frontend needs: id, brand, model, type, totalStock, availableStock, rentedStock, maintenanceStock for each inventory item.
-- GET /machines - Brands and models: Purchase Order Create, Rental Agreement Create, Stock-In, Invoice use brand/model/type dropdowns. Backend may provide GET /machines/brands and GET /machines/models or derive from GET /machines/inventory.
+- GET /brands - Used by: Machine pages, Invoice pages for brand dropdown
+- GET /models - Used by: Machine pages, Invoice pages for model dropdown (filtered by brandId)
+- GET /machine-types - Used by: Machine pages, Invoice pages for type dropdown
 - Add-ons: Rental Agreement Create uses add-ons list (id, name, price). Doc references mockAddOns; backend can provide GET /add-ons or include in agreement create context.
 
 Pagination: All list endpoints support page and limit (default limit 10; options 10, 25, 50, 100 where applicable). Frontend Table component uses itemsPerPage; parent passes filtered/sorted data from API.
+
+
+================================================================================
+ADDITIONAL NOTES
+================================================================================
+
+1. Authentication: All endpoints (except login/register) require Authorization header with Bearer token.
+   Header format: Authorization: Bearer {access_token}
+   Token stored in localStorage as 'needletech_access_token'
+
+2. Date Formats:
+   - Display dates: DD/MM/YYYY (e.g., "15/01/2024")
+   - API request/response dates: ISO 8601 format (e.g., "2024-01-15T10:00:00Z")
+   - Frontend handles conversion between formats
+
+3. Status Mapping:
+   - Customer status: Frontend "Active"/"Inactive"/"Blocked" ↔ API may use same or different values
+   - User status: Frontend "Active"/"Inactive" ↔ API isActive boolean
+   - Machine status: "Available", "Rented", "Maintenance", "Retired"
+   - Rental agreement status: "Active", "Completed", "Cancelled", "Pending"
+   - Invoice status: "draft", "issued", "paid", "overdue"
+   - Gate pass entry: "IN", "OUT"
+
+4. Pagination Response Format (Standard):
+   {
+     "currentPage": number,
+     "totalPages": number,
+     "totalItems": number,
+     "itemsPerPage": number,
+     "hasNextPage": boolean (optional),
+     "hasPreviousPage": boolean (optional)
+   }
+
+5. Error Response Format (All Endpoints):
+   {
+     "success": false,
+     "message": "Error message",
+     "errors": { "fieldName": "Field error message" }
+   }
+
+6. File Uploads:
+   - Machine registration: referencePhoto, serialPlatePhoto, invoiceGrn (multiple files)
+   - Returns: damage photos (multiple files per machine)
+   - Invoice: receiptFile (single file)
+   - Format: multipart/form-data or base64 encoded in JSON
+   - Accepted formats: JPG, PNG, PDF (max 5MB per file)
+
+7. QR Code Format (Machine QR):
+   JSON: { "serialNo": "string", "motorBoxNo": "string" }
+   Alternative keys accepted: serialNumber, serial, boxNo, boxNumber
+   Used by: Machine Assignment, Gatepass QR, Return QR pages
+
+8. Mobile Pages (QR Scanner Pages):
+   - Machine Assignment: /machine-assign-page
+   - Gatepass QR (Security): /gatepass-qr-page
+   - Return QR: /return-qr-page
+   - General QR Scanner: /qr
+   All use same QR format and share similar flow patterns
 
 
 ================================================================================

@@ -74,7 +74,7 @@ export async function registerUser({
         id: authData.user.id, // Use the same UUID from Supabase Auth
         email,
         username,
-        passwordHash: '', // Password is managed by Supabase Auth
+       
         fullName,
         roleId,
         phone,

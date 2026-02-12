@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
-import { withAuthAndRole } from '@/lib/auth-middleware';
+import { withAuthAndRole, AuthUser } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
 /**
@@ -33,7 +33,7 @@ import prisma from '@/lib/prisma';
  *         schema:
  *           type: string
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -109,7 +109,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *               totalAmount:
  *                 type: number
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest, context: any) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { customerId, rentalId, type, taxCategory, lineItems, issueDate, dueDate, subtotal, vatAmount, grandTotal } = body;
@@ -142,7 +142,7 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
     
     const now = new Date();
     const invoiceNumber = `INV-${Date.now()}`;
-    const userId = context.user?.id || 'system';
+    const userId = auth.id;
     
     const newInvoice = await prisma.invoice.create({
       data: {
