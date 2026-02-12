@@ -162,6 +162,7 @@ model Customer {
   gatePasses      GatePass[]
   returns         Return[]
   outstandingAlerts OutstandingAlert[]
+  transactionLogs TransactionLog[]
 
   @@index([code])
   @@index([type])
@@ -800,6 +801,17 @@ model OutstandingAlert {
   status              AlertStatus @default(PENDING)
   sentAt              DateTime? @db.Timestamptz(6)
   
+  // Frontend requirements
+  alertType           AlertType?
+  severity            AlertSeverity?
+  description         String?
+  amount              Decimal?  @db.Decimal(15, 2)
+  dueDate             DateTime? @db.Timestamptz(6)
+  resolvedAt          DateTime? @db.Timestamptz(6)
+  relatedAgreement    String?
+  relatedMachine      String?
+  daysOverdue         Int?
+  
   overdueInvoices     Json[] // Array of overdue invoice summaries
   
   // Snapshot Totals
@@ -817,8 +829,24 @@ model OutstandingAlert {
   @@index([customerId])
   @@index([generatedAt])
   @@index([status])
+  @@index([alertType])
+  @@index([severity])
   @@index([scheduleDay])
   @@map("outstanding_alerts")
+}
+
+enum AlertType {
+  PAYMENT_OVERDUE
+  HIGH_BALANCE
+  CREDIT_LIMIT_EXCEEDED
+  AGREEMENT_EXPIRING
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
 enum AlertChannel {
@@ -830,6 +858,56 @@ enum AlertStatus {
   PENDING
   SENT
   FAILED
+  ACTIVE
+  RESOLVED
+}
+
+// ============ Transaction Log ============
+
+model TransactionLog {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transactionDate DateTime @db.Timestamptz(6)
+  category        TransactionCategory
+  transactionType String
+  reference       String?
+  description     String
+  brand           String?
+  model           String?
+  customerId      String?  @db.Uuid
+  amount          Decimal? @db.Decimal(15, 2)
+  quantity        Int?
+  location        String?
+  performedBy     String?
+  status          TransactionStatus @default(SUCCESS)
+  notes           String?
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  // Relations
+  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([transactionDate(sort: Desc)])
+  @@index([category])
+  @@index([transactionType])
+  @@index([status])
+  @@index([customerId])
+  @@map("transaction_logs")
+}
+
+enum TransactionCategory {
+  INVENTORY
+  RENTAL
+  RETURN
+  INVOICE
+  MAINTENANCE
+  OTHER
+}
+
+enum TransactionStatus {
+  SUCCESS
+  PENDING
+  FAILED
+  CANCELLED
 }
 
 

@@ -18,13 +18,35 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
-    const customerIdFilter = searchParams.get('customerId');
+    const customerTypeFilter = searchParams.get('customerType');
+    const alertTypeFilter = searchParams.get('alertType');
+    const severityFilter = searchParams.get('severity');
     const statusFilter = searchParams.get('status');
     
     const where: any = {};
     
-    if (customerIdFilter) where.customerId = customerIdFilter;
-    if (statusFilter) where.status = statusFilter;
+    if (search) {
+      where.OR = [
+        { customer: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+    
+    if (customerTypeFilter) {
+      const customerType = customerTypeFilter === 'Company' ? 'GARMENT_FACTORY' : 'INDIVIDUAL';
+      where.customer = { type: customerType };
+    }
+    
+    if (alertTypeFilter) {
+      where.alertType = alertTypeFilter.toUpperCase().replace(/ /g, '_');
+    }
+    
+    if (severityFilter) {
+      where.severity = severityFilter.toUpperCase();
+    }
+    
+    if (statusFilter) {
+      where.status = statusFilter.toUpperCase();
+    }
     
     const totalItems = await prisma.outstandingAlert.count({ where });
     const skip = (page - 1) * limit;
@@ -38,16 +60,37 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       include: { customer: true }
     });
     
+    // Transform for frontend
+    const transformed = alerts.map((alert: any) => ({
+      id: alert.id,
+      customerId: alert.customerId,
+      customerName: alert.customer?.name || '',
+      customerType: alert.customer?.type === 'GARMENT_FACTORY' ? 'Company' : 'Individual',
+      alertType: alert.alertType?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || '',
+      description: alert.description || '',
+      amount: alert.amount ? parseFloat(alert.amount.toString()) : null,
+      dueDate: alert.dueDate,
+      severity: alert.severity?.charAt(0) + alert.severity?.slice(1).toLowerCase() || '',
+      status: alert.status === 'RESOLVED' ? 'Resolved' : 'Active',
+      createdAt: alert.createdAt,
+      resolvedAt: alert.resolvedAt,
+      relatedAgreement: alert.relatedAgreement || null,
+      relatedMachine: alert.relatedMachine || null,
+      daysOverdue: alert.daysOverdue || null,
+    }));
+    
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      alerts,
+      { outstandingAlerts: transformed },
       pagination,
       'Outstanding alerts retrieved successfully',
       { sortBy, sortOrder: sortOrder_ },
-      undefined,
+      search || undefined,
       {
-        ...(customerIdFilter && { customerId: customerIdFilter }),
+        ...(customerTypeFilter && { customerType: customerTypeFilter }),
+        ...(alertTypeFilter && { alertType: alertTypeFilter }),
+        ...(severityFilter && { severity: severityFilter }),
         ...(statusFilter && { status: statusFilter }),
       }
     );
