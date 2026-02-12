@@ -1,18 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, Pencil, Package, FileText, Building2, MapPin, Camera, DollarSign, Calendar } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { useRouter } from 'next/navigation';
+import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
 
 type ReturnType = 'Standard' | 'Damage' | 'Missing' | 'Exchange';
 type ReturnStatus = 'Pending' | 'Completed' | 'Under Review';
 
 interface Return {
-  id: number;
+  id: string;
   returnNumber: string;
   machineName: string;
   machineId: string;
@@ -50,135 +51,112 @@ interface Return {
   };
 }
 
-// Mock return data with enhanced details
-const mockReturns: Return[] = [
-  {
-    id: 1,
-    returnNumber: 'RET-2024-001',
-    machineName: 'Excavator CAT 320',
-    machineId: 'MACH-001',
-    customerName: 'ABC Holdings (Pvt) Ltd',
-    returnDate: '2024-04-15',
-    returnType: 'Standard',
-    status: 'Completed',
-    inspectedBy: 'John Doe',
-    machineDetails: {
-      model: 'CAT 320',
-      serialNumber: 'SN-CAT320-2023-001',
-      manufacturer: 'Caterpillar',
-      year: 2023,
-      category: 'Excavator',
-      location: 'Warehouse A',
-    },
-    rentalDetails: {
-      agreementNumber: 'AGR-2024-001',
-      customerPhone: '+94 11 2345678',
-      customerEmail: 'contact@abcholdings.lk',
-      rentalStartDate: '2024-01-15',
-      rentalEndDate: '2024-07-15',
-      rentalPeriod: '6 months',
-      monthlyRate: 25000,
-      totalAmount: 150000,
-      paidAmount: 100000,
-      outstandingAmount: 50000,
-      securityDeposit: 50000,
-      dispatchedDate: '2024-01-15',
-      expectedReturnDate: '2024-07-15',
-    },
-  },
-  {
-    id: 2,
-    returnNumber: 'RET-2024-002',
-    machineName: 'Bulldozer CAT D6',
-    machineId: 'MACH-002',
-    customerName: 'Mega Constructions',
-    returnDate: '2024-04-16',
-    returnType: 'Damage',
-    status: 'Under Review',
-    damageNote: 'Minor scratch on hydraulic arm. Requires repainting and minor repair.',
-    photosCount: 3,
-    repairCost: 5000,
-    inspectedBy: 'Jane Smith',
-    machineDetails: {
-      model: 'CAT D6',
-      serialNumber: 'SN-CATD6-2023-002',
-      manufacturer: 'Caterpillar',
-      year: 2023,
-      category: 'Bulldozer',
-      location: 'Site Location',
-    },
-    rentalDetails: {
-      agreementNumber: 'AGR-2024-002',
-      customerPhone: '+94 11 3456789',
-      customerEmail: 'info@megaconstructions.lk',
-      rentalStartDate: '2024-03-01',
-      rentalEndDate: '2024-09-01',
-      rentalPeriod: '6 months',
-      monthlyRate: 33333.33,
-      totalAmount: 200000,
-      paidAmount: 100000,
-      outstandingAmount: 100000,
-      securityDeposit: 75000,
-      dispatchedDate: '2024-03-01',
-      expectedReturnDate: '2024-09-01',
-    },
-  },
-  {
-    id: 3,
-    returnNumber: 'RET-2024-003',
-    machineName: 'Loader CAT 950',
-    machineId: 'MACH-003',
-    customerName: 'XYZ Engineering',
-    returnDate: '2024-04-17',
-    returnType: 'Missing',
-    status: 'Pending',
-    damageNote: 'Missing hydraulic hose. Customer claims it was not included during dispatch.',
-    photosCount: 2,
-    inspectedBy: 'Bob Wilson',
-    machineDetails: {
-      model: 'CAT 950',
-      serialNumber: 'SN-CAT950-2022-003',
-      manufacturer: 'Caterpillar',
-      year: 2022,
-      category: 'Loader',
-      location: 'Construction Site',
-    },
-    rentalDetails: {
-      agreementNumber: 'AGR-2024-003',
-      customerPhone: '+94 11 4567890',
-      customerEmail: 'contact@xyzengineering.lk',
-      rentalStartDate: '2024-02-01',
-      rentalEndDate: '2024-08-01',
-      rentalPeriod: '6 months',
-      monthlyRate: 20000,
-      totalAmount: 120000,
-      paidAmount: 60000,
-      outstandingAmount: 60000,
-      securityDeposit: 40000,
-      dispatchedDate: '2024-02-01',
-      expectedReturnDate: '2024-08-01',
-    },
-  },
-  {
-    id: 4,
-    returnNumber: 'RET-2024-004',
-    machineName: 'Excavator CAT 320',
-    machineId: 'MACH-004',
-    customerName: 'Kamal Silva',
-    returnDate: '2024-04-18',
-    returnType: 'Exchange',
-    status: 'Completed',
-    inspectedBy: 'Alice Brown',
-    machineDetails: {
-      model: 'CAT 320',
-      serialNumber: 'SN-CAT320-2023-004',
-      manufacturer: 'Caterpillar',
-      year: 2023,
-      category: 'Excavator',
-      location: 'Warehouse B',
-    },
-  },
-];
+const API_BASE_URL = '/api/v1';
+
+const getAuthHeaders = () => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+};
+
+function toNum(v: unknown): number {
+  if (v == null) return 0;
+  if (typeof v === 'number' && !Number.isNaN(v)) return v;
+  const n = Number(v);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function triageToReturnType(triage: string): ReturnType {
+  const m: Record<string, ReturnType> = {
+    STANDARD: 'Standard',
+    DAMAGE: 'Damage',
+    MISSING_PARTS: 'Missing',
+    EXCHANGE: 'Exchange',
+  };
+  return m[triage] ?? 'Standard';
+}
+
+function parseStatusFromNotes(notes: string | null | undefined): ReturnStatus {
+  if (!notes) return 'Pending';
+  const u = notes.toUpperCase();
+  if (u.includes('COMPLETED')) return 'Completed';
+  if (u.includes('UNDER REVIEW')) return 'Under Review';
+  return 'Pending';
+}
+
+function mapApiReturnToReturn(api: any): Return {
+  const rental = api.rental;
+  const customer = rental?.customer;
+  const machine = api.machine;
+  const inspector = api.inspectedBy;
+  const damageReport = api.damageReport;
+
+  const returnDate = api.returnDate ? new Date(api.returnDate).toISOString().slice(0, 10) : '';
+  const startDate = rental?.startDate ? new Date(rental.startDate).toISOString().slice(0, 10) : '';
+  const endDate = rental?.expectedEndDate ? new Date(rental.expectedEndDate).toISOString().slice(0, 10) : '';
+
+  const total = toNum(rental?.total);
+  const paid = toNum(rental?.paidAmount);
+  const balance = toNum(rental?.balance);
+  const deposit = toNum(rental?.depositTotal);
+  const monthlyRate = total;
+
+  const customerPhones = customer?.phones;
+  const customerEmails = customer?.emails;
+  const customerPhone = Array.isArray(customerPhones) && customerPhones.length > 0 ? customerPhones[0] : '—';
+  const customerEmail = Array.isArray(customerEmails) && customerEmails.length > 0 ? customerEmails[0] : '—';
+
+  const repairCostVal = damageReport != null ? toNum(damageReport.estimatedRepairCost ?? damageReport.approvedChargeToCustomer) : undefined;
+
+  return {
+    id: api.id,
+    returnNumber: api.returnNumber ?? '—',
+    machineName: machine
+      ? (() => {
+          const part = `${machine.brand?.name ?? ''} ${machine.model?.name ?? machine.serialNumber ?? ''}`.trim();
+          return (part || machine.serialNumber) ?? api.machineId;
+        })()
+      : (api.machineId ?? '—'),
+    machineId: api.machineId ?? '—',
+    customerName: customer?.name ?? '—',
+    returnDate,
+    returnType: triageToReturnType(api.triageCategory),
+    status: parseStatusFromNotes(api.notes),
+    damageNote: api.notes ?? api.condition ?? undefined,
+    photosCount: Array.isArray(api.photos) ? api.photos.length : 0,
+    repairCost: repairCostVal,
+    inspectedBy: inspector?.fullName ?? inspector?.username ?? '—',
+    machineDetails: machine
+      ? {
+          model: machine.model?.name ?? machine.serialNumber ?? '—',
+          serialNumber: machine.serialNumber ?? '—',
+          manufacturer: machine.brand?.name ?? '—',
+          year: machine.manufactureYear ? parseInt(String(machine.manufactureYear), 10) || 0 : 0,
+          category: machine.type?.name ?? '—',
+          location: machine.currentLocationName ?? undefined,
+        }
+      : undefined,
+    rentalDetails: rental
+      ? {
+          agreementNumber: rental.agreementNumber ?? '—',
+          customerPhone,
+          customerEmail,
+          rentalStartDate: startDate,
+          rentalEndDate: endDate,
+          rentalPeriod: rental.expectedEndDate && rental.startDate ? `${Math.ceil((new Date(rental.expectedEndDate).getTime() - new Date(rental.startDate).getTime()) / (30 * 24 * 60 * 60 * 1000))} months` : '—',
+          monthlyRate,
+          totalAmount: total,
+          paidAmount: paid,
+          outstandingAmount: balance,
+          securityDeposit: deposit,
+          dispatchedDate: startDate,
+          expectedReturnDate: endDate,
+        }
+      : undefined,
+  };
+}
 
 // Table column configuration
 const columns: TableColumn[] = [
@@ -315,13 +293,49 @@ const ReturnsPage: React.FC = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
-  const [returns, setReturns] = useState<Return[]>(mockReturns);
+  const [returns, setReturns] = useState<Return[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Update form state
   const [returnStatus, setReturnStatus] = useState<ReturnStatus>('Pending');
   const [repairCost, setRepairCost] = useState<number | undefined>(undefined);
   const [inspectedBy, setInspectedBy] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchReturns = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set('page', '1');
+      params.set('limit', '500');
+      params.set('sortBy', 'returnDate');
+      params.set('sortOrder', 'desc');
+      const res = await fetch(`${API_BASE_URL}/returns?${params.toString()}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.message ?? 'Failed to load returns');
+        setReturns([]);
+        return;
+      }
+      const items = json?.data?.items ?? [];
+      setReturns(items.map(mapApiReturnToReturn));
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to load returns');
+      setReturns([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchReturns();
+  }, [fetchReturns]);
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -367,28 +381,52 @@ const ReturnsPage: React.FC = () => {
   };
 
   const handleSubmitUpdate = async () => {
-    if (!selectedReturn) {
-      return;
-    }
+    if (!selectedReturn) return;
 
     setIsSubmitting(true);
     try {
-      const updatedReturn: Return = {
-        ...selectedReturn,
-        status: returnStatus,
-        repairCost: repairCost,
-        inspectedBy: inspectedBy || selectedReturn.inspectedBy,
-      };
+      const notesParts: string[] = [`Status: ${returnStatus}.`];
+      if (inspectedBy?.trim()) notesParts.push(`Inspected by: ${inspectedBy.trim()}.`);
+      if (repairCost != null && repairCost >= 0) notesParts.push(`Repair cost: ${repairCost}.`);
+      const existingNote = selectedReturn.damageNote?.trim();
+      if (existingNote) notesParts.push(existingNote);
+      const notes = notesParts.join(' ').trim();
 
-      setReturns((prev) =>
-        prev.map((ret) => (ret.id === selectedReturn.id ? updatedReturn : ret)),
-      );
-      console.log('Update return payload:', updatedReturn);
+      const res = await fetch(`${API_BASE_URL}/returns/${selectedReturn.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ notes }),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json?.message ?? 'Failed to update return. Please try again.');
+        return;
+      }
+
+      const updatedFromApi = json?.data ? mapApiReturnToReturn(json.data) : null;
+      if (updatedFromApi) {
+        setReturns((prev) =>
+          prev.map((ret) => (ret.id === selectedReturn.id ? updatedFromApi : ret)),
+        );
+        setSelectedReturn(updatedFromApi);
+      } else {
+        const updatedReturn: Return = {
+          ...selectedReturn,
+          status: returnStatus,
+          repairCost: repairCost,
+          inspectedBy: inspectedBy || selectedReturn.inspectedBy,
+        };
+        setReturns((prev) =>
+          prev.map((ret) => (ret.id === selectedReturn.id ? updatedReturn : ret)),
+        );
+      }
       alert('Return updated successfully.');
       handleCloseUpdateModal();
-    } catch (error) {
-      console.error('Error updating return:', error);
-      alert('Failed to update return. Please try again.');
+    } catch (err: any) {
+      console.error('Error updating return:', err);
+      alert(err?.message ?? 'Failed to update return. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -597,18 +635,30 @@ const ReturnsPage: React.FC = () => {
             
           </div>
 
-          {/* Returns table card */}
-          <Table
-            data={returns}
-            columns={columns}
-            actions={actions}
-            itemsPerPage={10}
-            searchable
-            filterable
-            onCreateClick={handleCreateReturn}
-            createButtonLabel="Create Return"
-            emptyMessage="No returns found."
-          />
+          {/* Loading / Error */}
+          {loading && (
+            <div className="flex justify-center items-center py-12 text-gray-500 dark:text-gray-400">
+              Loading returns...
+            </div>
+          )}
+          {error && !loading && (
+            <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-red-700 dark:text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+          {!loading && (
+            <Table
+              data={returns}
+              columns={columns}
+              actions={actions}
+              itemsPerPage={10}
+              searchable
+              filterable
+              onCreateClick={handleCreateReturn}
+              createButtonLabel="Create Return"
+              emptyMessage="No returns found."
+            />
+          )}
         </div>
       </main>
 

@@ -34,6 +34,8 @@ export interface FormField {
   rows?: number; // for textarea
   accept?: string; // for file inputs (e.g., 'image/*', 'application/pdf')
   multiple?: boolean; // for file inputs
+  /** Optional callback when field value changes (e.g. to sync parent state like brand -> models) */
+  onChange?: (value: any) => void;
 }
 
 export interface FormProps {
@@ -146,6 +148,10 @@ const Form: React.FC<FormProps> = ({
   };
 
   const handleInputChange = (fieldName: string, value: any) => {
+    const field = fields.find((f) => f.name === fieldName);
+    if (field?.onChange) {
+      field.onChange(value);
+    }
     setFormData((prev) => ({
       ...prev,
       [fieldName]: value,
@@ -435,8 +441,8 @@ const Form: React.FC<FormProps> = ({
         );
 
       case 'select':
-        if (field.searchable && field.options && field.options.length > 0) {
-          const selectOptions = field.options.map((opt) => ({
+        if (field.searchable && ((field.options && field.options.length > 0) || field.creatable)) {
+          const selectOptions = (field.options || []).map((opt) => ({
             value: String(opt.value),
             label: opt.label,
           }));

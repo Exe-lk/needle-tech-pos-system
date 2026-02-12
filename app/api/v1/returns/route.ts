@@ -14,13 +14,12 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
     
     const rentalIdFilter = searchParams.get('rentalId');
-    const statusFilter = searchParams.get('status');
     
     const where: any = {};
     
@@ -31,18 +30,22 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     }
     
     if (rentalIdFilter) where.rentalId = rentalIdFilter;
-    if (statusFilter) where.status = statusFilter;
     
     const totalItems = await prisma.return.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const returns = await prisma.return.findMany({
       where,
       skip,
       take: limit,
       orderBy: { [sortBy]: sortOrder_ },
-      include: { rental: true, inspector: true }
+      include: {
+        rental: { include: { customer: true } },
+        inspectedBy: true,
+        machine: { include: { brand: true, model: true, type: true } },
+        damageReport: true,
+      },
     });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
@@ -55,7 +58,6 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
       search || undefined,
       {
         ...(rentalIdFilter && { rentalId: rentalIdFilter }),
-        ...(statusFilter && { status: statusFilter }),
       }
     );
   } catch (error: any) {
@@ -74,10 +76,10 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { rentalId, status = 'PENDING', notes = '' } = body;
+    const { rentalId, notes = '' } = body;
     
     if (!rentalId) {
       return validationErrorResponse('Missing required fields', {
@@ -85,7 +87,10 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
       });
     }
     
-    const rental = await prisma.rental.findUnique({ where: { id: rentalId } });
+    const rental = await prisma.rental.findUnique({
+      where: { id: rentalId },
+      include: { machines: true },
+    });
     
     if (!rental) {
       return validationErrorResponse('Invalid rental', {
@@ -93,13 +98,29 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
       });
     }
     
+    const firstMachineId = rental.machines?.[0]?.machineId;
+    if (!body.machineId && !firstMachineId) {
+      return validationErrorResponse('Invalid rental', {
+        machineId: ['Rental has no machines; provide machineId'],
+      });
+    }
+    
     const newReturn = await prisma.return.create({
       data: {
         rentalId,
-        status,
-        notes,
+        customerId: rental.customerId,
+        machineId: body.machineId ?? firstMachineId,
+        returnDate: body.returnDate ? new Date(body.returnDate) : new Date(),
+        inspectedByUserId: body.inspectedByUserId ?? rental.createdByUserId,
+        returnNumber: body.returnNumber ?? `RET-${Date.now()}`,
+        notes: notes || undefined,
       },
-      include: { rental: true, inspector: true }
+      include: {
+        rental: { include: { customer: true } },
+        inspectedBy: true,
+        machine: { include: { brand: true, model: true, type: true } },
+        damageReport: true,
+      },
     });
     
     return successResponse(newReturn, 'Return created successfully', 201);

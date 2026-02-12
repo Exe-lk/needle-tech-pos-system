@@ -1,24 +1,24 @@
 // app/bincard/page.tsx
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, X, TrendingUp, TrendingDown, Package, Calendar, Filter } from 'lucide-react';
-import Tooltip from '@/src/components/common/tooltip';
+import { Eye, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type TransactionType = 'Stock In' | 'Stock Out' | 'Rental Out' | 'Return In' | 'Maintenance Out' | 'Maintenance In' | 'Retired';
 
 interface BincardEntry {
-  id: number;
+  id: string;
   date: string;
   brand: string;
   model: string;
   type: MachineType;
   transactionType: TransactionType;
-  reference: string; // Invoice No, Gate Pass No, etc.
+  reference: string;
   in: number;
   out: number;
   balance: number;
@@ -38,159 +38,28 @@ interface BincardSummary {
   lastTransactionDate: string;
 }
 
-// Mock bincard data
-const mockBincardEntries: BincardEntry[] = [
-  {
-    id: 1,
-    date: '2024-01-01',
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-    transactionType: 'Stock In',
-    reference: 'PO-2024-001',
-    in: 25,
-    out: 0,
-    balance: 25,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Initial stock from supplier',
-  },
-  {
-    id: 2,
-    date: '2024-01-15',
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-    transactionType: 'Rental Out',
-    reference: 'GP-2024-001',
-    in: 0,
-    out: 3,
-    balance: 22,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Rented to ABC Holdings',
-  },
-  {
-    id: 3,
-    date: '2024-01-20',
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-    transactionType: 'Maintenance Out',
-    reference: 'MAINT-2024-001',
-    in: 0,
-    out: 2,
-    balance: 20,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Sent for maintenance',
-  },
-  {
-    id: 4,
-    date: '2024-02-01',
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-    transactionType: 'Maintenance In',
-    reference: 'MAINT-2024-001',
-    in: 2,
-    out: 0,
-    balance: 22,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Returned from maintenance',
-  },
-  {
-    id: 5,
-    date: '2024-02-15',
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-    transactionType: 'Return In',
-    reference: 'RET-2024-001',
-    in: 1,
-    out: 0,
-    balance: 23,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Returned from rental',
-  },
-  {
-    id: 6,
-    date: '2024-01-01',
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    type: 'Industrial',
-    transactionType: 'Stock In',
-    reference: 'PO-2024-002',
-    in: 15,
-    out: 0,
-    balance: 15,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Initial stock from supplier',
-  },
-  {
-    id: 7,
-    date: '2024-01-10',
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    type: 'Industrial',
-    transactionType: 'Rental Out',
-    reference: 'GP-2024-002',
-    in: 0,
-    out: 6,
-    balance: 9,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Rented to XYZ Engineering',
-  },
-  {
-    id: 8,
-    date: '2024-01-25',
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    type: 'Industrial',
-    transactionType: 'Maintenance Out',
-    reference: 'MAINT-2024-002',
-    in: 0,
-    out: 1,
-    balance: 8,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Sent for maintenance',
-  },
-  {
-    id: 9,
-    date: '2024-01-01',
-    brand: 'Janome',
-    model: 'HD3000',
-    type: 'Domestic',
-    transactionType: 'Stock In',
-    reference: 'PO-2024-003',
-    in: 12,
-    out: 0,
-    balance: 12,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Initial stock from supplier',
-  },
-  {
-    id: 10,
-    date: '2024-01-18',
-    brand: 'Janome',
-    model: 'HD3000',
-    type: 'Domestic',
-    transactionType: 'Rental Out',
-    reference: 'GP-2024-003',
-    in: 0,
-    out: 2,
-    balance: 10,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    notes: 'Rented to John Perera',
-  },
-];
+const API_BASE_URL = '/api/v1';
+
+const getAuthHeaders = () => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+};
+
+function normalizeMachineType(value: string): MachineType {
+  const normalized = value?.trim() || '';
+  const map: Record<string, MachineType> = {
+    industrial: 'Industrial',
+    domestic: 'Domestic',
+    embroidery: 'Embroidery',
+    overlock: 'Overlock',
+    buttonhole: 'Buttonhole',
+    other: 'Other',
+  };
+  return (map[normalized.toLowerCase()] as MachineType) || 'Other';
+}
 
 const BincardPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -200,6 +69,10 @@ const BincardPage: React.FC = () => {
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
   const [selectedBrand, setSelectedBrand] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
+  const [bincardSummary, setBincardSummary] = useState<BincardSummary[]>([]);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [modalEntries, setModalEntries] = useState<BincardEntry[]>([]);
+  const [modalEntriesLoading, setModalEntriesLoading] = useState(false);
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -213,95 +86,129 @@ const BincardPage: React.FC = () => {
     console.log('Logout clicked');
   };
 
+  const fetchSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (dateRange.from) params.set('dateFrom', dateRange.from);
+      if (dateRange.to) params.set('dateTo', dateRange.to);
+      const qs = params.toString();
+      const url = `${API_BASE_URL}/bincard/summary${qs ? `?${qs}` : ''}`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to fetch bincard summary');
+      const json = await res.json();
+      const raw: any[] = json.data?.summary ?? [];
+      const mapped: BincardSummary[] = raw.map((s: any) => ({
+        brand: s.brand ?? '',
+        model: s.model ?? '',
+        type: normalizeMachineType(s.type ?? ''),
+        openingBalance: Number(s.openingBalance) ?? 0,
+        totalIn: Number(s.totalIn) ?? 0,
+        totalOut: Number(s.totalOut) ?? 0,
+        closingBalance: Number(s.closingBalance) ?? 0,
+        lastTransactionDate: s.lastTransactionDate
+          ? new Date(s.lastTransactionDate).toISOString().slice(0, 10)
+          : '',
+      }));
+      setBincardSummary(mapped);
+    } catch (e) {
+      console.error('Error fetching bincard summary:', e);
+      setBincardSummary([]);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [dateRange.from, dateRange.to]);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
   const handleViewDetails = (item: BincardSummary) => {
     setSelectedItem(item);
     setIsViewModalOpen(true);
+    setModalEntries([]);
   };
 
   const handleCloseViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedItem(null);
+    setModalEntries([]);
   };
 
-  // Get unique brands and models
-  const uniqueBrands = useMemo(() => {
-    return [...new Set(mockBincardEntries.map((e) => e.brand))].sort();
-  }, []);
+  useEffect(() => {
+    if (!isViewModalOpen || !selectedItem) return;
+    let cancelled = false;
+    setModalEntriesLoading(true);
+    const params = new URLSearchParams();
+    params.set('brand', selectedItem.brand);
+    params.set('model', selectedItem.model);
+    params.set('limit', '500');
+    params.set('sortBy', 'date');
+    params.set('sortOrder', 'asc');
+    if (dateRange.from) params.set('dateFrom', dateRange.from);
+    if (dateRange.to) params.set('dateTo', dateRange.to);
+    fetch(`${API_BASE_URL}/bincard/entries?${params}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch entries');
+        return res.json();
+      })
+      .then((json) => {
+        if (cancelled) return;
+        const raw: any[] = json.data?.items?.entries ?? [];
+        const mapped: BincardEntry[] = raw.map((e: any) => ({
+          id: String(e.id),
+          date: e.date ? new Date(e.date).toISOString().slice(0, 10) : '',
+          brand: e.brand ?? '',
+          model: e.model ?? '',
+          type: normalizeMachineType(e.type ?? ''),
+          transactionType: (e.transactionType ?? '') as TransactionType,
+          reference: e.reference ?? '',
+          in: Number(e.in) ?? 0,
+          out: Number(e.out) ?? 0,
+          balance: Number(e.balance) ?? 0,
+          location: e.location ?? '',
+          performedBy: e.performedBy ?? '',
+          notes: e.notes ?? undefined,
+        }));
+        setModalEntries(mapped);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Error fetching bincard entries:', err);
+          setModalEntries([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setModalEntriesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isViewModalOpen, selectedItem?.brand, selectedItem?.model, dateRange.from, dateRange.to]);
 
-  const uniqueModels = useMemo(() => {
-    return [...new Set(mockBincardEntries.map((e) => e.model))].sort();
-  }, []);
+  const uniqueBrands = useMemo(() => [...new Set(bincardSummary.map((s) => s.brand))].sort(), [bincardSummary]);
+  const uniqueModels = useMemo(() => [...new Set(bincardSummary.map((s) => s.model))].sort(), [bincardSummary]);
 
-  // Calculate bincard summary
-  const bincardSummary = useMemo(() => {
-    const summaryMap = new Map<string, BincardSummary>();
-
-    mockBincardEntries.forEach((entry) => {
-      const key = `${entry.brand}-${entry.model}`;
-      
-      if (!summaryMap.has(key)) {
-        summaryMap.set(key, {
-          brand: entry.brand,
-          model: entry.model,
-          type: entry.type,
-          openingBalance: 0,
-          totalIn: 0,
-          totalOut: 0,
-          closingBalance: 0,
-          lastTransactionDate: entry.date,
-        });
-      }
-
-      const summary = summaryMap.get(key)!;
-      summary.totalIn += entry.in;
-      summary.totalOut += entry.out;
-      summary.closingBalance = entry.balance;
-      if (new Date(entry.date) > new Date(summary.lastTransactionDate)) {
-        summary.lastTransactionDate = entry.date;
-      }
-    });
-
-    // Calculate opening balance (closing - totalIn + totalOut)
-    summaryMap.forEach((summary) => {
-      summary.openingBalance = summary.closingBalance - summary.totalIn + summary.totalOut;
-    });
-
-    return Array.from(summaryMap.values());
-  }, []);
-
-  // Filter summary based on filters
   const filteredSummary = useMemo(() => {
     let filtered = [...bincardSummary];
-
-    if (selectedBrand) {
-      filtered = filtered.filter((item) => item.brand === selectedBrand);
-    }
-
-    if (selectedModel) {
-      filtered = filtered.filter((item) => item.model === selectedModel);
-    }
-
+    if (selectedBrand) filtered = filtered.filter((item) => item.brand === selectedBrand);
+    if (selectedModel) filtered = filtered.filter((item) => item.model === selectedModel);
     return filtered;
   }, [bincardSummary, selectedBrand, selectedModel]);
 
-  // Get detailed entries for selected item
-  const getItemEntries = (item: BincardSummary | null): BincardEntry[] => {
-    if (!item) return [];
-    
-    let entries = mockBincardEntries.filter(
-      (e) => e.brand === item.brand && e.model === item.model
-    );
-
-    if (dateRange.from) {
-      entries = entries.filter((e) => e.date >= dateRange.from);
-    }
-
-    if (dateRange.to) {
-      entries = entries.filter((e) => e.date <= dateRange.to);
-    }
-
-    return entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  };
+  const getItemEntries = useCallback((item: BincardSummary | null): BincardEntry[] => {
+    if (!item || !selectedItem) return modalEntries;
+    if (item.brand !== selectedItem.brand || item.model !== selectedItem.model) return [];
+    return modalEntries;
+  }, [selectedItem, modalEntries]);
 
   // Table columns for bincard summary
   const summaryColumns: TableColumn[] = [

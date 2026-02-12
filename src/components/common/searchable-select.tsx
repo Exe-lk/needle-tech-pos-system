@@ -172,9 +172,10 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option, index) => (
               <div
-                key={option.value}
-                onClick={() => handleSelect(option.value)}
-                onMouseEnter={() => setHighlightedIndex(index)}
+              key={option.value}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSelect(option.value)}
+              onMouseEnter={() => setHighlightedIndex(index)}
                 className={`px-4 py-3 cursor-pointer flex items-center justify-between ${
                   index === highlightedIndex
                     ? 'bg-blue-50 dark:bg-indigo-900/30'

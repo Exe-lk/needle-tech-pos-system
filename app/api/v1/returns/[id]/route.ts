@@ -3,7 +3,7 @@ import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-resp
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -13,7 +13,12 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     const returnRecord = await prisma.return.findUnique({
       where: { id },
-      include: { rental: true, inspector: true }
+      include: {
+        rental: { include: { customer: true } },
+        inspectedBy: true,
+        machine: { include: { brand: true, model: true, type: true } },
+        damageReport: true,
+      },
     });
     
     if (!returnRecord) {
@@ -27,7 +32,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
   }
 });
 
-export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -44,10 +49,14 @@ export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
     const updatedReturn = await prisma.return.update({
       where: { id },
       data: {
-        ...(body.status && { status: body.status }),
-        ...(body.notes && { notes: body.notes }),
+        ...(body.notes !== undefined && { notes: body.notes }),
       },
-      include: { rental: true, inspector: true }
+      include: {
+        rental: { include: { customer: true } },
+        inspectedBy: true,
+        machine: { include: { brand: true, model: true, type: true } },
+        damageReport: true,
+      },
     });
     
     return successResponse(updatedReturn, 'Return updated successfully');
@@ -57,7 +66,7 @@ export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   }
 });
 
-export const DELETE = withAuthAndRole(['ADMIN'], async (
+export const DELETE = withAuthAndRole(['SUPER_ADMIN', 'ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }

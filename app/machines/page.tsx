@@ -194,6 +194,77 @@ const fetchActiveMachineTypes = async (): Promise<MachineTypeData[]> => {
   }
 };
 
+// Tool type (from API)
+interface ToolRecord {
+  id: string;
+  toolName: string;
+  toolType: string;
+  brand: string | null;
+  model: string | null;
+  [key: string]: any;
+}
+
+// Fetch tools for dropdown options (distinct tool names, types, brands, models)
+const fetchTools = async (): Promise<ToolRecord[]> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/tools?limit=500`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch tools');
+    }
+
+    const data = await response.json();
+    return data.data?.items || [];
+  } catch (error) {
+    console.error('Error fetching tools:', error);
+    return [];
+  }
+};
+
+// Create tool
+const createTool = async (toolData: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> => {
+  const token = localStorage.getItem('needletech_access_token');
+  try {
+    const response = await fetch(`${API_BASE_URL}/tools`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify(toolData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Failed to create tool',
+      };
+    }
+
+    return {
+      success: true,
+      data: data.data,
+    };
+  } catch (error: any) {
+    console.error('Error creating tool:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+};
+
 // Fetch machine by ID
 const fetchMachineById = async (machineId: string): Promise<MachineInfo | null> => {
   const token = localStorage.getItem('needletech_access_token');
@@ -399,17 +470,31 @@ const MachineListPage: React.FC = () => {
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
   const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(false);
 
+  // Tool dropdown options (distinct values from existing tools)
+  const [toolNames, setToolNames] = useState<string[]>([]);
+  const [toolTypes, setToolTypes] = useState<string[]>([]);
+  const [toolBrands, setToolBrands] = useState<string[]>([]);
+  const [toolModels, setToolModels] = useState<string[]>([]);
+  const [isLoadingToolOptions, setIsLoadingToolOptions] = useState(false);
+
   // Fetch machines on component mount
   useEffect(() => {
     loadMachines();
   }, []);
 
-  // Fetch dropdown data when create modal opens
+  // Fetch dropdown data when create modal opens (machine tab)
   useEffect(() => {
     if (isCreateModalOpen) {
       loadDropdownData();
     }
   }, [isCreateModalOpen]);
+
+  // Fetch tool options when switching to tool tab
+  useEffect(() => {
+    if (isCreateModalOpen && activeCreateTab === 'tool') {
+      loadToolOptions();
+    }
+  }, [isCreateModalOpen, activeCreateTab]);
 
   // Fetch models when brand changes
   useEffect(() => {
@@ -466,6 +551,25 @@ const MachineListPage: React.FC = () => {
       setModels(modelsData);
     } catch (error) {
       console.error('Error loading models by brand:', error);
+    }
+  };
+
+  const loadToolOptions = async () => {
+    setIsLoadingToolOptions(true);
+    try {
+      const toolsList = await fetchTools();
+      const names = [...new Set(toolsList.map((t) => t.toolName).filter((x): x is string => Boolean(x)))].sort();
+      const types = [...new Set(toolsList.map((t) => t.toolType).filter((x): x is string => Boolean(x)))].sort();
+      const brandsList = [...new Set(toolsList.map((t) => t.brand).filter((x): x is string => Boolean(x)))].sort();
+      const modelsList = [...new Set(toolsList.map((t) => t.model).filter((x): x is string => Boolean(x)))].sort();
+      setToolNames(names);
+      setToolTypes(types);
+      setToolBrands(brandsList);
+      setToolModels(modelsList);
+    } catch (error) {
+      console.error('Error loading tool options:', error);
+    } finally {
+      setIsLoadingToolOptions(false);
     }
   };
 
@@ -592,7 +696,10 @@ const MachineListPage: React.FC = () => {
   };
 
   const getModelOptions = () => {
-    return models.map(model => ({
+    // When brand is a custom (new) name, we have no models for it yet - show empty with creatable
+    const isExistingBrand = selectedBrandId && brands.some((b) => b.id === selectedBrandId);
+    const modelList = isExistingBrand ? models : [];
+    return modelList.map((model) => ({
       label: model.name,
       value: model.id,
     }));
@@ -611,25 +718,33 @@ const MachineListPage: React.FC = () => {
       name: 'brandId',
       label: 'Brand',
       type: 'select',
-      placeholder: isLoadingDropdowns ? 'Loading brands...' : 'Search or select brand',
+      placeholder: isLoadingDropdowns ? 'Loading brands...' : 'Search or select brand, or type new',
       required: true,
       searchable: true,
-      creatable: false,
+      creatable: true,
       options: getBrandOptions(),
       onChange: (value: string) => {
         setSelectedBrandId(value);
+        const isExistingBrand = brands.some((b) => b.id === value);
+        if (isExistingBrand) {
+          loadModelsByBrand(value);
+        } else {
+          setModels([]);
+        }
       },
     },
     {
       name: 'modelId',
       label: 'Model',
       type: 'select',
-      placeholder: selectedBrandId 
-        ? (models.length === 0 ? 'No models available for this brand' : 'Search or select model')
-        : 'Select a brand first',
+      placeholder: !selectedBrandId
+        ? 'Select a brand first'
+        : getModelOptions().length === 0
+          ? 'Type model name (new brand or no models yet)'
+          : 'Search or select model, or type new',
       required: true,
       searchable: true,
-      creatable: false,
+      creatable: true,
       options: getModelOptions(),
       disabled: !selectedBrandId,
     },
@@ -637,10 +752,10 @@ const MachineListPage: React.FC = () => {
       name: 'machineTypeId',
       label: 'Type',
       type: 'select',
-      placeholder: isLoadingDropdowns ? 'Loading types...' : 'Search or select machine type',
+      placeholder: isLoadingDropdowns ? 'Loading types...' : 'Search or select machine type, or type new',
       required: true,
       searchable: true,
-      creatable: false,
+      creatable: true,
       options: getMachineTypeOptions(),
     },
     {
@@ -727,89 +842,47 @@ const MachineListPage: React.FC = () => {
     },
   ];
 
-  // Form fields for Tool Registration (unchanged)
-  const toolFields: FormField[] = [
+  // Form fields for Tool Registration (options from existing tools, searchable + creatable)
+  const getToolFields = (): FormField[] => [
     {
       name: 'toolName',
       label: 'Tool Name',
       type: 'select',
-      placeholder: 'Search or select tool name',
+      placeholder: isLoadingToolOptions ? 'Loading...' : 'Search or select tool name, or type new',
       required: true,
       searchable: true,
       creatable: true,
-      options: [
-        { label: 'Thread Stand', value: 'Thread Stand' },
-        { label: 'Extension Table', value: 'Extension Table' },
-        { label: 'Presser Foot Set', value: 'Presser Foot Set' },
-        { label: 'Bobbin Case', value: 'Bobbin Case' },
-        { label: 'Needle Set', value: 'Needle Set' },
-        { label: 'Thread Spool', value: 'Thread Spool' },
-        { label: 'Seam Ripper', value: 'Seam Ripper' },
-        { label: 'Measuring Tape', value: 'Measuring Tape' },
-        { label: 'Scissors', value: 'Scissors' },
-        { label: 'Walking Foot', value: 'Walking Foot' },
-        { label: 'Zipper Foot', value: 'Zipper Foot' },
-        { label: 'Buttonhole Foot', value: 'Buttonhole Foot' },
-        { label: 'Quilting Foot', value: 'Quilting Foot' },
-        { label: 'Other', value: 'Other' },
-      ],
+      options: toolNames.map((n) => ({ label: n, value: n })),
     },
     {
       name: 'toolType',
       label: 'Tool Type',
       type: 'select',
-      placeholder: 'Search or select tool type',
+      placeholder: isLoadingToolOptions ? 'Loading...' : 'Search or select tool type, or type new',
       required: true,
       searchable: true,
       creatable: true,
-      options: [
-        { label: 'Thread Stand', value: 'Thread Stand' },
-        { label: 'Extension Table', value: 'Extension Table' },
-        { label: 'Presser Foot Set', value: 'Presser Foot Set' },
-        { label: 'Bobbin Case', value: 'Bobbin Case' },
-        { label: 'Needle Set', value: 'Needle Set' },
-        { label: 'Thread Spool', value: 'Thread Spool' },
-        { label: 'Seam Ripper', value: 'Seam Ripper' },
-        { label: 'Measuring Tape', value: 'Measuring Tape' },
-        { label: 'Scissors', value: 'Scissors' },
-        { label: 'Other', value: 'Other' },
-      ],
+      options: toolTypes.map((t) => ({ label: t, value: t })),
     },
     {
       name: 'brand',
       label: 'Brand',
       type: 'select',
-      placeholder: 'Search or select brand',
+      placeholder: isLoadingToolOptions ? 'Loading...' : 'Search or select brand, or type new',
       required: false,
       searchable: true,
       creatable: true,
-      options: [
-        { label: 'Brother', value: 'Brother' },
-        { label: 'Singer', value: 'Singer' },
-        { label: 'Janome', value: 'Janome' },
-        { label: 'Juki', value: 'Juki' },
-        { label: 'Pfaff', value: 'Pfaff' },
-        { label: 'Bernina', value: 'Bernina' },
-        { label: 'Generic', value: 'Generic' },
-        { label: 'Other', value: 'Other' },
-      ],
+      options: toolBrands.map((b) => ({ label: b, value: b })),
     },
     {
       name: 'model',
       label: 'Model',
       type: 'select',
-      placeholder: 'Search or select model',
+      placeholder: isLoadingToolOptions ? 'Loading...' : 'Search or select model, or type new',
       required: false,
       searchable: true,
       creatable: true,
-      options: [
-        { label: 'Standard', value: 'Standard' },
-        { label: 'Heavy Duty', value: 'Heavy Duty' },
-        { label: 'Professional', value: 'Professional' },
-        { label: 'Compact', value: 'Compact' },
-        { label: 'Universal', value: 'Universal' },
-        { label: 'Other', value: 'Other' },
-      ],
+      options: toolModels.map((m) => ({ label: m, value: m })),
     },
     {
       name: 'serialNumber',
@@ -839,10 +912,10 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Select status',
       required: true,
       options: [
-        { label: 'Available', value: 'Available' },
-        { label: 'In Use', value: 'In Use' },
-        { label: 'Maintenance', value: 'Maintenance' },
-        { label: 'Retired', value: 'Retired' },
+        { label: 'Available', value: 'AVAILABLE' },
+        { label: 'In Use', value: 'IN_USE' },
+        { label: 'Maintenance', value: 'MAINTENANCE' },
+        { label: 'Retired', value: 'RETIRED' },
       ],
     },
     {
@@ -872,10 +945,10 @@ const MachineListPage: React.FC = () => {
       placeholder: 'Select condition',
       required: true,
       options: [
-        { label: 'New', value: 'New' },
-        { label: 'Good', value: 'Good' },
-        { label: 'Fair', value: 'Fair' },
-        { label: 'Poor', value: 'Poor' },
+        { label: 'New', value: 'NEW' },
+        { label: 'Good', value: 'GOOD' },
+        { label: 'Fair', value: 'FAIR' },
+        { label: 'Poor', value: 'POOR' },
       ],
     },
     {
@@ -952,11 +1025,33 @@ const MachineListPage: React.FC = () => {
   const handleMachineSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      const result = await createMachine(data);
-      
+      // API accepts brandId or brand (name), modelId or model (name), machineTypeId or type (name)
+      const payload: Record<string, any> = { ...data };
+
+      if (brands.some((b) => b.id === data.brandId)) {
+        payload.brandId = data.brandId;
+      } else {
+        payload.brand = (data.brandId || '').trim();
+        delete payload.brandId;
+      }
+      if (models.some((m) => m.id === data.modelId)) {
+        payload.modelId = data.modelId;
+      } else {
+        payload.model = (data.modelId || '').trim();
+        delete payload.modelId;
+      }
+      if (machineTypes.some((t) => t.id === data.machineTypeId)) {
+        payload.machineTypeId = data.machineTypeId;
+      } else {
+        payload.type = (data.machineTypeId || '').trim();
+        delete payload.machineTypeId;
+      }
+
+      const result = await createMachine(payload);
+
       if (result.success) {
-        const brandName = brands.find(b => b.id === data.brandId)?.name || '';
-        const modelName = models.find(m => m.id === data.modelId)?.name || '';
+        const brandName = payload.brand || brands.find((b) => b.id === payload.brandId)?.name || '';
+        const modelName = payload.model || models.find((m) => m.id === payload.modelId)?.name || '';
         alert(`Machine "${brandName} ${modelName}" registered successfully.`);
         handleCloseCreateModal();
         await loadMachines();
@@ -974,9 +1069,32 @@ const MachineListPage: React.FC = () => {
   const handleToolSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      console.log('Create tool payload:', data);
-      alert(`Tool "${data.toolName}" registered successfully (frontend only).`);
-      handleCloseCreateModal();
+      const payload = {
+        toolName: (data.toolName || '').trim(),
+        toolType: (data.toolType || '').trim(),
+        brand: data.brand ? String(data.brand).trim() : null,
+        model: data.model ? String(data.model).trim() : null,
+        serialNumber: data.serialNumber ? String(data.serialNumber).trim() : null,
+        quantity: parseInt(data.quantity, 10) || 1,
+        unitPrice: data.unitPrice != null && data.unitPrice !== '' ? parseFloat(data.unitPrice) : null,
+        status: data.status || 'AVAILABLE',
+        location: (data.location || '').trim(),
+        purchaseDate: data.purchaseDate || null,
+        condition: data.condition || 'NEW',
+        notes: data.notes ? String(data.notes).trim() : null,
+        toolPhotoUrls: [], // File upload to URL not implemented in this flow; can be extended later
+      };
+      const result = await createTool(payload);
+      if (result.success) {
+        alert(`Tool "${payload.toolName}" registered successfully.`);
+        handleCloseCreateModal();
+        await loadToolOptions(); // Refresh tool options for next time
+      } else {
+        alert(`Failed to create tool: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error creating tool:', error);
+      alert('Failed to create tool. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -984,14 +1102,40 @@ const MachineListPage: React.FC = () => {
 
   const handleMachineUpdate = async (data: Record<string, any>) => {
     if (!selectedMachine) return;
-    
+
     setIsSubmitting(true);
     try {
-      const result = await updateMachine(selectedMachine.id.toString(), data);
-      
+      const payload: Record<string, any> = { ...data };
+      if (data.brandId != null) {
+        if (brands.some((b) => b.id === data.brandId)) {
+          payload.brandId = data.brandId;
+        } else {
+          payload.brand = (data.brandId || '').trim();
+          delete payload.brandId;
+        }
+      }
+      if (data.modelId != null) {
+        if (models.some((m) => m.id === data.modelId)) {
+          payload.modelId = data.modelId;
+        } else {
+          payload.model = (data.modelId || '').trim();
+          delete payload.modelId;
+        }
+      }
+      if (data.machineTypeId != null) {
+        if (machineTypes.some((t) => t.id === data.machineTypeId)) {
+          payload.machineTypeId = data.machineTypeId;
+        } else {
+          payload.type = (data.machineTypeId || '').trim();
+          delete payload.machineTypeId;
+        }
+      }
+
+      const result = await updateMachine(selectedMachine.id.toString(), payload);
+
       if (result.success) {
-        const brandName = brands.find(b => b.id === data.brandId)?.name || data.brand;
-        const modelName = models.find(m => m.id === data.modelId)?.name || data.model;
+        const brandName = payload.brand || brands.find((b) => b.id === payload.brandId)?.name || '';
+        const modelName = payload.model || models.find((m) => m.id === payload.modelId)?.name || '';
         alert(`Machine "${brandName} ${modelName}" updated successfully.`);
         handleCloseUpdateModal();
         await loadMachines();
@@ -1441,7 +1585,7 @@ const MachineListPage: React.FC = () => {
               ) : (
                 <CreateForm
                   title="Tool Registration"
-                  fields={toolFields}
+                  fields={getToolFields()}
                   onSubmit={handleToolSubmit}
                   onClear={handleClear}
                   submitButtonLabel="Register"
