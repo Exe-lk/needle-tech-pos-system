@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { unauthorizedResponse, forbiddenResponse } from './api-response';
-import { authenticateRequest, AuthUser, hasPermission } from './auth-supabase';
+import { authenticateRequest, hasPermission } from './auth-supabase';
+import type { AuthUser } from './auth-supabase';
 
 /**
  * Middleware wrapper for protected routes
@@ -73,4 +74,4 @@ export function withAuthAndPermission<T extends any[]>(
   };
 }
 
-export { AuthUser };
+export type { AuthUser };

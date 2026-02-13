@@ -71,11 +71,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             href: '/dashboard',
         },
         {
-            icon: ShoppingCart,
-            label: 'Purchase Order',
-            href: '/purchase-order',
-        },
-        {
             icon: Users,
             label: 'Customer Management',
             href: '/customers',
@@ -89,6 +84,11 @@ const Sidebar: React.FC<SidebarProps> = ({
             icon: Boxes,
             label: 'Inventory Management',
             href: '/inventory',
+        },
+        {
+            icon: ShoppingCart,
+            label: 'Purchase Order',
+            href: '/purchase-order',
         },
         {
             icon: FileText,
