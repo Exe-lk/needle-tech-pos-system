@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
@@ -9,6 +9,19 @@ import { LetterheadDocument } from '@/src/components/letterhead/letterhead-docum
 import { X, Plus, Trash2, ChevronDown, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
+
+const API_BASE_URL = '/api/v1';
+
+interface ApiCustomer {
+    id: string;
+    code: string;
+    type: string;
+    name: string;
+    contactPerson?: string;
+    phones?: string[];
+    emails?: string[];
+    status?: string;
+}
 
 type CustomerType = 'Company' | 'Individual';
 
@@ -487,12 +500,86 @@ const CreatePurchaseRequestPage: React.FC = () => {
     ]);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-    // Get outstanding alerts for selected customer (only Active alerts)
+    // API data: registered customers and inventory (available stock by brand+model)
+    const [customers, setCustomers] = useState<ApiCustomer[]>([]);
+    const [customersLoading, setCustomersLoading] = useState(true);
+    const [inventoryByBrandModel, setInventoryByBrandModel] = useState<Record<string, number>>({});
+    const [brandModelList, setBrandModelList] = useState<{ brand: string; model: string; type: string }[]>([]);
+
+    const getAuthHeaders = useCallback(() => {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
+        return {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+    }, []);
+
+    const fetchCustomers = useCallback(async () => {
+        setCustomersLoading(true);
+        try {
+            const params = new URLSearchParams({ page: '1', limit: '500', status: 'ACTIVE' });
+            const response = await fetch(`${API_BASE_URL}/customers?${params.toString()}`, {
+                method: 'GET',
+                headers: getAuthHeaders(),
+                credentials: 'include',
+            });
+            const json = await response.json();
+            if (response.ok && Array.isArray(json?.data?.items)) {
+                setCustomers(json.data.items);
+            } else {
+                setCustomers([]);
+            }
+        } catch {
+            setCustomers([]);
+        } finally {
+            setCustomersLoading(false);
+        }
+    }, [getAuthHeaders]);
+
+    const fetchMachinesForInventory = useCallback(async () => {
+        try {
+            const params = new URLSearchParams({ page: '1', limit: '2000', status: 'AVAILABLE' });
+            const response = await fetch(`${API_BASE_URL}/machines?${params.toString()}`, {
+                method: 'GET',
+                headers: getAuthHeaders(),
+                credentials: 'include',
+            });
+            const json = await response.json();
+            const list = Array.isArray(json?.data?.items) ? json.data.items : [];
+            const countByKey: Record<string, number> = {};
+            const brandModelSet: { brand: string; model: string; type: string }[] = [];
+            const seen = new Set<string>();
+            list.forEach((m: { brand?: string; model?: string; type?: string }) => {
+                const brand = (m.brand || '').trim();
+                const model = (m.model || '').trim();
+                const type = (m.type || 'Other').trim();
+                if (brand && model) {
+                    const key = `${brand}|${model}`;
+                    countByKey[key] = (countByKey[key] || 0) + 1;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        brandModelSet.push({ brand, model, type });
+                    }
+                }
+            });
+            setInventoryByBrandModel(countByKey);
+            setBrandModelList(brandModelSet);
+        } catch {
+            setInventoryByBrandModel({});
+            setBrandModelList([]);
+        }
+    }, [getAuthHeaders]);
+
+    useEffect(() => {
+        fetchCustomers();
+        fetchMachinesForInventory();
+    }, [fetchCustomers, fetchMachinesForInventory]);
+
+    // Get outstanding alerts for selected customer (mock data; when using API customers, match by id string or skip)
     const customerOutstandingAlerts = useMemo(() => {
         if (!selectedCustomerId) return [];
-        const customerId = Number(selectedCustomerId);
         return mockOutstandingAlerts.filter(
-            alert => alert.customerId === customerId && alert.status === 'Active'
+            alert => String(alert.customerId) === String(selectedCustomerId) && alert.status === 'Active'
         );
     }, [selectedCustomerId]);
 
@@ -507,41 +594,57 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }, customerOutstandingAlerts[0].severity);
     }, [customerOutstandingAlerts]);
 
-    // Get available models based on selected brand
+    // Get available models based on selected brand (from API-derived list, fallback to mock)
     const getAvailableModels = (brand: string) => {
+        if (brandModelList.length > 0) {
+            const models = brandModelList.filter((m) => m.brand === brand).map((m) => m.model);
+            return [...new Set(models)].sort();
+        }
         const brandData = mockMachineModels.find((m) => m.brand === brand);
         return brandData?.models || [];
     };
 
-    // Get available stock for a brand/model combination
+    // Get available stock for a brand/model combination (from API inventory, fallback to mock)
     const getAvailableStock = (brand: string, model: string): number => {
+        const key = `${brand}|${model}`;
+        if (Object.keys(inventoryByBrandModel).length > 0) {
+            return inventoryByBrandModel[key] ?? 0;
+        }
         const inventoryItem = mockInventory.find(
             (item) => item.brand === brand && item.model === model
         );
         return inventoryItem?.availableStock || 0;
     };
 
-    // Get unique brands (including those with no stock)
+    // Get unique brands (from API-derived list, fallback to mock)
     const getAvailableBrands = () => {
+        if (brandModelList.length > 0) {
+            const brands = [...new Set(brandModelList.map((m) => m.brand))].filter(Boolean).sort();
+            return brands;
+        }
         const allBrands = new Set<string>();
-        mockInventory.forEach((item) => {
-            allBrands.add(item.brand);
-        });
-        mockMachineBrands.forEach((brand) => {
-            allBrands.add(brand);
-        });
+        mockInventory.forEach((item) => allBrands.add(item.brand));
+        mockMachineBrands.forEach((b) => allBrands.add(b));
         return Array.from(allBrands).sort();
     };
 
-    // Prepare customer options
+    // Prepare customer options: registered customers from API (fallback to mock when API returns empty)
     const customerOptions = useMemo(() => {
+        if (customers.length > 0) {
+            return customers
+                .filter((c) => c.status !== 'INACTIVE')
+                .map((customer) => ({
+                    value: customer.id,
+                    label: `${customer.name} (${customer.type === 'GARMENT_FACTORY' ? 'Business' : 'Customer'})`,
+                }));
+        }
         return mockCustomers
             .filter((c) => c.status === 'Active')
             .map((customer) => ({
                 value: customer.id.toString(),
                 label: `${customer.name} (${getCustomerTypeLabel(customer.type)})`,
             }));
-    }, []);
+    }, [customers]);
 
     // Prepare brand options
     const brandOptions = useMemo(() => {
@@ -674,15 +777,22 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
         setIsSubmitting(true);
         try {
-            const selectedCustomer = mockCustomers.find((c) => c.id === Number(selectedCustomerId));
+            const selectedCustomerApi = customers.find((c) => c.id === selectedCustomerId);
+            const selectedCustomerMock = mockCustomers.find((c) => c.id.toString() === selectedCustomerId);
+            const customerName = selectedCustomerApi?.name ?? selectedCustomerMock?.name ?? '';
 
-            // Calculate pending quantities for each machine
             const machinesWithStatus = machines.map((machine) => {
                 const available = Math.min(machine.availableStock, machine.quantity);
                 const pending = machine.quantity - available;
-
                 return {
-                    ...machine,
+                    id: machine.id,
+                    brand: machine.brand,
+                    model: machine.model,
+                    type: machine.type,
+                    quantity: machine.quantity,
+                    availableStock: machine.availableStock ?? 0,
+                    unitPrice: machine.unitPrice,
+                    totalPrice: machine.totalPrice,
                     rentedQuantity: 0,
                     pendingQuantity: pending,
                 };
@@ -690,20 +800,33 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
             const payload = {
                 customerId: selectedCustomerId,
-                customerName: selectedCustomer?.name || '',
-                startDate: startDate.trim(),
-                endDate: endDate.trim(),
+                customerName,
+                requestDate: new Date().toISOString().split('T')[0],
                 machines: machinesWithStatus,
                 totalAmount: pricing,
-                requestDate: new Date().toISOString().split('T')[0],
             };
 
-            console.log('Create purchase request payload:', payload);
-            alert(`Purchase Request created successfully (frontend only).`);
+            const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
+            const response = await fetch('/api/v1/purchase-orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                credentials: 'include',
+                body: JSON.stringify(payload),
+            });
+            const json = await response.json();
+
+            if (!response.ok) {
+                const msg = json?.message || (json?.data ? Object.values(json.data).flat().join(' ') : '') || 'Failed to create purchase order';
+                throw new Error(msg);
+            }
+            alert('Purchase order created successfully.');
             router.push('/purchase-order');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error creating purchase request:', error);
-            alert('Failed to create purchase request. Please try again.');
+            alert(error?.message || 'Failed to create purchase request. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -805,9 +928,35 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleCompanySubmit = async (data: Record<string, any>) => {
         setIsSubmitting(true);
         try {
-            console.log('Create business customer payload:', data);
-            alert(`Business "${data.companyName}" registered successfully. Please select this customer.`);
+            const code = (data.vatTin || (data.companyName || '').replace(/\s+/g, '').substring(0, 8)).toUpperCase() + '-' + Date.now().toString(36);
+            const payload = {
+                code,
+                type: 'GARMENT_FACTORY',
+                name: data.companyName || '',
+                contactPerson: data.contactPerson || '',
+                phones: [data.phone].filter(Boolean),
+                emails: [data.email].filter(Boolean),
+            };
+            const response = await fetch(`${API_BASE_URL}/customers`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                credentials: 'include',
+                body: JSON.stringify(payload),
+            });
+            const json = await response.json();
+            if (!response.ok) {
+                const msg = json?.message || (json?.data ? Object.values(json.data).flat().join(' ') : '') || 'Failed to register customer';
+                throw new Error(msg);
+            }
+            const newCustomer = json?.data;
+            if (newCustomer?.id) {
+                await fetchCustomers();
+                setSelectedCustomerId(newCustomer.id);
+            }
+            alert(`Business "${data.companyName}" registered successfully. Please confirm the customer is selected.`);
             handleCloseRegisterModal();
+        } catch (err: any) {
+            alert(err?.message || 'Failed to register business. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -816,9 +965,35 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleIndividualSubmit = async (data: Record<string, any>) => {
         setIsSubmitting(true);
         try {
-            console.log('Create customer payload:', data);
-            alert(`Customer "${data.fullName}" registered successfully. Please select this customer.`);
+            const code = (data.nicNumber || (data.fullName || '').replace(/\s+/g, '').substring(0, 8)).toUpperCase() + '-' + Date.now().toString(36);
+            const payload = {
+                code,
+                type: 'INDIVIDUAL',
+                name: data.fullName || '',
+                contactPerson: data.fullName || '',
+                phones: [data.phone].filter(Boolean),
+                emails: [data.email].filter(Boolean),
+            };
+            const response = await fetch(`${API_BASE_URL}/customers`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                credentials: 'include',
+                body: JSON.stringify(payload),
+            });
+            const json = await response.json();
+            if (!response.ok) {
+                const msg = json?.message || (json?.data ? Object.values(json.data).flat().join(' ') : '') || 'Failed to register customer';
+                throw new Error(msg);
+            }
+            const newCustomer = json?.data;
+            if (newCustomer?.id) {
+                await fetchCustomers();
+                setSelectedCustomerId(newCustomer.id);
+            }
+            alert(`Customer "${data.fullName}" registered successfully. Please confirm the customer is selected.`);
             handleCloseRegisterModal();
+        } catch (err: any) {
+            alert(err?.message || 'Failed to register customer. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -916,7 +1091,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                         value={selectedCustomerId}
                                         onChange={setSelectedCustomerId}
                                         options={customerOptions}
-                                        placeholder="Select Customer"
+                                        placeholder={customersLoading ? 'Loading customers...' : 'Select Customer'}
+                                        disabled={customersLoading}
                                         error={formErrors.selectedCustomerId}
                                     />
                                 </div>

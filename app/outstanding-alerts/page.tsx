@@ -1,153 +1,44 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, Pencil } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
+import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
 
 type AlertType = 'Payment Overdue' | 'High Balance' | 'Credit Limit Exceeded' | 'Agreement Expiring';
 type AlertSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
 type AlertStatus = 'Active' | 'Resolved';
 
 interface OutstandingAlert {
-  id: number;
-  customerId: number;
+  id: string;
+  customerId: string;
   customerName: string;
   customerType: 'Company' | 'Individual';
   alertType: AlertType;
   description: string;
-  amount: number;
+  amount: number | null;
   dueDate: string;
   severity: AlertSeverity;
   status: AlertStatus;
   createdAt: string;
-  resolvedAt?: string;
-  relatedAgreement?: string;
-  relatedMachine?: string;
-  daysOverdue?: number;
+  resolvedAt?: string | null;
+  relatedAgreement?: string | null;
+  relatedMachine?: string | null;
+  daysOverdue?: number | null;
 }
 
-// Mock data for all outstanding alerts
-const initialMockOutstandingAlerts: OutstandingAlert[] = [
-  {
-    id: 1,
-    customerId: 1,
-    customerName: 'ABC Holdings (Pvt) Ltd',
-    customerType: 'Company',
-    alertType: 'Payment Overdue',
-    description: 'Monthly payment for Bulldozer CAT D6 is overdue by 15 days',
-    amount: 50000,
-    dueDate: '2024-04-01',
-    severity: 'High',
-    status: 'Active',
-    createdAt: '2024-04-16',
-    relatedAgreement: 'AGR-2024-002',
-    relatedMachine: 'Bulldozer CAT D6',
-    daysOverdue: 15,
-  },
-  {
-    id: 2,
-    customerId: 1,
-    customerName: 'ABC Holdings (Pvt) Ltd',
-    customerType: 'Company',
-    alertType: 'High Balance',
-    description: 'Total outstanding balance exceeds warning threshold',
-    amount: 120000.5,
-    dueDate: '2024-04-15',
-    severity: 'Medium',
-    status: 'Active',
-    createdAt: '2024-04-10',
-  },
-  {
-    id: 3,
-    customerId: 1,
-    customerName: 'ABC Holdings (Pvt) Ltd',
-    customerType: 'Company',
-    alertType: 'Agreement Expiring',
-    description: 'Agreement AGR-2024-001 will expire in 30 days',
-    amount: 0,
-    dueDate: '2024-07-15',
-    severity: 'Low',
-    status: 'Active',
-    createdAt: '2024-04-15',
-    relatedAgreement: 'AGR-2024-001',
-  },
-  {
-    id: 4,
-    customerId: 4,
-    customerName: 'Kamal Silva',
-    customerType: 'Individual',
-    alertType: 'Credit Limit Exceeded',
-    description: 'Customer has exceeded their credit limit of Rs. 50,000',
-    amount: 78000,
-    dueDate: '2024-04-20',
-    severity: 'Critical',
-    status: 'Active',
-    createdAt: '2024-04-18',
-  },
-  {
-    id: 5,
-    customerId: 5,
-    customerName: 'Mega Constructions',
-    customerType: 'Company',
-    alertType: 'Payment Overdue',
-    description: 'Monthly payment for Excavator CAT 320 is overdue by 8 days',
-    amount: 75000,
-    dueDate: '2024-04-08',
-    severity: 'Medium',
-    status: 'Active',
-    createdAt: '2024-04-16',
-    relatedAgreement: 'AGR-2024-003',
-    relatedMachine: 'Excavator CAT 320',
-    daysOverdue: 8,
-  },
-  {
-    id: 6,
-    customerId: 2,
-    customerName: 'John Perera',
-    customerType: 'Individual',
-    alertType: 'Payment Overdue',
-    description: 'Monthly payment for Loader CAT 950 is overdue by 3 days',
-    amount: 15000,
-    dueDate: '2024-04-13',
-    severity: 'Low',
-    status: 'Active',
-    createdAt: '2024-04-16',
-    relatedAgreement: 'AGR-2024-004',
-    relatedMachine: 'Loader CAT 950',
-    daysOverdue: 3,
-  },
-  {
-    id: 7,
-    customerId: 5,
-    customerName: 'Mega Constructions',
-    customerType: 'Company',
-    alertType: 'High Balance',
-    description: 'Total outstanding balance exceeds warning threshold',
-    amount: 245000.75,
-    dueDate: '2024-04-25',
-    severity: 'High',
-    status: 'Active',
-    createdAt: '2024-04-20',
-  },
-  {
-    id: 8,
-    customerId: 3,
-    customerName: 'XYZ Engineering',
-    customerType: 'Company',
-    alertType: 'Agreement Expiring',
-    description: 'Agreement AGR-2023-045 will expire in 45 days',
-    amount: 0,
-    dueDate: '2024-06-01',
-    severity: 'Low',
-    status: 'Resolved',
-    createdAt: '2024-04-15',
-    resolvedAt: '2024-04-20',
-    relatedAgreement: 'AGR-2023-045',
-  },
-];
+const API_BASE_URL = '/api/v1';
+
+const getAuthHeaders = (): HeadersInit => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+};
 
 // Table column configuration
 const columns: TableColumn[] = [
@@ -200,8 +91,8 @@ const columns: TableColumn[] = [
     label: 'Amount',
     sortable: true,
     filterable: false,
-    render: (value: number) => (
-      value > 0 ? (
+    render: (value: number | null) => (
+      value != null && value > 0 ? (
         <span className="font-medium text-red-600 dark:text-red-400">
           Rs. {value.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
@@ -266,11 +157,49 @@ const OutstandingAlertsPage: React.FC = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<OutstandingAlert | null>(null);
-  const [alerts, setAlerts] = useState<OutstandingAlert[]>(initialMockOutstandingAlerts);
+  const [alerts, setAlerts] = useState<OutstandingAlert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Update form state
   const [alertStatus, setAlertStatus] = useState<AlertStatus>('Active');
+
+  const fetchAlerts = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('page', '1');
+      params.set('limit', '100');
+      params.set('sortBy', 'createdAt');
+      params.set('sortOrder', 'desc');
+      const res = await fetch(`${API_BASE_URL}/outstanding-alerts?${params.toString()}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json?.message ?? 'Failed to fetch outstanding alerts');
+      }
+
+      const items = json?.data?.items;
+      const list = (items?.outstandingAlerts ?? (Array.isArray(items) ? items : [])) as OutstandingAlert[];
+      setAlerts(list);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load outstanding alerts';
+      setError(message);
+      setAlerts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAlerts();
+  }, [fetchAlerts]);
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -307,29 +236,36 @@ const OutstandingAlertsPage: React.FC = () => {
   };
 
   const handleSubmitUpdate = async () => {
-    if (!selectedAlert) {
-      return;
-    }
+    if (!selectedAlert) return;
 
     setIsSubmitting(true);
     try {
-      const updatedAlert: OutstandingAlert = {
-        ...selectedAlert,
-        status: alertStatus,
-        resolvedAt: alertStatus === 'Resolved' && !selectedAlert.resolvedAt
-          ? new Date().toISOString().split('T')[0]
-          : alertStatus === 'Active'
-          ? undefined
-          : selectedAlert.resolvedAt,
-      };
+      const body: { status: string; resolvedAt?: string } = { status: alertStatus };
+      if (alertStatus === 'Resolved' && !selectedAlert.resolvedAt) {
+        body.resolvedAt = new Date().toISOString();
+      } else if (alertStatus === 'Active') {
+        body.resolvedAt = undefined;
+      }
 
-      setAlerts(alerts.map(alert => alert.id === selectedAlert.id ? updatedAlert : alert));
-      console.log('Update alert payload:', updatedAlert);
-      alert('Alert status updated successfully.');
+      const res = await fetch(`${API_BASE_URL}/outstanding-alerts/${selectedAlert.id}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json?.message ?? 'Failed to update alert');
+      }
+
+      await fetchAlerts();
       handleCloseUpdateModal();
-    } catch (error) {
-      console.error('Error updating alert:', error);
-      alert('Failed to update alert. Please try again.');
+      alert('Alert status updated successfully.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update alert. Please try again.';
+      console.error('Error updating alert:', err);
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -424,7 +360,7 @@ const OutstandingAlertsPage: React.FC = () => {
             </label>
             <input
               type="text"
-              value={selectedAlert.amount > 0 
+              value={selectedAlert.amount != null && selectedAlert.amount > 0
                 ? `Rs. ${selectedAlert.amount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 : 'N/A'}
               disabled
@@ -575,6 +511,12 @@ const OutstandingAlertsPage: React.FC = () => {
             </div>
           </div>
 
+          {error && (
+            <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              {error}
+            </div>
+          )}
+
           {/* Alerts table card */}
           <Table
             data={alerts}
@@ -583,6 +525,7 @@ const OutstandingAlertsPage: React.FC = () => {
             itemsPerPage={10}
             searchable
             filterable
+            loading={loading}
             getRowClassName={getRowClassName}
             emptyMessage="No outstanding alerts found."
           />
@@ -748,7 +691,7 @@ const OutstandingAlertsPage: React.FC = () => {
                     <div>
                       <span className="text-gray-500 dark:text-gray-400">Amount:</span>
                       <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                        {selectedAlert.amount > 0 ? (
+                        {selectedAlert.amount != null && selectedAlert.amount > 0 ? (
                           <span className="text-red-600 dark:text-red-400">
                             Rs. {selectedAlert.amount.toLocaleString('en-LK', {
                               minimumFractionDigits: 2,

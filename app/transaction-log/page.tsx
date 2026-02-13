@@ -1,322 +1,260 @@
 // app/transaction-log/page.tsx
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn } from '@/src/components/table/table';
-import { Download, FileText, Filter, Calendar, User, Search } from 'lucide-react';
+import { Download, Filter, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
+import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
 
+// Align with API response and Prisma enums (API returns title-case; filters sent uppercase)
 type TransactionCategory = 'Inventory' | 'Rental' | 'Return' | 'Invoice' | 'Maintenance' | 'Other';
-type TransactionType =
-  | 'Stock In'
-  | 'Stock Out'
-  | 'Rental Created'
-  | 'Rental Completed'
-  | 'Return Processed'
-  | 'Invoice Generated'
-  | 'Payment Received'
-  | 'Maintenance Out'
-  | 'Maintenance In'
-  | 'Machine Retired';
+type TransactionType = string;
+type TransactionStatus = 'Success' | 'Pending' | 'Failed' | 'Cancelled';
 
 interface TransactionLog {
-  id: number;
+  id: string;
   transactionDate: string;
   transactionTime: string;
   category: TransactionCategory;
   transactionType: TransactionType;
-  reference: string; // Invoice No, Gate Pass No, etc.
+  reference: string;
   description: string;
-  brand?: string;
-  model?: string;
-  customer?: string;
-  amount?: number;
-  quantity?: number;
+  brand?: string | null;
+  model?: string | null;
+  customer?: string | null;
+  amount?: number | null;
+  quantity?: number | null;
   location: string;
   performedBy: string;
-  status: 'Success' | 'Pending' | 'Failed' | 'Cancelled';
-  notes?: string;
+  status: TransactionStatus;
+  notes?: string | null;
 }
 
-// Mock transaction log data
-const mockTransactionLogs: TransactionLog[] = [
-  {
-    id: 1,
-    transactionDate: '2024-01-01',
-    transactionTime: '10:30:00',
-    category: 'Inventory',
-    transactionType: 'Stock In',
-    reference: 'PO-2024-001',
-    description: 'Stock In: Brother XL2600i - 25 units',
-    brand: 'Brother',
-    model: 'XL2600i',
-    quantity: 25,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Initial stock from supplier',
-  },
-  {
-    id: 2,
-    transactionDate: '2024-01-15',
-    transactionTime: '14:20:00',
-    category: 'Rental',
-    transactionType: 'Rental Created',
-    reference: 'GP-2024-001',
-    description: 'Rental Created: ABC Holdings (Pvt) Ltd - 3 machines',
-    brand: 'Brother',
-    model: 'XL2600i',
-    customer: 'ABC Holdings (Pvt) Ltd',
-    quantity: 3,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Monthly rental agreement',
-  },
-  {
-    id: 3,
-    transactionDate: '2024-01-20',
-    transactionTime: '09:15:00',
-    category: 'Invoice',
-    transactionType: 'Invoice Generated',
-    reference: 'INV-2024-001',
-    description: 'Invoice Generated: ABC Holdings (Pvt) Ltd',
-    customer: 'ABC Holdings (Pvt) Ltd',
-    amount: 17700,
-    location: 'Main Office',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'VAT invoice for rental period',
-  },
-  {
-    id: 4,
-    transactionDate: '2024-01-25',
-    transactionTime: '11:45:00',
-    category: 'Invoice',
-    transactionType: 'Payment Received',
-    reference: 'RCP-2024-001',
-    description: 'Payment Received: ABC Holdings (Pvt) Ltd - LKR 17,700',
-    customer: 'ABC Holdings (Pvt) Ltd',
-    amount: 17700,
-    location: 'Main Office',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Bank transfer payment',
-  },
-  {
-    id: 5,
-    transactionDate: '2024-01-20',
-    transactionTime: '15:30:00',
-    category: 'Maintenance',
-    transactionType: 'Maintenance Out',
-    reference: 'MAINT-2024-001',
-    description: 'Maintenance Out: Brother XL2600i - 2 units',
-    brand: 'Brother',
-    model: 'XL2600i',
-    quantity: 2,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Sent for routine maintenance',
-  },
-  {
-    id: 6,
-    transactionDate: '2024-02-01',
-    transactionTime: '10:00:00',
-    category: 'Maintenance',
-    transactionType: 'Maintenance In',
-    reference: 'MAINT-2024-001',
-    description: 'Maintenance In: Brother XL2600i - 2 units',
-    brand: 'Brother',
-    model: 'XL2600i',
-    quantity: 2,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Returned from maintenance',
-  },
-  {
-    id: 7,
-    transactionDate: '2024-02-15',
-    transactionTime: '13:20:00',
-    category: 'Return',
-    transactionType: 'Return Processed',
-    reference: 'RET-2024-001',
-    description: 'Return Processed: Brother XL2600i - 1 unit',
-    brand: 'Brother',
-    model: 'XL2600i',
-    customer: 'ABC Holdings (Pvt) Ltd',
-    quantity: 1,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Early return from rental',
-  },
-  {
-    id: 8,
-    transactionDate: '2024-01-01',
-    transactionTime: '11:00:00',
-    category: 'Inventory',
-    transactionType: 'Stock In',
-    reference: 'PO-2024-002',
-    description: 'Stock In: Singer Heavy Duty 4423 - 15 units',
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    quantity: 15,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Initial stock from supplier',
-  },
-  {
-    id: 9,
-    transactionDate: '2024-01-10',
-    transactionTime: '16:00:00',
-    category: 'Rental',
-    transactionType: 'Rental Created',
-    reference: 'GP-2024-002',
-    description: 'Rental Created: XYZ Engineering - 6 machines',
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    customer: 'XYZ Engineering',
-    quantity: 6,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Monthly rental agreement',
-  },
-  {
-    id: 10,
-    transactionDate: '2024-01-25',
-    transactionTime: '10:30:00',
-    category: 'Maintenance',
-    transactionType: 'Maintenance Out',
-    reference: 'MAINT-2024-002',
-    description: 'Maintenance Out: Singer Heavy Duty 4423 - 1 unit',
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    quantity: 1,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Sent for repair',
-  },
-  {
-    id: 11,
-    transactionDate: '2024-01-01',
-    transactionTime: '12:00:00',
-    category: 'Inventory',
-    transactionType: 'Stock In',
-    reference: 'PO-2024-003',
-    description: 'Stock In: Janome HD3000 - 12 units',
-    brand: 'Janome',
-    model: 'HD3000',
-    quantity: 12,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Initial stock from supplier',
-  },
-  {
-    id: 12,
-    transactionDate: '2024-01-18',
-    transactionTime: '14:00:00',
-    category: 'Rental',
-    transactionType: 'Rental Created',
-    reference: 'GP-2024-003',
-    description: 'Rental Created: John Perera - 2 machines',
-    brand: 'Janome',
-    model: 'HD3000',
-    customer: 'John Perera',
-    quantity: 2,
-    location: 'Main Warehouse',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Monthly rental agreement',
-  },
-  {
-    id: 13,
-    transactionDate: '2024-01-20',
-    transactionTime: '09:30:00',
-    category: 'Invoice',
-    transactionType: 'Invoice Generated',
-    reference: 'INV-2024-002',
-    description: 'Invoice Generated: John Perera',
-    customer: 'John Perera',
-    amount: 17000,
-    location: 'Main Office',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Non-VAT invoice',
-  },
-  {
-    id: 14,
-    transactionDate: '2024-02-12',
-    transactionTime: '11:00:00',
-    category: 'Invoice',
-    transactionType: 'Payment Received',
-    reference: 'RCP-2024-002',
-    description: 'Payment Received: John Perera - LKR 17,000',
-    customer: 'John Perera',
-    amount: 17000,
-    location: 'Main Office',
-    performedBy: 'Admin User',
-    status: 'Success',
-    notes: 'Cash payment',
-  },
+interface PaginationMeta {
+  totalItems: number;
+  currentPage: number;
+  itemsPerPage: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+const API_BASE_URL = '/api/v1';
+
+const CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All categories' },
+  { value: 'INVENTORY', label: 'Inventory' },
+  { value: 'RENTAL', label: 'Rental' },
+  { value: 'RETURN', label: 'Return' },
+  { value: 'INVOICE', label: 'Invoice' },
+  { value: 'MAINTENANCE', label: 'Maintenance' },
+  { value: 'OTHER', label: 'Other' },
 ];
+
+const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All statuses' },
+  { value: 'SUCCESS', label: 'Success' },
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'FAILED', label: 'Failed' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+];
+
+const SORT_BY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'transactionDate', label: 'Date' },
+  { value: 'category', label: 'Category' },
+  { value: 'transactionType', label: 'Transaction Type' },
+  { value: 'reference', label: 'Reference' },
+  { value: 'status', label: 'Status' },
+  { value: 'performedBy', label: 'Performed By' },
+];
+
+const getAuthHeaders = (): HeadersInit => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+};
 
 const TransactionLogPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
 
-  const handleMenuClick = () => {
-    setIsMobileSidebarOpen((prev) => !prev);
+  // Server-side state
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [sortBy, setSortBy] = useState('transactionDate');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [category, setCategory] = useState('');
+  const [transactionType, setTransactionType] = useState('');
+  const [status, setStatus] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const [transactions, setTransactions] = useState<TransactionLog[]>([]);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    totalItems: 0,
+    currentPage: 1,
+    itemsPerPage: 10,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const buildParams = useCallback(
+    (forExport = false) => {
+      const params = new URLSearchParams();
+      if (!forExport) {
+        params.set('page', String(page));
+        params.set('limit', String(limit));
+      }
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
+      if (search) params.set('search', search);
+      if (category) params.set('category', category);
+      if (transactionType) params.set('transactionType', transactionType);
+      if (status) params.set('status', status);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      return params;
+    },
+    [page, limit, sortBy, sortOrder, search, category, transactionType, status, dateFrom, dateTo]
+  );
+
+  const fetchTransactionLogs = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const params = buildParams(false);
+      const res = await fetch(`${API_BASE_URL}/transaction-log?${params.toString()}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json?.message || 'Failed to fetch transaction logs');
+      }
+
+      const raw = json?.data?.items;
+      const list = Array.isArray(raw) ? raw : raw?.transactions ?? [];
+      setTransactions(list);
+
+      const meta = json?.data?.pagination;
+      if (meta) {
+        setPagination({
+          totalItems: meta.totalItems ?? 0,
+          currentPage: meta.currentPage ?? 1,
+          itemsPerPage: meta.itemsPerPage ?? limit,
+          totalPages: meta.totalPages ?? 0,
+          hasNextPage: meta.hasNextPage ?? false,
+          hasPreviousPage: meta.hasPreviousPage ?? false,
+        });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load transaction logs';
+      setError(message);
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [buildParams, limit]);
+
+  useEffect(() => {
+    fetchTransactionLogs();
+  }, [fetchTransactionLogs]);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const params = buildParams(true);
+      const res = await fetch(`${API_BASE_URL}/transaction-log/export?${params.toString()}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.message || 'Export failed');
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition');
+      const match = disposition?.match(/filename="?([^";\n]+)"?/);
+      const filename = match?.[1] || `transactions-${new Date().toISOString().split('T')[0]}.csv`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Export failed';
+      alert(message);
+    } finally {
+      setExporting(false);
+    }
+  }, [buildParams]);
+
+  const applySearch = () => {
+    setSearch(searchInput.trim());
+    setPage(1);
   };
 
-  const handleMobileSidebarClose = () => {
-    setIsMobileSidebarOpen(false);
+  const clearFilters = () => {
+    setSearchInput('');
+    setSearch('');
+    setCategory('');
+    setTransactionType('');
+    setStatus('');
+    setDateFrom('');
+    setDateTo('');
+    setPage(1);
   };
 
-  const handleLogout = () => {
-    console.log('Logout clicked');
-  };
+  const handleMenuClick = () => setIsMobileSidebarOpen((prev) => !prev);
+  const handleMobileSidebarClose = () => setIsMobileSidebarOpen(false);
+  const handleLogout = () => console.log('Logout clicked');
 
-  const handleExport = () => {
-    // Export functionality - can be implemented with xlsx library
-    console.log('Exporting transaction log...');
-    alert('Export functionality will be implemented with backend integration.');
-  };
+  const hasActiveFilters =
+    search || category || transactionType || status || dateFrom || dateTo;
 
-  // Table columns with date range filter enabled for transactionDate
   const columns: TableColumn[] = [
     {
       key: 'transactionDate',
       label: 'Date',
-      sortable: true,
-      filterable: true,
-      filterType: 'dateRange', // Enable date range filtering
+      sortable: false,
+      filterable: false,
       render: (value: string, row: TransactionLog) => (
         <div>
           <div className="text-gray-900 dark:text-white font-medium">
-            {new Date(value).toLocaleDateString('en-LK')}
+            {value ? new Date(value).toLocaleDateString('en-LK') : '—'}
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {row.transactionTime}
-          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{row.transactionTime || '—'}</div>
         </div>
       ),
     },
     {
       key: 'category',
       label: 'Category',
-      sortable: true,
-      filterable: true,
+      sortable: false,
+      filterable: false,
       render: (value: TransactionCategory) => {
         const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center';
-        const categoryColors: Record<TransactionCategory, string> = {
+        const categoryColors: Record<string, string> = {
           Inventory: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
           Rental: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
           Return: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
@@ -325,8 +263,8 @@ const TransactionLogPage: React.FC = () => {
           Other: 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200',
         };
         return (
-          <span className={`${base} ${categoryColors[value] || categoryColors.Other}`}>
-            {value}
+          <span className={`${base} ${categoryColors[value as string] || categoryColors.Other}`}>
+            {value || '—'}
           </span>
         );
       },
@@ -334,19 +272,19 @@ const TransactionLogPage: React.FC = () => {
     {
       key: 'transactionType',
       label: 'Transaction Type',
-      sortable: true,
-      filterable: true,
+      sortable: false,
+      filterable: false,
       render: (value: TransactionType) => (
-        <span className="text-gray-900 dark:text-white font-medium text-sm">{value}</span>
+        <span className="text-gray-900 dark:text-white font-medium text-sm">{value || '—'}</span>
       ),
     },
     {
       key: 'reference',
       label: 'Reference',
-      sortable: true,
-      filterable: true,
+      sortable: false,
+      filterable: false,
       render: (value: string) => (
-        <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{value}</span>
+        <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{value || '—'}</span>
       ),
     },
     {
@@ -355,85 +293,77 @@ const TransactionLogPage: React.FC = () => {
       sortable: false,
       filterable: false,
       render: (value: string) => (
-        <span className="text-gray-900 dark:text-white text-sm">{value}</span>
+        <span className="text-gray-900 dark:text-white text-sm">{value || '—'}</span>
       ),
     },
     {
       key: 'brand',
       label: 'Brand/Model',
-      sortable: true,
-      filterable: true,
-      render: (value: string | undefined, row: TransactionLog) => (
+      sortable: false,
+      filterable: false,
+      render: (_: unknown, row: TransactionLog) => (
         <div>
-          {row.brand && (
-            <div className="text-gray-900 dark:text-white font-medium">{row.brand}</div>
-          )}
-          {row.model && (
-            <div className="text-xs text-gray-500 dark:text-gray-400">{row.model}</div>
-          )}
-          {!row.brand && !row.model && (
-            <span className="text-gray-400 dark:text-gray-500">N/A</span>
-          )}
+          {row.brand && <div className="text-gray-900 dark:text-white font-medium">{row.brand}</div>}
+          {row.model && <div className="text-xs text-gray-500 dark:text-gray-400">{row.model}</div>}
+          {!row.brand && !row.model && <span className="text-gray-400 dark:text-gray-500">—</span>}
         </div>
       ),
     },
     {
       key: 'customer',
       label: 'Customer',
-      sortable: true,
-      filterable: true,
+      sortable: false,
+      filterable: false,
       render: (value: string | undefined) => (
-        <span className="text-gray-700 dark:text-gray-300 text-sm">
-          {value || 'N/A'}
-        </span>
+        <span className="text-gray-700 dark:text-gray-300 text-sm">{value || '—'}</span>
       ),
     },
     {
       key: 'quantity',
       label: 'Quantity',
-      sortable: true,
+      sortable: false,
       filterable: false,
       render: (value: number | undefined) => (
         <span className="text-gray-900 dark:text-white font-medium">
-          {value !== undefined ? value : 'N/A'}
+          {value !== undefined && value !== null ? value : '—'}
         </span>
       ),
     },
     {
       key: 'amount',
       label: 'Amount (LKR)',
-      sortable: true,
+      sortable: false,
       filterable: false,
       render: (value: number | undefined) => (
         <span className="text-gray-900 dark:text-white font-semibold">
-          {value !== undefined ? value.toLocaleString('en-LK') : 'N/A'}
+          {value !== undefined && value !== null ? Number(value).toLocaleString('en-LK') : '—'}
         </span>
       ),
     },
     {
       key: 'location',
       label: 'Location',
-      sortable: true,
-      filterable: true,
+      sortable: false,
+      filterable: false,
       render: (value: string) => (
-        <span className="text-gray-600 dark:text-gray-400 text-sm">{value}</span>
+        <span className="text-gray-600 dark:text-gray-400 text-sm">{value || '—'}</span>
       ),
     },
     {
       key: 'performedBy',
       label: 'Performed By',
-      sortable: true,
-      filterable: true,
+      sortable: false,
+      filterable: false,
       render: (value: string) => (
-        <span className="text-gray-700 dark:text-gray-300 text-sm">{value}</span>
+        <span className="text-gray-700 dark:text-gray-300 text-sm">{value || '—'}</span>
       ),
     },
     {
       key: 'status',
       label: 'Status',
-      sortable: true,
-      filterable: true,
-      render: (value: string) => {
+      sortable: false,
+      filterable: false,
+      render: (value: TransactionStatus) => {
         const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center';
         const statusColors: Record<string, string> = {
           Success: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
@@ -442,8 +372,8 @@ const TransactionLogPage: React.FC = () => {
           Cancelled: 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200',
         };
         return (
-          <span className={`${base} ${statusColors[value] || statusColors.Pending}`}>
-            {value}
+          <span className={`${base} ${statusColors[value as string] || statusColors.Pending}`}>
+            {value || '—'}
           </span>
         );
       },
@@ -452,10 +382,7 @@ const TransactionLogPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-      {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
-
-      {/* Left sidebar */}
       <Sidebar
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
@@ -463,40 +390,264 @@ const TransactionLogPage: React.FC = () => {
         onExpandedChange={setIsSidebarExpanded}
       />
 
-      {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-        }`}>
+      <main
+        className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+          isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+        }`}
+      >
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Page header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Transaction Log
-              </h2>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Transaction Log</h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Comprehensive log of all system transactions including inventory, rentals, returns, invoices, and maintenance.
+                Comprehensive log of all system transactions including inventory, rentals, returns,
+                invoices, and maintenance.
               </p>
             </div>
-            <Tooltip content="Export Transaction Log">
-              <button
-                onClick={handleExport}
-                className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2"
-              >
-                <Download className="w-4 h-4" />
-                <span>Export</span>
-              </button>
-            </Tooltip>
+            <div className="flex items-center gap-2">
+              <Tooltip content="Export current filters to CSV">
+                <button
+                  onClick={handleExport}
+                  disabled={exporting || loading}
+                  className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {exporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  <span>{exporting ? 'Exporting…' : 'Export'}</span>
+                </button>
+              </Tooltip>
+            </div>
           </div>
 
-          {/* Transaction Log Table */}
-          <Table
-            data={mockTransactionLogs}
-            columns={columns}
-            itemsPerPage={10}
-            searchable
-            filterable
-            emptyMessage="No transactions found matching the filters."
-          />
+          {/* Filters */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowFilters((prev) => !prev)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+            >
+              <span className="flex items-center gap-2 font-medium">
+                <Filter className="w-4 h-4" />
+                Filters & search
+              </span>
+              <span
+                className={`text-sm text-gray-500 dark:text-gray-400 ${
+                  hasActiveFilters ? 'text-blue-600 dark:text-indigo-400 font-medium' : ''
+                }`}
+              >
+                {hasActiveFilters ? 'Active' : showFilters ? 'Hide' : 'Show'}
+              </span>
+            </button>
+            {showFilters && (
+              <div className="px-4 pb-4 pt-0 border-t border-gray-200 dark:border-slate-700 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Search
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && applySearch()}
+                        placeholder="Reference, description, customer…"
+                        className="flex-1 min-w-0 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={applySearch}
+                        className="px-3 py-2 bg-gray-100 dark:bg-slate-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-500 text-sm font-medium"
+                      >
+                        Search
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Category
+                    </label>
+                    <select
+                      value={category}
+                      onChange={(e) => {
+                        setCategory(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                    >
+                      {CATEGORY_OPTIONS.map((opt) => (
+                        <option key={opt.value || 'all'} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Transaction type
+                    </label>
+                    <input
+                      type="text"
+                      value={transactionType}
+                      onChange={(e) => {
+                        setTransactionType(e.target.value);
+                        setPage(1);
+                      }}
+                      placeholder="e.g. Stock In"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Status
+                    </label>
+                    <select
+                      value={status}
+                      onChange={(e) => {
+                        setStatus(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                    >
+                      {STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.value || 'all'} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Date from
+                    </label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => {
+                        setDateFrom(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Date to
+                    </label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => {
+                        setDateTo(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Sort by
+                    </label>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => {
+                        setSortBy(e.target.value);
+                        setPage(1);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                    >
+                      {SORT_BY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Order
+                    </label>
+                    <select
+                      value={sortOrder}
+                      onChange={(e) => {
+                        setSortOrder(e.target.value as 'asc' | 'desc');
+                        setPage(1);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                    >
+                      <option value="desc">Newest first</option>
+                      <option value="asc">Oldest first</option>
+                    </select>
+                  </div>
+                </div>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                    Clear all filters
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3 text-red-700 dark:text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="bg-white dark:bg-slate-800 rounded-lg overflow-hidden flex flex-col">
+            <Table
+              data={transactions}
+              columns={columns}
+              itemsPerPage={limit}
+              searchable={false}
+              filterable={false}
+              loading={loading}
+              emptyMessage="No transactions found. Adjust filters or date range."
+            />
+
+            {!loading && pagination.totalPages > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Showing {(pagination.currentPage - 1) * pagination.itemsPerPage + 1}–
+                  {Math.min(
+                    pagination.currentPage * pagination.itemsPerPage,
+                    pagination.totalItems
+                  )}{' '}
+                  of {pagination.totalItems}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={!pagination.hasPreviousPage}
+                    className="p-2 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 px-2">
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={!pagination.hasNextPage}
+                    className="p-2 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>

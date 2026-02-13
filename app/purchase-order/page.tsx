@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
@@ -9,13 +9,15 @@ import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer } from 'lucide
 import Tooltip from '@/src/components/common/tooltip';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 
+const API_BASE_URL = '/api/v1';
+
 type PurchaseRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Completed' | 'Cancelled' | 'Partially Fulfilled';
 type CustomerType = 'Business' | 'Customer';
 
 interface PurchaseRequest {
-    id: number;
+    id: string | number;
     requestNumber: string;
-    customerId: number;
+    customerId: string | number;
     customerName: string;
     customerType: CustomerType;
     requestDate: string;
@@ -23,7 +25,7 @@ interface PurchaseRequest {
     status: PurchaseRequestStatus;
     requestedMachines: number;
     machines: MachineRequestItem[];
-    rentalAgreementIds?: number[];
+    rentalAgreementIds?: (string | number)[];
 }
 
 interface MachineRequestItem {
@@ -39,47 +41,6 @@ interface MachineRequestItem {
     pendingQuantity?: number;
     expectedAvailabilityDate?: string;
 }
-
-const mockCustomers = [
-    { id: 1, name: 'ABC Holdings (Pvt) Ltd', type: 'Business' as CustomerType, outstandingBalance: 120000.5, status: 'Active' },
-    { id: 2, name: 'John Perera', type: 'Customer' as CustomerType, outstandingBalance: 3500, status: 'Active' },
-    { id: 3, name: 'XYZ Engineering', type: 'Business' as CustomerType, outstandingBalance: 0, status: 'Inactive' },
-    { id: 4, name: 'Kamal Silva', type: 'Customer' as CustomerType, outstandingBalance: 78000, status: 'Blocked' },
-    { id: 5, name: 'Mega Constructions', type: 'Business' as CustomerType, outstandingBalance: 245000.75, status: 'Active' },
-];
-
-const mockPurchaseRequests: PurchaseRequest[] = [
-    {
-        id: 1, requestNumber: 'PO24010001', customerId: 1, customerName: 'ABC Holdings (Pvt) Ltd', customerType: 'Business',
-        requestDate: '2024-04-15', totalAmount: 100000, status: 'Approved', requestedMachines: 2,
-        machines: [{ id: '1', brand: 'Brother', model: 'XL2600i', type: 'Domestic', quantity: 2, availableStock: 20, unitPrice: 35000, totalPrice: 70000, rentedQuantity: 2, pendingQuantity: 0 }],
-        rentalAgreementIds: [1],
-    },
-    {
-        id: 2, requestNumber: 'PO24010002', customerId: 2, customerName: 'John Perera', customerType: 'Customer',
-        requestDate: '2024-04-16', totalAmount: 35000, status: 'Approved', requestedMachines: 1,
-        machines: [{ id: '1', brand: 'Singer', model: 'Heavy Duty 4423', type: 'Industrial', quantity: 1, availableStock: 8, unitPrice: 50000, totalPrice: 50000, rentedQuantity: 0, pendingQuantity: 1 }],
-    },
-    {
-        id: 3, requestNumber: 'PO24010003', customerId: 5, customerName: 'Mega Constructions', customerType: 'Business',
-        requestDate: '2024-04-17', totalAmount: 525000, status: 'Partially Fulfilled', requestedMachines: 15,
-        machines: [
-            { id: '1', brand: 'Brother', model: 'XL2600i', type: 'Domestic', quantity: 10, availableStock: 20, unitPrice: 35000, totalPrice: 350000, rentedQuantity: 10, pendingQuantity: 0 },
-            { id: '2', brand: 'Singer', model: 'Heavy Duty 4423', type: 'Industrial', quantity: 5, availableStock: 8, unitPrice: 50000, totalPrice: 250000, rentedQuantity: 0, pendingQuantity: 5, expectedAvailabilityDate: '2024-05-15' },
-        ],
-        rentalAgreementIds: [2],
-    },
-    {
-        id: 4, requestNumber: 'PO24010004', customerId: 3, customerName: 'XYZ Engineering', customerType: 'Business',
-        requestDate: '2024-04-17', totalAmount: 725000, status: 'Pending', requestedMachines: 20,
-        machines: [
-            { id: '1', brand: 'Brother', model: 'XL2600i', type: 'Domestic', quantity: 10, availableStock: 20, unitPrice: 35000, totalPrice: 350000, rentedQuantity: 0, pendingQuantity: 10 },
-            { id: '2', brand: 'Singer', model: 'Heavy Duty 4423', type: 'Industrial', quantity: 5, availableStock: 8, unitPrice: 50000, totalPrice: 250000, rentedQuantity: 0, pendingQuantity: 5 },
-            { id: '3', brand: 'Janome', model: 'HD3000', type: 'Industrial', quantity: 5, availableStock: 0, unitPrice: 50000, totalPrice: 250000, rentedQuantity: 0, pendingQuantity: 5, expectedAvailabilityDate: '2024-06-01' },
-        ],
-        rentalAgreementIds: [2],
-    },
-];
 
 const getEarliestExpectedAvailabilityDate = (request: PurchaseRequest): string | null => {
     if (!request.machines || request.machines.length === 0) return null;
@@ -165,6 +126,41 @@ const PurchaseOrderPage: React.FC = () => {
     const [rentalStartDate, setRentalStartDate] = useState('');
     const [rentalEndDate, setRentalEndDate] = useState('');
     const [rentalFormErrors, setRentalFormErrors] = useState<Record<string, string>>({});
+    const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
+    const fetchPurchaseOrders = useCallback(async () => {
+        setFetchError(null);
+        setLoading(true);
+        try {
+            const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
+            const params = new URLSearchParams({ page: '1', limit: '500', sortBy: 'requestDate', sortOrder: 'desc' });
+            const response = await fetch(`${API_BASE_URL}/purchase-orders?${params.toString()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                credentials: 'include',
+            });
+            const json = await response.json();
+            if (!response.ok) {
+                throw new Error(json?.message || 'Failed to fetch purchase orders');
+            }
+            const list = json?.data?.items ?? [];
+            setPurchaseRequests(Array.isArray(list) ? list : []);
+        } catch (err: any) {
+            setFetchError(err?.message || 'Failed to load purchase orders');
+            setPurchaseRequests([]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchPurchaseOrders();
+    }, [fetchPurchaseOrders]);
 
     const hasAvailableMachinesForRental = (request: PurchaseRequest): boolean => {
         if (!request.machines || request.machines.length === 0) return false;
@@ -202,6 +198,10 @@ const PurchaseOrderPage: React.FC = () => {
     const handlePrintPurchaseOrder = () => window.print();
 
     const handleCreateRentalAgreement = (request: PurchaseRequest) => {
+        if (!hasAvailableMachinesForRental(request)) {
+            alert('No machines available for rental from this purchase order. You can only create a rental agreement when at least one machine line has available stock.');
+            return;
+        }
         setSelectedRequest(request);
         setSelectedMachinesForRental({});
         setModifiedUnitPrices({});
@@ -213,7 +213,7 @@ const PurchaseOrderPage: React.FC = () => {
             return { ...machine, canRent: available };
         }).filter(m => m.canRent > 0) || [];
         const initialSelection: Record<string, number> = {};
-        availableMachines.forEach((machine) => { initialSelection[machine.id] = machine.canRent; });
+        availableMachines.forEach((machine) => { initialSelection[String(machine.id)] = machine.canRent; });
         setSelectedMachinesForRental(initialSelection);
         setIsRentalModalOpen(true);
     };
@@ -249,22 +249,38 @@ const PurchaseOrderPage: React.FC = () => {
         try {
             const machinesToRent = availableMachinesForRental
                 .filter(m => selectedMachinesForRental[m.id] > 0)
-                .map(m => ({ ...m, quantity: selectedMachinesForRental[m.id], unitPrice: modifiedUnitPrices[m.id] ?? m.unitPrice }));
+                .map(m => ({
+                    machineId: m.id,
+                    quantity: selectedMachinesForRental[m.id],
+                    unitPrice: modifiedUnitPrices[m.id] ?? m.unitPrice,
+                }));
             const payload = {
                 purchaseRequestId: selectedRequest.id,
-                purchaseRequestNumber: selectedRequest.requestNumber,
-                customerId: selectedRequest.customerId,
-                customerName: selectedRequest.customerName,
-                startDate: rentalStartDate,
-                endDate: rentalEndDate,
+                rentalStartDate: rentalStartDate,
+                rentalEndDate: rentalEndDate,
                 machines: machinesToRent,
             };
-            console.log('Create rental agreement from purchase request payload:', payload);
-            alert(`Rental Agreement created successfully for ${machinesToRent.length} machine type(s) (frontend only).`);
+            const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
+            const response = await fetch(`${API_BASE_URL}/rentals/from-purchase-request`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                credentials: 'include',
+                body: JSON.stringify(payload),
+            });
+            const json = await response.json();
+            if (!response.ok) {
+                const msg = json?.message || (json?.data ? Object.values(json.data).flat().join(' ') : '') || 'Failed to create rental agreement';
+                throw new Error(msg);
+            }
+            alert(`Rental agreement created successfully. Agreement: ${json?.data?.agreementNo ?? 'N/A'}`);
             handleCloseRentalModal();
-        } catch (error) {
+            fetchPurchaseOrders();
+        } catch (error: any) {
             console.error('Error creating rental agreement:', error);
-            alert('Failed to create rental agreement. Please try again.');
+            alert(error?.message || 'Failed to create rental agreement. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -272,7 +288,7 @@ const PurchaseOrderPage: React.FC = () => {
 
     const actions: ActionButton[] = [
         { label: '', icon: <Eye className="w-4 h-4" />, variant: 'secondary', onClick: handleViewRequest, tooltip: 'View Purchase Request', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600' },
-        { label: '', icon: <FileText className="w-4 h-4" />, variant: 'primary', onClick: (row: PurchaseRequest) => handleCreateRentalAgreement(row), tooltip: 'Create Rental Agreement', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500', shouldShow: (row: PurchaseRequest) => (row.status === 'Pending' || row.status === 'Approved' || row.status === 'Partially Fulfilled') && hasAvailableMachinesForRental(row) },
+        { label: '', icon: <FileText className="w-4 h-4" />, variant: 'primary', onClick: (row: PurchaseRequest) => handleCreateRentalAgreement(row), tooltip: 'Create Rental Agreement (only when machines are available)', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500', shouldShow: (row: PurchaseRequest) => hasAvailableMachinesForRental(row) },
     ];
 
     const renderStatusBadge = (status: PurchaseRequestStatus) => {
@@ -444,7 +460,12 @@ const PurchaseOrderPage: React.FC = () => {
                                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Manage purchase requests from customers for sewing machines and related tools. Create rental agreements for available machines.</p>
                             </div>
                         </div>
-                        <Table data={mockPurchaseRequests} columns={columns} actions={actions} itemsPerPage={10} searchable filterable onCreateClick={handleCreatePurchaseRequest} createButtonLabel="Create Purchase Order" emptyMessage="No purchase requests found." />
+                        {fetchError && (
+                            <div className="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                                {fetchError}
+                            </div>
+                        )}
+                        <Table data={purchaseRequests} columns={columns} actions={actions} itemsPerPage={10} searchable filterable loading={loading} onCreateClick={handleCreatePurchaseRequest} createButtonLabel="Create Purchase Order" emptyMessage="No purchase requests found." />
                     </div>
                 </main>
 

@@ -14,10 +14,13 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const { sortBy, sortOrder, search } = parseQueryParams(searchParams);
+    const parsed = parseQueryParams(searchParams);
+    const sortBy = searchParams.get('sortBy') || 'transactionDate';
+    const sortOrder = parsed.sortOrder;
+    const search = parsed.search;
     
     const categoryFilter = searchParams.get('category');
     const transactionTypeFilter = searchParams.get('transactionType');
@@ -53,7 +56,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (requ
       if (dateTo) where.transactionDate.lte = new Date(dateTo);
     }
     
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const transactions = await prisma.transactionLog.findMany({
       where,

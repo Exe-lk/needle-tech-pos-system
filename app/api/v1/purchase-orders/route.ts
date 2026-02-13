@@ -3,7 +3,7 @@ import { successResponse, errorResponse, paginatedResponse, validationErrorRespo
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Decimal } from '@prisma/client/runtime/client';
 
 /**
  * @swagger
@@ -15,7 +15,7 @@ import { Decimal } from '@prisma/client/runtime/library';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -37,13 +37,13 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     const totalItems = await prisma.purchaseOrder.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrderDir = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const purchaseOrders = await prisma.purchaseOrder.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { [sortBy]: sortOrder_ },
+      orderBy: { [sortBy]: sortOrderDir },
       include: {
         customer: true,
         rentals: {
@@ -91,10 +91,10 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      { purchaseRequests: transformed },
+      transformed,
       pagination,
       'Purchase orders retrieved successfully',
-      { sortBy, sortOrder: sortOrder_ },
+      { sortBy, sortOrder: sortOrderDir },
       search || undefined,
       {
         ...(statusFilter && { status: statusFilter }),
@@ -116,7 +116,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const {

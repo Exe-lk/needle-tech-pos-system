@@ -14,10 +14,15 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
+    const parsed = parseQueryParams(searchParams);
+    const page = parsed.page;
+    const limit = parsed.limit;
+    const sortBy = searchParams.get('sortBy') || 'transactionDate';
+    const sortOrder = parsed.sortOrder;
+    const search = parsed.search;
     
     const categoryFilter = searchParams.get('category');
     const transactionTypeFilter = searchParams.get('transactionType');
@@ -55,7 +60,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     const totalItems = await prisma.transactionLog.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const transactions = await prisma.transactionLog.findMany({
       where,
@@ -91,7 +96,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      { transactions: transformed },
+      transformed,
       pagination,
       'Transaction logs retrieved successfully',
       { sortBy, sortOrder: sortOrder_ },

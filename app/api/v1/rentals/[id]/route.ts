@@ -54,14 +54,33 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
       return notFoundResponse('Rental not found');
     }
     
+    const statusMap: Record<string, 'ACTIVE' | 'COMPLETED' | 'CANCELLED'> = {
+      Active: 'ACTIVE',
+      Completed: 'COMPLETED',
+      Cancelled: 'CANCELLED',
+    };
+    const mappedStatus = body.status && statusMap[body.status];
+    
     const updatedRental = await prisma.rental.update({
       where: { id },
       data: {
-        ...(body.status && { status: body.status }),
-        ...(body.endDate && { endDate: new Date(body.endDate) }),
-        ...(body.notes && { notes: body.notes }),
+        ...(mappedStatus && { status: mappedStatus }),
+        ...(body.endDate != null && body.endDate !== '' && { expectedEndDate: new Date(body.endDate) }),
       },
-      include: { customer: true, machines: true }
+      include: {
+        customer: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              },
+            },
+          },
+        },
+      },
     });
     
     return successResponse(updatedRental, 'Rental updated successfully');

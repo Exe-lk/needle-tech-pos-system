@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse, validationErrorRespo
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import { Decimal } from '@prisma/client/runtime/client';
 
 /**
  * @swagger
@@ -87,7 +88,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest, auth: { id: string }) => {
   try {
     const body = await request.json();
     const { customerId, startDate, endDate, machineIds = [] } = body;
@@ -108,12 +109,29 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
       });
     }
     
+    const count = await prisma.rental.count();
+    const agreementNumber = `RA${new Date().getFullYear().toString().slice(-2)}${String(count + 1).padStart(6, '0')}`;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const subtotal = new Decimal(0);
+    const vatAmount = new Decimal(0);
+    const total = new Decimal(0);
+    const balance = new Decimal(0);
+    
     const newRental = await prisma.rental.create({
       data: {
+        agreementNumber,
         customerId,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: start,
+        expectedEndDate: end,
         status: 'ACTIVE',
+        subtotal,
+        vatAmount,
+        total,
+        balance,
+        paidAmount: new Decimal(0),
+        depositTotal: new Decimal(0),
+        createdByUserId: auth.id,
       },
       include: { customer: true, machines: true }
     });

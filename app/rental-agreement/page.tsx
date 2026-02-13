@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
@@ -23,7 +23,7 @@ interface ExpectedMachineCategory {
 }
 
 interface RentalAgreement {
-  id: number;
+  id: string;
   agreementNo: string;
   customerNo: string;
   customerName: string;
@@ -33,7 +33,7 @@ interface RentalAgreement {
   monthlyRent: number;
   outstanding: number;
   status: RentalStatus;
-  purchaseRequestId?: number;
+  purchaseRequestId?: string;
   purchaseRequestNumber?: string;
   expectedMachines?: number;
   addedMachines?: number;
@@ -54,7 +54,7 @@ interface MachineDetail {
 
 // Rental Agreement Detail Data Types
 interface RentalAgreementInfo {
-  id: number;
+  id: string;
   agreementNo: string;
   customerNo: string;
   customerName: string;
@@ -74,7 +74,7 @@ interface RentalAgreementInfo {
   customerFullName?: string;
   customerSignatureDate?: string;
   customerSignature?: string;
-  purchaseRequestId?: number;
+  purchaseRequestId?: string;
   purchaseRequestNumber?: string;
   expectedMachines?: number;
   addedMachines?: number;
@@ -104,6 +104,139 @@ interface GatePass {
   items: GatePassItem[];
   issuedBy?: string;
   receivedBy?: string;
+}
+
+const API_BASE = '/api/v1';
+
+// Backend API rental shape (from GET /rentals and GET /rentals/[id])
+interface ApiRentalMachine {
+  machineId: string;
+  dailyRate: number | string;
+  quantity: number;
+  machine: {
+    serialNumber: string;
+    boxNumber: string | null;
+    brand: { name: string } | null;
+    model: { name: string } | null;
+    type: { name: string } | null;
+  };
+}
+interface ApiRental {
+  id: string;
+  agreementNumber: string;
+  customerId: string;
+  purchaseOrderId: string | null;
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  startDate: string;
+  expectedEndDate: string;
+  actualEndDate: string | null;
+  subtotal: number | string;
+  vatAmount: number | string;
+  total: number | string;
+  balance: number | string;
+  paidAmount: number | string;
+  depositTotal: number | string;
+  customer: {
+    id: string;
+    code: string;
+    name: string;
+    billingAddressLine1?: string | null;
+    billingAddressLine2?: string | null;
+    billingCity?: string | null;
+    billingRegion?: string | null;
+    billingPostalCode?: string | null;
+    billingCountry?: string | null;
+    phones?: string[];
+    emails?: string[];
+  };
+  purchaseOrder?: { id: string; requestNumber: string } | null;
+  machines: ApiRentalMachine[];
+}
+
+function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
+  const start = new Date(r.startDate);
+  const end = new Date(r.expectedEndDate);
+  const months = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+  const total = Number(r.total);
+  const balance = Number(r.balance);
+  const statusMap: Record<string, RentalStatus> = {
+    ACTIVE: 'Active',
+    COMPLETED: 'Completed',
+    CANCELLED: 'Cancelled',
+  };
+  const firstSerial = r.machines?.[0]?.machine?.serialNumber ?? '';
+  return {
+    id: r.id,
+    agreementNo: r.agreementNumber,
+    customerNo: r.customerId,
+    customerName: r.customer.name,
+    serialNo: firstSerial,
+    startDate: r.startDate,
+    endDate: r.expectedEndDate,
+    monthlyRent: months > 0 ? total / months : total,
+    outstanding: balance,
+    status: statusMap[r.status] ?? 'Active',
+    purchaseRequestId: r.purchaseOrder?.id,
+    purchaseRequestNumber: r.purchaseOrder?.requestNumber,
+    expectedMachines: r.machines?.length ?? 0,
+    addedMachines: r.machines?.length ?? 0,
+  };
+}
+
+function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
+  const start = new Date(r.startDate);
+  const end = new Date(r.expectedEndDate);
+  const months = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+  const total = Number(r.total);
+  const addressParts = [
+    r.customer.billingAddressLine1,
+    r.customer.billingAddressLine2,
+    r.customer.billingCity,
+    r.customer.billingRegion,
+    r.customer.billingPostalCode,
+    r.customer.billingCountry,
+  ].filter(Boolean) as string[];
+  const machines: MachineDetail[] = (r.machines ?? []).map((rm) => {
+    const brand = rm.machine.brand?.name ?? '';
+    const model = rm.machine.model?.name ?? '';
+    const type = rm.machine.type?.name ?? '';
+    const desc = `${brand} ${model}${type ? ` - ${type}` : ''}`.trim() || 'Machine';
+    const dailyRate = Number(rm.dailyRate);
+    return {
+      serialNo: rm.machine.serialNumber,
+      machineBrand: brand,
+      machineModel: model,
+      machineType: type,
+      machineDescription: desc.toUpperCase(),
+      motorBoxNo: rm.machine.boxNumber ?? undefined,
+      monthlyRent: dailyRate * 30,
+    };
+  });
+  const statusMap: Record<string, RentalStatus> = {
+    ACTIVE: 'Active',
+    COMPLETED: 'Completed',
+    CANCELLED: 'Cancelled',
+  };
+  return {
+    id: r.id,
+    agreementNo: r.agreementNumber,
+    customerNo: r.customerId,
+    customerName: r.customer.name,
+    customerAddress: addressParts.join(', '),
+    machines,
+    startDate: r.startDate,
+    endDate: r.expectedEndDate,
+    monthlyRent: months > 0 ? total / months : total,
+    outstanding: Number(r.balance),
+    status: statusMap[r.status] ?? 'Active',
+    totalAmount: total,
+    paidAmount: Number(r.paidAmount),
+    deposit: Number(r.depositTotal),
+    purchaseRequestId: r.purchaseOrder?.id,
+    purchaseRequestNumber: r.purchaseOrder?.requestNumber,
+    expectedMachines: r.machines?.length,
+    addedMachines: r.machines?.length,
+  };
 }
 
 // Machine interface for create form (matches print: one row per machine with serial/box/monthly rent)
@@ -396,10 +529,10 @@ const standardPrices: Record<string, number> = {
   Other: 35000,
 };
 
-// Mock rental agreement data
+// Mock rental agreement data (used only by getRentalAgreementInfoFromList fallback; API is primary)
 const mockRentalAgreements: RentalAgreement[] = [
   {
-    id: 1,
+    id: '1',
     agreementNo: 'RA24010001',
     customerNo: 'CUST-001',
     customerName: 'ABC Holdings (Pvt) Ltd',
@@ -409,13 +542,13 @@ const mockRentalAgreements: RentalAgreement[] = [
     monthlyRent: 50000,
     outstanding: 120000,
     status: 'Active',
-    purchaseRequestId: 1,
+    purchaseRequestId: '1',
     purchaseRequestNumber: 'PO24010001',
     expectedMachines: 2,
     addedMachines: 2,
   },
   {
-    id: 2,
+    id: '2',
     agreementNo: 'RA24010002',
     customerNo: 'CUST-002',
     customerName: 'John Perera',
@@ -429,7 +562,7 @@ const mockRentalAgreements: RentalAgreement[] = [
     addedMachines: 0,
   },
   {
-    id: 3,
+    id: '3',
     agreementNo: 'RA24010001',
     customerNo: 'CUST-003',
     customerName: 'XYZ Engineering',
@@ -441,7 +574,7 @@ const mockRentalAgreements: RentalAgreement[] = [
     status: 'Completed',
   },
   {
-    id: 4,
+    id: '4',
     agreementNo: 'RA24010004',
     customerNo: 'CUST-004',
     customerName: 'Kamal Silva',
@@ -453,7 +586,7 @@ const mockRentalAgreements: RentalAgreement[] = [
     status: 'Active',
   },
   {
-    id: 5,
+    id: '5',
     agreementNo: 'RA24010005',
     customerNo: 'CUST-005',
     customerName: 'Mega Constructions',
@@ -463,7 +596,7 @@ const mockRentalAgreements: RentalAgreement[] = [
     monthlyRent: 60000,
     outstanding: 180000,
     status: 'Pending',
-    purchaseRequestId: 3,
+    purchaseRequestId: '3',
     purchaseRequestNumber: 'PO24010003',
     expectedMachines: 15,
     addedMachines: 0,
@@ -473,7 +606,7 @@ const mockRentalAgreements: RentalAgreement[] = [
     ],
   },
   {
-    id: 6,
+    id: '6',
     agreementNo: 'RA24010006',
     customerNo: 'CUST-006',
     customerName: 'VIHANGA SHADE STRUCTURES',
@@ -500,13 +633,13 @@ function getExpectedCategories(agreement: RentalAgreement | null): ExpectedMachi
   return [{ id: 'default', brand: '', model: 'Machine', type: '', quantity: total }];
 }
 
-// Get rental agreement detail data; uses provided list or mock list for lookup.
-const getRentalAgreementInfo = (agreementId: number, agreementsList?: RentalAgreement[]): RentalAgreementInfo => {
-  const list = agreementsList ?? mockRentalAgreements;
-  const agreement = list.find((r) => r.id === agreementId);
-  const customer = mockCustomers.find((c) => c.id === agreement?.customerNo);
+// Get rental agreement detail from list (fallback when API detail not loaded); uses provided list for lookup.
+const getRentalAgreementInfoFromList = (agreementId: string, agreementsList: RentalAgreement[]): RentalAgreementInfo | null => {
+  const agreement = agreementsList.find((r) => r.id === agreementId);
+  if (!agreement) return null;
+  const customer = mockCustomers.find((c) => c.id === agreement.customerNo);
 
-  if (agreementId === 6) {
+  if (agreementId === '6') {
     const machines: MachineDetail[] = [
       {
         serialNo: '2LIDH01733',
@@ -547,7 +680,7 @@ const getRentalAgreementInfo = (agreementId: number, agreementsList?: RentalAgre
     ];
 
     return {
-      id: agreement?.id || 0,
+      id: agreement?.id || '',
       agreementNo: agreement?.agreementNo || '',
       customerNo: agreement?.customerNo || '',
       customerName: agreement?.customerName || '',
@@ -614,7 +747,7 @@ const getRentalAgreementInfo = (agreementId: number, agreementsList?: RentalAgre
   ];
 
   return {
-    id: agreement?.id || 0,
+    id: agreement?.id || '',
     agreementNo: agreement?.agreementNo || '',
     customerNo: agreement?.customerNo || '',
     customerName: agreement?.customerName || '',
@@ -816,7 +949,12 @@ const RentalAgreementPage: React.FC = () => {
   // Machine management state for update form
   const [machinesForAgreement, setMachinesForAgreement] = useState<MachineForAgreement[]>([]);
   const [showScanCategoriesView, setShowScanCategoriesView] = useState(false);
-  const [agreements, setAgreements] = useState<RentalAgreement[]>(mockRentalAgreements);
+  const [agreements, setAgreements] = useState<RentalAgreement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [rentalDetail, setRentalDetail] = useState<RentalAgreementInfo | null>(null);
+  const [rentalDetailLoading, setRentalDetailLoading] = useState(false);
+  const [customers, setCustomers] = useState<{ id: string; name: string; address?: string }[]>([]);
   /** When set, inline QR scanner is shown for this category (gatepass-style, no navigation). */
   const [activeScanCategoryIndex, setActiveScanCategoryIndex] = useState<number | null>(null);
   const [scannerKey, setScannerKey] = useState(1);
@@ -824,6 +962,100 @@ const RentalAgreementPage: React.FC = () => {
   useEffect(() => {
     activeScanCategoryIndexRef.current = activeScanCategoryIndex;
   }, [activeScanCategoryIndex]);
+
+  const getAuthHeaders = useCallback((): HeadersInit => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  }, []);
+
+  const fetchRentals = useCallback(async () => {
+    setFetchError(null);
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: '1', limit: '500', sortBy: 'createdAt', sortOrder: 'desc' });
+      const res = await fetch(`${API_BASE}/rentals?${params}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || 'Failed to fetch rentals');
+      const items = json?.data?.items ?? json?.data ?? [];
+      const list = Array.isArray(items) ? items.map((r: ApiRental) => mapApiRentalToAgreement(r)) : [];
+      setAgreements(list);
+    } catch (err: any) {
+      setFetchError(err?.message || 'Failed to load rental agreements');
+      setAgreements([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [getAuthHeaders]);
+
+  const fetchRentalById = useCallback(async (id: string): Promise<RentalAgreementInfo | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/rentals/${id}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || 'Failed to fetch rental');
+      const data = json?.data;
+      if (!data) return null;
+      return mapApiRentalToAgreementInfo(data as ApiRental);
+    } catch {
+      return null;
+    }
+  }, [getAuthHeaders]);
+
+  const fetchCustomers = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ page: '1', limit: '1000' });
+      const res = await fetch(`${API_BASE}/customers?${params}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+      const items = json?.data?.items ?? json?.data ?? [];
+      const list = Array.isArray(items)
+        ? items.map((c: { id: string; name: string; billingAddressLine1?: string; billingCity?: string; billingRegion?: string; billingPostalCode?: string; billingCountry?: string }) => ({
+            id: c.id,
+            name: c.name,
+            address: [c.billingAddressLine1, c.billingCity, c.billingRegion, c.billingPostalCode, c.billingCountry].filter(Boolean).join(', '),
+          }))
+        : [];
+      setCustomers(list);
+    } catch {
+      // keep existing customers (mock or previous)
+    }
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    fetchRentals();
+  }, [fetchRentals]);
+
+  useEffect(() => {
+    if (isViewModalOpen && selectedAgreement) {
+      setRentalDetailLoading(true);
+      setRentalDetail(null);
+      fetchRentalById(selectedAgreement.id).then((info) => {
+        setRentalDetail(info ?? null);
+        setRentalDetailLoading(false);
+      });
+    } else {
+      setRentalDetail(null);
+      setRentalDetailLoading(false);
+    }
+  }, [isViewModalOpen, selectedAgreement?.id, fetchRentalById]);
+
+  useEffect(() => {
+    if (isCreateModalOpen && customers.length === 0) fetchCustomers();
+  }, [isCreateModalOpen, customers.length, fetchCustomers]);
 
   // Calculate pricing
   const pricing = useMemo(() => {
@@ -860,13 +1092,14 @@ const RentalAgreementPage: React.FC = () => {
     return brandData?.models || [];
   };
 
-  // Customer options for SearchableSelect
-const customerOptions = useMemo(() => {
-  return mockCustomers.map((customer) => ({
-    value: customer.id,
-    label: `${customer.name} - ${customer.address}`,
-  }));
-}, []);
+  // Customer options for SearchableSelect (API customers with fallback to mock)
+  const customerOptions = useMemo(() => {
+    const list = customers.length > 0 ? customers : mockCustomers;
+    return list.map((customer) => ({
+      value: customer.id,
+      label: `${customer.name}${customer.address ? ` - ${customer.address}` : ''}`,
+    }));
+  }, [customers]);
 
 // Brand options for SearchableSelect
 const brandOptions = useMemo(() => {
@@ -964,12 +1197,14 @@ const typeOptions = useMemo(() => {
       setCustomerAddress('');
       return;
     }
-    const customer = mockCustomers.find((c) => c.id === customerId);
+    const fromApi = customers.find((c) => c.id === customerId);
+    const fromMock = mockCustomers.find((c) => c.id === customerId);
+    const customer = fromApi ?? fromMock;
     if (customer) {
       setCustomerFullName(customer.name);
-      setCustomerAddress(customer.address || '');
+      setCustomerAddress('address' in customer ? (customer as { address?: string }).address || '' : '');
     }
-  }, [customerId]);
+  }, [customerId, customers]);
 
   const handleAddMachine = () => {
     setMachines([
@@ -1074,28 +1309,27 @@ const typeOptions = useMemo(() => {
 
     setIsSubmitting(true);
     try {
-      const selectedCustomer = mockCustomers.find((c) => c.id === customerId);
-      const payload = {
-        customerId,
-        customerName: selectedCustomer?.name || '',
-        startDate,
-        endDate,
-        machines,
-        addOns,
-        pricing,
-        signature,
-        agreementDate,
-        customerIdNo,
-        customerFullName,
-        customerSignatureDate,
-      };
-
-      console.log('Create rental agreement payload:', payload);
-      alert(`Rental Agreement created successfully (frontend only).`);
+      const res = await fetch(`${API_BASE}/rentals`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          customerId,
+          startDate,
+          endDate,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = json?.message || json?.data?.customerId?.[0] || json?.data?.startDate?.[0] || json?.data?.endDate?.[0] || 'Failed to create rental agreement';
+        throw new Error(typeof msg === 'string' ? msg : 'Validation error');
+      }
+      await fetchRentals();
+      alert('Rental agreement created successfully.');
       handleCloseCreateModal();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating rental agreement:', error);
-      alert('Failed to create rental agreement. Please try again.');
+      alert(error?.message || 'Failed to create rental agreement. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1109,6 +1343,7 @@ const typeOptions = useMemo(() => {
   const handleCloseViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedAgreement(null);
+    setRentalDetail(null);
   };
 
   const handlePrintAgreement = () => {
@@ -1259,7 +1494,7 @@ const typeOptions = useMemo(() => {
     setIssuedBy('');
   };
 
-  const handleCreateGatePass = () => {
+  const handleCreateGatePass = async () => {
     if (!selectedAgreement) return;
 
     // Validate required fields
@@ -1268,8 +1503,17 @@ const typeOptions = useMemo(() => {
       return;
     }
 
-    const agreementInfo = getRentalAgreementInfo(selectedAgreement.id, agreements);
-    const customer = mockCustomers.find((c) => c.id === selectedAgreement.customerNo);
+    let agreementInfo: RentalAgreementInfo | null =
+      (rentalDetail?.id === selectedAgreement.id ? rentalDetail : null) ??
+      getRentalAgreementInfoFromList(selectedAgreement.id, agreements);
+    if (!agreementInfo) {
+      agreementInfo = await fetchRentalById(selectedAgreement.id);
+    }
+    if (!agreementInfo) {
+      alert('Could not load agreement details.');
+      return;
+    }
+    const customer = customers.find((c) => c.id === selectedAgreement.customerNo) ?? mockCustomers.find((c) => c.id === selectedAgreement.customerNo);
     const gatepassNo = generateGatepassNo();
 
     // Convert machines to gatepass items
@@ -1290,7 +1534,7 @@ const typeOptions = useMemo(() => {
       entry,
       from: 'Needle Technologies',
       to: selectedAgreement.customerName,
-      toAddress: customer?.address || agreementInfo.customerAddress || '',
+      toAddress: (customer as { address?: string })?.address ?? agreementInfo.customerAddress ?? '',
       vehicleNumber,
       driverName,
       items: gatePassItems,
@@ -1387,6 +1631,21 @@ const typeOptions = useMemo(() => {
     try {
       const addedCount = machinesForAgreement.length;
       const newStatus = wasPending && totalExpected > 0 && addedCount >= totalExpected ? 'Active' : (data.status ?? selectedAgreement.status);
+      const body: Record<string, unknown> = {
+        status: newStatus,
+        ...(data.endDate != null && data.endDate !== '' && { endDate: data.endDate }),
+      };
+
+      const res = await fetch(`${API_BASE}/rentals/${selectedAgreement.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.message || 'Failed to update rental agreement');
+      }
 
       setAgreements((prev) =>
         prev.map((a) =>
@@ -1394,7 +1653,7 @@ const typeOptions = useMemo(() => {
             ? {
                 ...a,
                 ...data,
-                status: newStatus,
+                status: newStatus as RentalStatus,
                 addedMachines: addedCount,
               }
             : a
@@ -1402,7 +1661,7 @@ const typeOptions = useMemo(() => {
       );
 
       if (newStatus === 'Active' && wasPending && addedCount > 0) {
-        const customer = mockCustomers.find((c) => c.id === selectedAgreement.customerNo);
+        const customer = customers.find((c) => c.id === selectedAgreement.customerNo) ?? mockCustomers.find((c) => c.id === selectedAgreement.customerNo);
         const monthlyRent = selectedAgreement.monthlyRent;
         const rentPerMachine = addedCount > 0 ? monthlyRent / addedCount : 0;
         const today = new Date().toISOString().split('T')[0];
@@ -1441,8 +1700,8 @@ const typeOptions = useMemo(() => {
         const generatedInvoice: AutoGeneratedInvoice = {
           invoiceNumber: `RA-${selectedAgreement.agreementNo}-${Date.now().toString().slice(-6)}`,
           customerName: selectedAgreement.customerName,
-          customerAddress: customer?.address || '',
-          vatTinNic: (customer as { vatTinNic?: string })?.vatTinNic ?? customer?.id ?? '',
+          customerAddress: (customer as { address?: string })?.address ?? '',
+          vatTinNic: (customer as { vatTinNic?: string })?.vatTinNic ?? (customer as { id?: string })?.id ?? '',
           invoiceDate: today,
           periodFrom,
           periodTo,
@@ -1462,7 +1721,11 @@ const typeOptions = useMemo(() => {
         alert(`Rental Agreement "${data.agreementNo}" updated successfully.`);
       }
 
+      await fetchRentals();
       handleCloseUpdateModal();
+    } catch (error: any) {
+      console.error('Error updating rental:', error);
+      alert(error?.message || 'Failed to update rental agreement.');
     } finally {
       setIsSubmitting(false);
     }
@@ -2015,9 +2278,21 @@ const typeOptions = useMemo(() => {
   // View Rental Agreement Content
   const renderAgreementDetails = () => {
     if (!selectedAgreement) return null;
-
-    const agreementInfo = getRentalAgreementInfo(selectedAgreement.id, agreements);
-
+    if (rentalDetailLoading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-indigo-400" />
+        </div>
+      );
+    }
+    if (!rentalDetail) {
+      return (
+        <div className="py-8 text-center text-gray-500 dark:text-gray-400">
+          Could not load agreement details.
+        </div>
+      );
+    }
+    const agreementInfo = rentalDetail;
     return (
       <div>
         <div className="print:hidden">
@@ -2036,12 +2311,12 @@ const typeOptions = useMemo(() => {
   return (
     <>
       {/* Print-only rental agreement document - normal flow so signature block and footer print (no fixed clipping) */}
-      {selectedAgreement && (
+      {selectedAgreement && rentalDetail && (
         <div
           id="rental-agreement-print"
           className="hidden print:block print:bg-white print:z-[9999] print:overflow-visible"
         >
-          {renderRentalAgreementDocument(getRentalAgreementInfo(selectedAgreement.id, agreements))}
+          {renderRentalAgreementDocument(rentalDetail)}
         </div>
       )}
 
@@ -2078,18 +2353,37 @@ const typeOptions = useMemo(() => {
             </div>
 
             {/* Rental Agreement table card */}
-            <Table
-              data={agreements}
-              columns={columns}
-              actions={actions}
-              itemsPerPage={10}
-              searchable
-              filterable
-              onCreateClick={handleCreateAgreement}
-              createButtonLabel="Create Hiring Machine Agreement"
-              getRowClassName={getRowClassName}
-              emptyMessage="No rental agreements found."
-            />
+            {fetchError && (
+              <div className="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0" />
+                <span className="text-sm text-red-700 dark:text-red-300">{fetchError}</span>
+                <button
+                  type="button"
+                  onClick={() => fetchRentals()}
+                  className="ml-auto px-3 py-1.5 text-sm font-medium text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {loading ? (
+              <div className="flex items-center justify-center py-16 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700">
+                <Loader2 className="w-10 h-10 animate-spin text-blue-600 dark:text-indigo-400" />
+              </div>
+            ) : (
+              <Table
+                data={agreements}
+                columns={columns}
+                actions={actions}
+                itemsPerPage={10}
+                searchable
+                filterable
+                onCreateClick={handleCreateAgreement}
+                createButtonLabel="Create Hiring Machine Agreement"
+                getRowClassName={getRowClassName}
+                emptyMessage="No rental agreements found."
+              />
+            )}
           </div>
         </main>
 
