@@ -72,3 +72,5 @@ export function withAuthAndPermission<T extends any[]>(
     }
   };
 }
+
+export { AuthUser };

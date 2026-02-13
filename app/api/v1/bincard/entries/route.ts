@@ -54,7 +54,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     
     const totalItems = await prisma.bincardEntry.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const entries = await prisma.bincardEntry.findMany({
       where,

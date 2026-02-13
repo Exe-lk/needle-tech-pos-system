@@ -425,6 +425,9 @@ model BincardEntry {
   quantityOut     Int     @default(0)
   balance         Int
   location        String?
+  stockType       String? // "New" or "Used" for stock-in transactions
+  warrantyExpiry  DateTime? @db.Timestamptz(6)
+  condition       String?
   
   performedBy     String?
   notes           String?
