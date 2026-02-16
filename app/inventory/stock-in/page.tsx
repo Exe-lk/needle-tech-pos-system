@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
@@ -8,6 +8,8 @@ import { X, ChevronDown, Check, Plus, Trash2, QrCode, Download, ChevronRight, Ch
 import { QRCodeSVG } from 'qrcode.react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateSerialNumber, validateBoxNumber } from '@/src/utils/validation';
+
+const API_BASE = '/api/v1';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type StockType = 'New' | 'Used';
@@ -21,17 +23,25 @@ const MACHINE_TYPE_OPTIONS: { value: MachineType; label: string }[] = [
   { value: 'Other', label: 'Other' },
 ];
 
-// Mock registered machines (should be fetched from machines API)
-const mockRegisteredMachines = [
-  { brand: 'Brother', model: 'XL2600i', type: 'Domestic' as MachineType },
-  { brand: 'Singer', model: 'Heavy Duty 4423', type: 'Industrial' as MachineType },
-  { brand: 'Janome', model: 'HD3000', type: 'Domestic' as MachineType },
-  { brand: 'Brother', model: 'SE600', type: 'Embroidery' as MachineType },
-  { brand: 'Juki', model: 'MO-654DE', type: 'Overlock' as MachineType },
-  { brand: 'Singer', model: 'Buttonhole 160', type: 'Buttonhole' as MachineType },
-  { brand: 'Brother', model: 'CS6000i', type: 'Domestic' as MachineType },
-  { brand: 'Janome', model: 'MB-4S', type: 'Industrial' as MachineType },
-];
+interface BrandRecord {
+  id: string;
+  name: string;
+}
+
+interface ModelRecord {
+  id: string;
+  name: string;
+  brandId: string;
+  brand?: { name: string };
+}
+
+function getAuthHeaders(): HeadersInit {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 interface SearchableSelectProps {
   value: string;
@@ -257,7 +267,12 @@ const StockInPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
+  // Brands and models from API (for dropdowns)
+  const [brands, setBrands] = useState<BrandRecord[]>([]);
+  const [models, setModels] = useState<ModelRecord[]>([]);
+  const [brandsModelsLoading, setBrandsModelsLoading] = useState(true);
+
   // New model form state
   const [newModelBrand, setNewModelBrand] = useState('');
   const [newModelModel, setNewModelModel] = useState('');
@@ -269,10 +284,10 @@ const StockInPage: React.FC = () => {
   const [newModelLocation, setNewModelLocation] = useState('');
   const [newModelNotes, setNewModelNotes] = useState('');
   const [newModelErrors, setNewModelErrors] = useState<Record<string, string>>({});
-  
+
   // Stock models list
   const [stockModels, setStockModels] = useState<StockModelEntry[]>([]);
-  
+
   // QR Code modal state
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [selectedMachineForQR, setSelectedMachineForQR] = useState<{ modelId: string; machineId: string } | null>(null);
@@ -282,40 +297,62 @@ const StockInPage: React.FC = () => {
   const [showQrBatchModal, setShowQrBatchModal] = useState(false);
   const [submittedStockModels, setSubmittedStockModels] = useState<StockModelEntry[]>([]);
 
-  // Get unique brands for dropdown
-  const uniqueBrands = useMemo(() => {
-    return [...new Set(mockRegisteredMachines.map((m) => m.brand))].sort();
+  // Fetch brands and models on mount
+  const fetchBrandsAndModels = useCallback(async () => {
+    setBrandsModelsLoading(true);
+    try {
+      const [brandsRes, modelsRes] = await Promise.all([
+        fetch(`${API_BASE}/brands?page=1&limit=200`, { headers: getAuthHeaders(), credentials: 'include' }),
+        fetch(`${API_BASE}/models?page=1&limit=500`, { headers: getAuthHeaders(), credentials: 'include' }),
+      ]);
+      const brandsJson = await brandsRes.json();
+      const modelsJson = await modelsRes.json();
+      const brandsList = brandsJson?.data?.items ?? [];
+      const modelsList = modelsJson?.data?.items ?? [];
+      setBrands(Array.isArray(brandsList) ? brandsList : []);
+      setModels(Array.isArray(modelsList) ? modelsList : []);
+    } catch {
+      setBrands([]);
+      setModels([]);
+    } finally {
+      setBrandsModelsLoading(false);
+    }
   }, []);
 
-  // Get models for selected brand (unique models)
-  const getModelsForBrand = (brand: string) => {
-    const models = mockRegisteredMachines
-      .filter((m) => m.brand === brand)
-      .map((m) => m.model);
-    return [...new Set(models)].sort().map((m) => ({ label: m, value: m }));
-  };
+  useEffect(() => {
+    fetchBrandsAndModels();
+  }, [fetchBrandsAndModels]);
 
-  // Default machine type for selected brand/model (user can override via Type field)
-  const getDefaultMachineType = (brand: string, model: string): MachineType => {
-    const machine = mockRegisteredMachines.find(
-      (m) => m.brand === brand && m.model === model
-    );
-    return machine?.type || 'Domestic';
-  };
+  // Get unique brand names (sorted) for dropdown
+  const uniqueBrands = useMemo(() => {
+    return [...new Set(brands.map((b) => b.name))].filter(Boolean).sort();
+  }, [brands]);
+
+  // Get models for selected brand (by brand name)
+  const getModelsForBrand = useCallback(
+    (brandName: string) => {
+      const brand = brands.find((b) => b.name === brandName);
+      if (!brand) return [];
+      const forBrand = models.filter((m) => m.brandId === brand.id);
+      const names = [...new Set(forBrand.map((m) => m.name))].filter(Boolean).sort();
+      return names.map((m) => ({ label: m, value: m }));
+    },
+    [brands, models]
+  );
+
+  // Default machine type when brand/model selected (no type from API, default to Domestic)
+  const getDefaultMachineType = (_brand: string, _model: string): MachineType => 'Domestic';
 
   // Prepare brand options
   const brandOptions = useMemo(() => {
-    return uniqueBrands.map((brand) => ({
-      value: brand,
-      label: brand,
-    }));
+    return uniqueBrands.map((brand) => ({ value: brand, label: brand }));
   }, [uniqueBrands]);
 
-  // Prepare model options
+  // Prepare model options for selected brand
   const modelOptions = useMemo(() => {
     if (!newModelBrand) return [];
     return getModelsForBrand(newModelBrand);
-  }, [newModelBrand]);
+  }, [newModelBrand, getModelsForBrand]);
 
   // Generate barcode
   const generateBarcode = (brand: string, model: string, serialNumber: string): string => {
@@ -547,13 +584,13 @@ const StockInPage: React.FC = () => {
     return true;
   };
 
-  // Submit stock in: record transaction then show QR batch modal
+  // Submit stock in: POST to API then show QR batch modal on success
   const handleSubmit = async () => {
     if (!validateAll()) return;
 
     setIsSubmitting(true);
     try {
-      const payload = stockModels.map(model => ({
+      const transactionsPayload = stockModels.map((model) => ({
         brand: model.brand,
         model: model.model,
         type: model.type,
@@ -563,23 +600,37 @@ const StockInPage: React.FC = () => {
         condition: model.condition || undefined,
         location: model.location,
         notes: model.notes || undefined,
-        machines: model.machines.map(machine => ({
+        transactionDate: new Date().toISOString().split('T')[0],
+        performedBy: undefined,
+        machines: model.machines.map((machine) => ({
           serialNumber: machine.serialNumber,
           boxNo: machine.boxNo || undefined,
           barcode: machine.barcode,
           qrCodeData: machine.qrCodeData,
         })),
-        transactionDate: new Date().toISOString().split('T')[0],
-        performedBy: 'Current User', // Replace with actual user from auth
       }));
 
-      console.log('Stock In transaction:', payload);
+      const res = await fetch(`${API_BASE}/inventory/stock-in`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ transactions: transactionsPayload }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const message = json?.message || json?.data?.transactions?.[0] || 'Failed to process stock in. Please try again.';
+        alert(typeof message === 'string' ? message : 'Failed to process stock in. Please try again.');
+        return;
+      }
+
       setSubmittedStockModels([...stockModels]);
       setShowQrBatchModal(true);
       document.body.classList.add('qr-batch-printing');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing stock in:', error);
-      alert('Failed to process stock in. Please try again.');
+      alert(error?.message || 'Failed to process stock in. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -697,6 +748,9 @@ const StockInPage: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Add Machine Model
             </h3>
+            {brandsModelsLoading && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Loading brands and models...</p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Brand */}
               <div>
@@ -710,7 +764,8 @@ const StockInPage: React.FC = () => {
                     setNewModelModel('');
                   }}
                   options={brandOptions}
-                  placeholder="Select brand"
+                  placeholder={brandsModelsLoading ? 'Loading...' : 'Select brand'}
+                  disabled={brandsModelsLoading}
                   error={newModelErrors.brand}
                 />
               </div>

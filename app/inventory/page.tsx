@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
@@ -10,13 +10,15 @@ import type { FormField } from '@/src/components/form-popup/update';
 import { Eye, Clock, Pencil, X, QrCode, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
+const API_BASE = '/api/v1';
+
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type StockType = 'New' | 'Used';
 type TransactionType = 'Stock In' | 'Stock Out';
 
-// Inventory Item - Represents stock levels for a brand/model combination
+// Inventory Item - Represents stock levels for a brand/model combination (from API)
 interface InventoryItem {
-  id: number;
+  id: string;
   brand: string;
   model: string;
   type: MachineType;
@@ -38,131 +40,30 @@ interface MachineUnit {
   boxNumber: string;
 }
 
-// Stock Transaction - Records individual stock movements
+// Stock Transaction - Records individual stock movements (from API)
 interface StockTransaction {
-  id: number;
+  id: string | number;
   brand: string;
   model: string;
-  type: MachineType;
+  type: MachineType | string;
   transactionType: TransactionType;
-  stockType: StockType;
+  stockType: StockType | string | null;
   quantity: number;
-  warrantyExpiry?: string; // For new machines
-  condition?: string; // For used machines
+  warrantyExpiry?: string | null;
+  condition?: string | null;
   location: string;
   notes?: string;
   transactionDate: string;
   performedBy?: string;
 }
 
-// Mock inventory data
-const mockInventory: InventoryItem[] = [
-  {
-    id: 1,
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-    totalStock: 25,
-    availableStock: 20,
-    rentedStock: 3,
-    maintenanceStock: 2,
-    retiredStock: 0,
-    lastUpdated: '2024-04-15',
-  },
-  {
-    id: 2,
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    type: 'Industrial',
-    totalStock: 15,
-    availableStock: 8,
-    rentedStock: 6,
-    maintenanceStock: 1,
-    retiredStock: 0,
-    lastUpdated: '2024-04-14',
-  },
-  {
-    id: 3,
-    brand: 'Janome',
-    model: 'HD3000',
-    type: 'Domestic',
-    totalStock: 12,
-    availableStock: 10,
-    rentedStock: 2,
-    maintenanceStock: 0,
-    retiredStock: 0,
-    lastUpdated: '2024-04-13',
-  },
-  {
-    id: 4,
-    brand: 'Brother',
-    model: 'SE600',
-    type: 'Embroidery',
-    totalStock: 8,
-    availableStock: 5,
-    rentedStock: 2,
-    maintenanceStock: 1,
-    retiredStock: 0,
-    lastUpdated: '2024-04-12',
-  },
-  {
-    id: 5,
-    brand: 'Juki',
-    model: 'MO-654DE',
-    type: 'Overlock',
-    totalStock: 10,
-    availableStock: 7,
-    rentedStock: 2,
-    maintenanceStock: 1,
-    retiredStock: 0,
-    lastUpdated: '2024-04-11',
-  },
-];
-
-// Mock stock transactions
-const mockTransactions: StockTransaction[] = [
-  {
-    id: 1,
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-    transactionType: 'Stock In',
-    stockType: 'New',
-    quantity: 10,
-    warrantyExpiry: '2027-04-15',
-    location: 'Main Warehouse',
-    notes: 'New shipment from supplier',
-    transactionDate: '2024-04-15',
-    performedBy: 'Admin User',
-  },
-  {
-    id: 2,
-    brand: 'Singer',
-    model: 'Heavy Duty 4423',
-    type: 'Industrial',
-    transactionType: 'Stock In',
-    stockType: 'Used',
-    quantity: 5,
-    condition: 'Good',
-    location: 'Main Warehouse',
-    notes: 'Refurbished machines',
-    transactionDate: '2024-04-14',
-    performedBy: 'Admin User',
-  },
-  {
-    id: 3,
-    brand: 'Brother',
-    model: 'XL2600i',
-    type: 'Domestic',
-    transactionType: 'Stock In',
-    stockType: 'New',
-    quantity: 15,
-    warrantyExpiry: '2027-04-20',
-    location: 'Main Warehouse',
-    transactionDate: '2024-04-10',
-    performedBy: 'Admin User',
-  },
-];
+function getAuthHeaders(): HeadersInit {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 /** Expand inventory items into individual machine units (one per physical machine). */
 function expandInventoryToMachineUnits(items: InventoryItem[]): MachineUnit[] {
@@ -195,12 +96,77 @@ const InventoryManagementPage: React.FC = () => {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
-  const [transactions, setTransactions] = useState<StockTransaction[]>(mockTransactions);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [transactions, setTransactions] = useState<StockTransaction[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedMachineForQR, setSelectedMachineForQR] = useState<MachineUnit | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const qrCodeRef = useRef<HTMLDivElement>(null);
+
+  // Fetch inventory from API
+  const fetchInventory = useCallback(async () => {
+    setInventoryLoading(true);
+    setInventoryError(null);
+    try {
+      const res = await fetch(`${API_BASE}/inventory?page=1&limit=1000`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.message || 'Failed to load inventory');
+      }
+      const list = json?.data?.items?.inventory ?? json?.data?.items ?? [];
+      setInventory(Array.isArray(list) ? list : []);
+    } catch (err: any) {
+      setInventoryError(err?.message || 'Failed to load inventory');
+      setInventory([]);
+    } finally {
+      setInventoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInventory();
+  }, [fetchInventory]);
+
+  // Fetch transactions for history modal (filtered by brand/model)
+  const fetchTransactionsForItem = useCallback(async (brand: string, model: string) => {
+    setTransactionsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        brand,
+        model,
+        limit: '500',
+      });
+      const res = await fetch(`${API_BASE}/inventory/transactions?${params}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.message || 'Failed to load transactions');
+      }
+      const list = json?.data?.items?.transactions ?? json?.data?.items ?? [];
+      setTransactions(Array.isArray(list) ? list : []);
+    } catch {
+      setTransactions([]);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  }, []);
+
+  // When history modal opens, fetch transactions for selected item
+  useEffect(() => {
+    if (isHistoryModalOpen && selectedItem) {
+      fetchTransactionsForItem(selectedItem.brand, selectedItem.model);
+    }
+  }, [isHistoryModalOpen, selectedItem?.brand, selectedItem?.model, fetchTransactionsForItem]);
 
   /** All individual machine units (70 total from 5 inventory rows). */
   const allMachineUnits = useMemo(() => expandInventoryToMachineUnits(inventory), [inventory]);
@@ -728,17 +694,35 @@ const InventoryManagementPage: React.FC = () => {
           </div>
 
           {/* Inventory table card */}
-          <Table
-            data={inventory}
-            columns={inventoryColumns}
-            actions={actions}
-            itemsPerPage={10}
-            searchable
-            filterable
-            onCreateClick={handleStockIn}
-            createButtonLabel="Stock In"
-            emptyMessage="No inventory items found. Add stock to get started."
-          />
+          {inventoryError && (
+            <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 flex items-center justify-between">
+              <p className="text-sm text-red-700 dark:text-red-300">{inventoryError}</p>
+              <button
+                type="button"
+                onClick={() => fetchInventory()}
+                className="px-3 py-1.5 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/40 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {inventoryLoading ? (
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-12 text-center">
+              <p className="text-gray-600 dark:text-gray-400">Loading inventory...</p>
+            </div>
+          ) : (
+            <Table
+              data={inventory}
+              columns={inventoryColumns}
+              actions={actions}
+              itemsPerPage={10}
+              searchable
+              filterable
+              onCreateClick={handleStockIn}
+              createButtonLabel="Stock In"
+              emptyMessage="No inventory items found. Add stock to get started."
+            />
+          )}
         </div>
       </main>
 
@@ -838,14 +822,18 @@ const InventoryManagementPage: React.FC = () => {
 
             {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
-              <Table
-                data={getItemTransactions(selectedItem)}
-                columns={transactionColumns}
-                itemsPerPage={10}
-                searchable
-                filterable
-                emptyMessage="No transaction history found for this item."
-              />
+              {transactionsLoading ? (
+                <p className="text-gray-600 dark:text-gray-400 text-center py-8">Loading transactions...</p>
+              ) : (
+                <Table
+                  data={getItemTransactions(selectedItem)}
+                  columns={transactionColumns}
+                  itemsPerPage={10}
+                  searchable
+                  filterable
+                  emptyMessage="No transaction history found for this item."
+                />
+              )}
             </div>
           </div>
         </div>

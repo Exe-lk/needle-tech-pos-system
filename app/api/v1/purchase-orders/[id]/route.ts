@@ -48,6 +48,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       customerName: purchaseOrder.customer?.name || '',
       customerType: purchaseOrder.customer?.type === 'GARMENT_FACTORY' ? 'Business' : 'Individual',
       requestDate: purchaseOrder.requestDate,
+      startDate: (purchaseOrder as any).startDate ?? null,
+      endDate: (purchaseOrder as any).endDate ?? null,
       totalAmount: parseFloat(purchaseOrder.totalAmount.toString()),
       status: purchaseOrder.status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
       requestedMachines,

@@ -404,12 +404,12 @@ const getMachineRentalHistory = (machineId: string): MachineRentalHistory[] => {
 
 // Table column configuration
 const columns: TableColumn[] = [
-  {
-    key: 'barcode',
-    label: 'Description',
-    sortable: true,
-    filterable: true,
-  },
+  // {
+  //   key: 'barcode',
+  //   label: 'Description',
+  //   sortable: true,
+  //   filterable: true,
+  // },
   {
     key: 'brand',
     label: 'Brand',
@@ -1339,24 +1339,8 @@ const MachineListPage: React.FC = () => {
                   {machineInfo.type}
                 </span>
               </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Serial Number:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {machineInfo.serialNumber}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">BOX No:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                  {machineInfo.boxNo}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Barcode:</span>
-                <span className="ml-2 text-gray-900 dark:text-white font-medium font-mono text-xs">
-                  {machineInfo.barcode}
-                </span>
-              </div>
+              
+              
             </div>
           </div>
 

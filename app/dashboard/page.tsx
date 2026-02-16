@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import {
@@ -10,7 +10,6 @@ import {
   Package,
   AlertTriangle,
   Activity,
-  Calendar,
   BarChart3,
   PieChart,
   LineChart,
@@ -23,11 +22,25 @@ import {
   Truck,
   Award,
   ChevronRight,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import Tooltip from '@/src/components/common/tooltip';
+
+const API_BASE = '/api/v1';
+
+/** Month-end analytics API response (data payload) */
+interface MonthEndAnalyticsPayload {
+  period: { startDate: string; endDate: string };
+  rentals: { total: number; active: number };
+  revenue: { total: number; vat: number; nonVat: number; paymentsReceived: number };
+  machines: { total: number; rented: number; utilizationRate: number };
+  financials: { totalOutstanding: number; totalPayments: number };
+  operations: { totalReturns: number; totalDamages: number };
+}
 
 // Data Types
 interface MonthlyRevenue {
@@ -171,12 +184,45 @@ const mockGatepassVolume: GatepassVolumeItem[] = [
   { entry: 'IN', count: 142, label: 'Inbound' },
 ];
 
-const MOCK_ACTIVE_RENTALS = 42;
-const MOCK_OUTSTANDING_AMOUNT = 910000;
-const MOCK_NEW_AGREEMENTS_THIS_MONTH = 8;
 const MOCK_ALERTS_COUNT = 27;
 const MOCK_TOP_BRAND = 'Brother';
 const MOCK_TOP_BRAND_REVENUE = 1250000;
+
+/** Get list of { year, month } for the selected period (oldest first for charts) */
+function getMonthsForPeriod(period: '6M' | '12M' | 'YTD'): { year: number; month: number }[] {
+  const now = new Date();
+  const endYear = now.getFullYear();
+  const endMonth = now.getMonth() + 1; // 1-indexed
+  let count = 6;
+  if (period === '12M') count = 12;
+  else if (period === 'YTD') count = endMonth;
+  const out: { year: number; month: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const monthsAgo = count - 1 - i;
+    const d = new Date(endYear, endMonth - 1 - monthsAgo, 1);
+    out.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+  }
+  return out;
+}
+
+/** Fetch month-end analytics for a given year and month */
+async function fetchMonthEndAnalytics(
+  year: number,
+  month: number,
+  getAuthHeaders: () => HeadersInit
+): Promise<MonthEndAnalyticsPayload | null> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/analytics/month-end?year=${year}&month=${month}`,
+      { method: 'GET', headers: getAuthHeaders(), credentials: 'include' }
+    );
+    const json = await res.json();
+    if (!res.ok || json?.status !== 'success') return null;
+    return json?.data ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const AnalyticsPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -184,6 +230,60 @@ const AnalyticsPage: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<'6M' | '12M' | 'YTD'>('6M');
   const [isExporting, setIsExporting] = useState(false);
   const [detailPopup, setDetailPopup] = useState<{ title: string; content: React.ReactNode } | null>(null);
+
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [apiMonthlyRevenue, setApiMonthlyRevenue] = useState<MonthlyRevenue[]>([]);
+  const [latestAnalytics, setLatestAnalytics] = useState<MonthEndAnalyticsPayload | null>(null);
+
+  const getAuthHeaders = useCallback((): HeadersInit => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  }, []);
+
+  const fetchAnalytics = useCallback(async () => {
+    setAnalyticsError(null);
+    setAnalyticsLoading(true);
+    const months = getMonthsForPeriod(selectedPeriod);
+    try {
+      const results = await Promise.all(
+        months.map(({ year, month }) => fetchMonthEndAnalytics(year, month, getAuthHeaders))
+      );
+      const valid = results.filter((r): r is MonthEndAnalyticsPayload => r != null);
+      if (valid.length === 0) {
+        setAnalyticsError('Could not load analytics. Please try again.');
+        setApiMonthlyRevenue([]);
+        setLatestAnalytics(null);
+      } else {
+        const revenueList: MonthlyRevenue[] = valid.map((a, i) => {
+          const start = new Date(a.period.startDate);
+          const monthLabel = start.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+          return {
+            month: monthLabel,
+            monthNumber: start.getMonth() + 1,
+            vatRevenue: a.revenue.vat,
+            nonVatRevenue: a.revenue.nonVat,
+            totalRevenue: a.revenue.total,
+          };
+        });
+        setApiMonthlyRevenue(revenueList);
+        setLatestAnalytics(valid[valid.length - 1] ?? null);
+      }
+    } catch {
+      setAnalyticsError('Failed to load analytics.');
+      setApiMonthlyRevenue([]);
+      setLatestAnalytics(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [selectedPeriod, getAuthHeaders]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -223,27 +323,31 @@ const AnalyticsPage: React.FC = () => {
     </div>
   );
 
-  // Calculate summary statistics
-  const summaryStats = useMemo(() => {
-    const currentMonth = mockMonthlyRevenue[mockMonthlyRevenue.length - 1];
-    const previousMonth = mockMonthlyRevenue[mockMonthlyRevenue.length - 2];
+  // Use API data when available, otherwise fall back to mock for charts that need model-level data
+  const monthlyRevenueForCharts = apiMonthlyRevenue.length > 0 ? apiMonthlyRevenue : mockMonthlyRevenue;
 
-    const totalRevenue = mockMonthlyRevenue.reduce((sum, m) => sum + m.totalRevenue, 0);
-    const avgMonthlyRevenue = totalRevenue / mockMonthlyRevenue.length;
-    const revenueGrowth = previousMonth
-      ? ((currentMonth.totalRevenue - previousMonth.totalRevenue) / previousMonth.totalRevenue) * 100
+  // Calculate summary statistics from API when available
+  const summaryStats = useMemo(() => {
+    const source = apiMonthlyRevenue.length > 0 ? apiMonthlyRevenue : mockMonthlyRevenue;
+    const currentMonth = source[source.length - 1];
+    const previousMonth = source[source.length - 2];
+
+    const totalRevenue = source.reduce((sum, m) => sum + m.totalRevenue, 0);
+    const avgMonthlyRevenue = source.length > 0 ? totalRevenue / source.length : 0;
+    const revenueGrowth = previousMonth && currentMonth
+      ? ((currentMonth.totalRevenue - previousMonth.totalRevenue) / (previousMonth.totalRevenue || 1)) * 100
       : 0;
 
-    const totalVatRevenue = mockMonthlyRevenue.reduce((sum, m) => sum + m.vatRevenue, 0);
-    const totalNonVatRevenue = mockMonthlyRevenue.reduce((sum, m) => sum + m.nonVatRevenue, 0);
-    const vatPercentage = (totalVatRevenue / totalRevenue) * 100;
+    const totalVatRevenue = source.reduce((sum, m) => sum + m.vatRevenue, 0);
+    const totalNonVatRevenue = source.reduce((sum, m) => sum + m.nonVatRevenue, 0);
+    const vatPercentage = totalRevenue > 0 ? (totalVatRevenue / totalRevenue) * 100 : 0;
 
-    const totalMachines = 50; // Mock total
-    const idleMachines = mockIdleMachines.length;
-    const utilizationRate = ((totalMachines - idleMachines) / totalMachines) * 100;
+    const totalMachines = latestAnalytics?.machines?.total ?? 50;
+    const utilizationRate = latestAnalytics?.machines?.utilizationRate ?? (totalMachines > 0 ? ((totalMachines - mockIdleMachines.length) / totalMachines) * 100 : 0);
+    const idleMachines = latestAnalytics ? (totalMachines - (latestAnalytics.machines?.rented ?? 0)) : mockIdleMachines.length;
 
-    const totalDamages = mockDamageFrequency.reduce((sum, d) => sum + d.totalDamages, 0);
-    const totalRepairCost = mockDamageFrequency.reduce((sum, d) => sum + d.repairCost, 0);
+    const totalDamages = latestAnalytics?.operations?.totalDamages ?? mockDamageFrequency.reduce((sum, d) => sum + d.totalDamages, 0);
+    const totalRepairCost = mockDamageFrequency.reduce((sum, d) => sum + d.repairCost, 0); // API does not return repair cost; keep mock for display
 
     return {
       totalRevenue,
@@ -257,12 +361,16 @@ const AnalyticsPage: React.FC = () => {
       totalRepairCost,
       idleMachines,
     };
-  }, []);
+  }, [apiMonthlyRevenue, latestAnalytics]);
 
   // Find max values for chart scaling
-  const maxRevenue = Math.max(...mockMonthlyRevenue.map(m => m.totalRevenue));
+  const maxRevenue = Math.max(1, ...monthlyRevenueForCharts.map(m => m.totalRevenue));
   const maxUtilization = Math.max(...mockMachineUtilization.map(m => m.utilizationRate));
   const maxDamageRate = Math.max(...mockDamageFrequency.map(d => d.damageRate));
+
+  const activeRentals = latestAnalytics?.rentals?.active ?? 42;
+  const outstandingAmount = latestAnalytics?.financials?.totalOutstanding ?? 910000;
+  const newAgreementsThisMonth = latestAnalytics?.rentals?.total ?? 8;
 
   // Export to PDF
   const handleExportToPDF = () => {
@@ -329,7 +437,7 @@ const AnalyticsPage: React.FC = () => {
       doc.text('Monthly Revenue (VAT vs Non-VAT)', 14, yPosition);
       yPosition += 8;
 
-      const revenueData = mockMonthlyRevenue.map(item => [
+      const revenueData = monthlyRevenueForCharts.map(item => [
         item.month,
         `Rs. ${item.vatRevenue.toLocaleString('en-LK')}`,
         `Rs. ${item.nonVatRevenue.toLocaleString('en-LK')}`,
@@ -460,7 +568,7 @@ const AnalyticsPage: React.FC = () => {
       // Monthly Revenue Sheet
       const revenueData = [
         ['Month', 'VAT Revenue', 'Non-VAT Revenue', 'Total Revenue'],
-        ...mockMonthlyRevenue.map(item => [
+        ...monthlyRevenueForCharts.map(item => [
           item.month,
           item.vatRevenue,
           item.nonVatRevenue,
@@ -777,6 +885,35 @@ const AnalyticsPage: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              {analyticsLoading && (
+                <span className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading analytics…
+                </span>
+              )}
+              {analyticsError && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
+                  {analyticsError}
+                  <button
+                    type="button"
+                    onClick={() => fetchAnalytics()}
+                    className="underline font-medium"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              <Tooltip content="Refresh analytics">
+                <button
+                  type="button"
+                  onClick={() => fetchAnalytics()}
+                  disabled={analyticsLoading}
+                  className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                  aria-label="Refresh"
+                >
+                  <RefreshCw className={`w-5 h-5 ${analyticsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </Tooltip>
               {/* Export Buttons */}
               <div className="flex items-center gap-2">
                 <Tooltip content="Export As a PDF">
@@ -910,7 +1047,7 @@ const AnalyticsPage: React.FC = () => {
                   content: (
                     <div className="space-y-4">
                       <p className="text-gray-600 dark:text-gray-400">
-                        Average revenue per month over the last {mockMonthlyRevenue.length} months. Useful for forecasting and target setting.
+                        Average revenue per month over the last {monthlyRevenueForCharts.length} months. Useful for forecasting and target setting.
                       </p>
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
@@ -923,7 +1060,7 @@ const AnalyticsPage: React.FC = () => {
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-500 dark:text-gray-400">Months in period</span>
-                          <span className="font-semibold text-gray-900 dark:text-white">{mockMonthlyRevenue.length}</span>
+                          <span className="font-semibold text-gray-900 dark:text-white">{monthlyRevenueForCharts.length}</span>
                         </div>
                       </div>
                     </div>
@@ -938,7 +1075,7 @@ const AnalyticsPage: React.FC = () => {
                   <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                     Rs. {(summaryStats.avgMonthlyRevenue / 1000).toFixed(0)}k
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Over {mockMonthlyRevenue.length} months</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Over {monthlyRevenueForCharts.length} months</p>
                 </div>
                 <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg group-hover:scale-105 transition-transform">
                   <BarChart3 className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -992,7 +1129,7 @@ const AnalyticsPage: React.FC = () => {
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Machine Utilization</p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{summaryStats.utilizationRate.toFixed(1)}%</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{mockIdleMachines.length} machines idle</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{summaryStats.idleMachines} machines idle</p>
                 </div>
                 <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg group-hover:scale-105 transition-transform">
                   <Activity className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -1070,7 +1207,7 @@ const AnalyticsPage: React.FC = () => {
                     <div className="space-y-3">
                       <p className="text-gray-600 dark:text-gray-400">Currently active rental agreements. These machines are out with customers.</p>
                       <div className="flex items-center gap-4">
-                        <div className="text-3xl font-bold text-gray-900 dark:text-white">{MOCK_ACTIVE_RENTALS}</div>
+                        <div className="text-3xl font-bold text-gray-900 dark:text-white">{activeRentals}</div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">agreements</div>
                       </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400">Rental status breakdown available in the Rental Status chart below.</p>
@@ -1083,7 +1220,7 @@ const AnalyticsPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Active Rentals</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{MOCK_ACTIVE_RENTALS}</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{activeRentals}</p>
                 </div>
                 <Users className="w-8 h-8 text-blue-500 dark:text-blue-400 opacity-80 group-hover:opacity-100" />
               </div>
@@ -1096,7 +1233,7 @@ const AnalyticsPage: React.FC = () => {
                   content: (
                     <div className="space-y-3">
                       <p className="text-gray-600 dark:text-gray-400">Total amount outstanding from customers (overdue and current).</p>
-                      <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">Rs. {(MOCK_OUTSTANDING_AMOUNT / 1000).toFixed(0)}k</div>
+                      <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">Rs. {(outstandingAmount / 1000).toFixed(0)}k</div>
                       <div className="space-y-2 text-sm">
                         {mockOutstandingAging.map((a, i) => (
                           <div key={i} className="flex justify-between">
@@ -1114,7 +1251,7 @@ const AnalyticsPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Outstanding</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">Rs. {(MOCK_OUTSTANDING_AMOUNT / 1000).toFixed(0)}k</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">Rs. {(outstandingAmount / 1000).toFixed(0)}k</p>
                 </div>
                 <DollarSign className="w-8 h-8 text-amber-500 dark:text-amber-400 opacity-80 group-hover:opacity-100" />
               </div>
@@ -1127,7 +1264,7 @@ const AnalyticsPage: React.FC = () => {
                   content: (
                     <div className="space-y-3">
                       <p className="text-gray-600 dark:text-gray-400">Rental agreements created in the current month. Indicates sales pipeline health.</p>
-                      <div className="text-3xl font-bold text-gray-900 dark:text-white">{MOCK_NEW_AGREEMENTS_THIS_MONTH}</div>
+                      <div className="text-3xl font-bold text-gray-900 dark:text-white">{newAgreementsThisMonth}</div>
                       <p className="text-xs text-gray-500 dark:text-gray-400">Compare with previous months in the Rental Status section.</p>
                     </div>
                   ),
@@ -1138,7 +1275,7 @@ const AnalyticsPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">New (Month)</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{MOCK_NEW_AGREEMENTS_THIS_MONTH}</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{newAgreementsThisMonth}</p>
                 </div>
                 <FileCheck className="w-8 h-8 text-green-500 dark:text-green-400 opacity-80 group-hover:opacity-100" />
               </div>
@@ -1250,7 +1387,7 @@ const AnalyticsPage: React.FC = () => {
                   <LineChart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
-              <RevenueLineChart data={mockMonthlyRevenue} />
+              <RevenueLineChart data={monthlyRevenueForCharts} />
             </div>
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
               <div className="flex items-center justify-between mb-4">
@@ -1357,7 +1494,7 @@ const AnalyticsPage: React.FC = () => {
                   <LineChart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
-              <BarChart data={mockMonthlyRevenue} />
+              <BarChart data={monthlyRevenueForCharts} />
             </div>
 
             {/* Top 5 Machine Models by Utilization */}
@@ -1575,11 +1712,11 @@ const AnalyticsPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Total Machines</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">50</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{latestAnalytics?.machines?.total ?? 50}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Active Rentals</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">42</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{activeRentals}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Avg Rental Duration</p>

@@ -380,6 +380,10 @@ model PurchaseOrder {
   totalAmount     Decimal  @db.Decimal(15, 2)
   status          PurchaseOrderStatus @default(PENDING)
   
+  // Rental period for agreements created from this PO (user cannot change in Create Hiring form)
+  startDate       DateTime? @db.Timestamptz(6)
+  endDate         DateTime? @db.Timestamptz(6)
+  
   // Purchase request machines (stored as JSON for flexibility)
   machines        Json[] // Array of machine requests with quantities
   

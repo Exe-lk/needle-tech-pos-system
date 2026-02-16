@@ -108,6 +108,39 @@ interface GatePass {
 
 const API_BASE = '/api/v1';
 
+// API gate pass response shape (from POST /api/v1/gate-passes)
+interface ApiGatePassResponse {
+  id: string;
+  gatePassNumber: string;
+  rentalId: string;
+  customerId: string;
+  driverName: string | null;
+  vehicleNumber: string | null;
+  departureTime: string;
+  arrivalTime: string | null;
+  status: string;
+  rental?: { agreementNumber?: string; customer?: { name: string } };
+  customer?: {
+    name: string;
+    billingAddressLine1?: string | null;
+    billingAddressLine2?: string | null;
+    billingCity?: string | null;
+    billingRegion?: string | null;
+    billingPostalCode?: string | null;
+    billingCountry?: string | null;
+  };
+  issuedBy?: { name?: string };
+  machines?: Array<{
+    machine: {
+      serialNumber: string;
+      boxNumber?: string | null;
+      brand?: { name: string } | null;
+      model?: { name: string } | null;
+      type?: { name: string } | null;
+    };
+  }>;
+}
+
 // Backend API rental shape (from GET /rentals and GET /rentals/[id])
 interface ApiRentalMachine {
   machineId: string;
@@ -920,6 +953,7 @@ const RentalAgreementPage: React.FC = () => {
   const [isGatePassModalOpen, setIsGatePassModalOpen] = useState(false);
   const [selectedAgreement, setSelectedAgreement] = useState<RentalAgreement | null>(null);
   const [generatedGatePass, setGeneratedGatePass] = useState<GatePass | null>(null);
+  const [isCreatingGatePass, setIsCreatingGatePass] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Gatepass form state
@@ -1466,12 +1500,6 @@ const typeOptions = useMemo(() => {
     }
   };
 
-  // Generate Gatepass Number
-  const generateGatepassNo = (): string => {
-    const num = Math.floor(Math.random() * 1000000);
-    return num.toString().padStart(6, '0');
-  };
-
   // Handle Generate Gatepass
   const handleGenerateGatePass = (agreement: RentalAgreement) => {
     setSelectedAgreement(agreement);
@@ -1494,55 +1522,100 @@ const typeOptions = useMemo(() => {
     setIssuedBy('');
   };
 
+  /** Map API gate pass response to UI GatePass shape for display/print */
+  function mapApiGatePassToUI(api: ApiGatePassResponse): GatePass {
+    const customer = api.customer ?? api.rental?.customer;
+    const addressParts = customer
+      ? [
+          (customer as { billingAddressLine1?: string }).billingAddressLine1,
+          (customer as { billingAddressLine2?: string }).billingAddressLine2,
+          (customer as { billingCity?: string }).billingCity,
+          (customer as { billingRegion?: string }).billingRegion,
+          (customer as { billingPostalCode?: string }).billingPostalCode,
+          (customer as { billingCountry?: string }).billingCountry,
+        ].filter(Boolean)
+      : [];
+    const items: GatePassItem[] = (api.machines ?? []).map((m, index) => {
+      const machine = m.machine;
+      const brand = machine.brand?.name ?? '';
+      const model = machine.model?.name ?? '';
+      const type = machine.type?.name ?? '';
+      const description = `${brand} ${model}${type ? ` - ${type}` : ''}`.trim() || 'Machine';
+      return {
+        id: (index + 1).toString(),
+        description: description.toUpperCase(),
+        status: 'GOOD',
+        serialNo: machine.serialNumber ?? '',
+        motorBoxNo: machine.boxNumber ?? 'N/A',
+      };
+    });
+    return {
+      id: Date.now(),
+      gatepassNo: api.gatePassNumber,
+      agreementReference: api.rental?.agreementNumber ?? selectedAgreement?.agreementNo ?? '',
+      dateOfIssue: api.departureTime ? new Date(api.departureTime).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      returnable,
+      entry,
+      from: 'Needle Technologies',
+      to: (customer as { name?: string })?.name ?? selectedAgreement?.customerName ?? '',
+      toAddress: addressParts.join(', '),
+      vehicleNumber: api.vehicleNumber ?? vehicleNumber,
+      driverName: api.driverName ?? driverName,
+      items,
+      issuedBy: api.issuedBy?.name ?? (issuedBy || 'System'),
+      receivedBy: '',
+    };
+  }
+
   const handleCreateGatePass = async () => {
     if (!selectedAgreement) return;
 
-    // Validate required fields
     if (!vehicleNumber.trim() || !driverName.trim()) {
       alert('Please fill in Vehicle Number and Driver Name');
       return;
     }
 
-    let agreementInfo: RentalAgreementInfo | null =
-      (rentalDetail?.id === selectedAgreement.id ? rentalDetail : null) ??
-      getRentalAgreementInfoFromList(selectedAgreement.id, agreements);
-    if (!agreementInfo) {
-      agreementInfo = await fetchRentalById(selectedAgreement.id);
+    setIsCreatingGatePass(true);
+    try {
+      const res = await fetch(`${API_BASE}/gate-passes`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          rentalId: selectedAgreement.id,
+          driverName: driverName.trim(),
+          vehicleNumber: vehicleNumber.trim(),
+          departureTime: new Date().toISOString(),
+          notes: [returnable ? 'Returnable: YES' : 'Returnable: NO', `Entry: ${entry}`].join('; '),
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        const message = json?.message ?? 'Failed to create gate pass';
+        const details = json?.data?.errors
+          ? Object.entries(json.data.errors)
+              .map(([k, v]) => `${k}: ${(v as string[]).join(', ')}`)
+              .join('; ')
+          : '';
+        alert(details ? `${message}\n${details}` : message);
+        return;
+      }
+
+      const apiGatePass = json?.data as ApiGatePassResponse | undefined;
+      if (!apiGatePass?.gatePassNumber) {
+        alert('Invalid response from server.');
+        return;
+      }
+
+      const gatePass = mapApiGatePassToUI(apiGatePass);
+      setGeneratedGatePass(gatePass);
+    } catch (err: any) {
+      console.error('Create gate pass error:', err);
+      alert(err?.message ?? 'Failed to create gate pass. Please try again.');
+    } finally {
+      setIsCreatingGatePass(false);
     }
-    if (!agreementInfo) {
-      alert('Could not load agreement details.');
-      return;
-    }
-    const customer = customers.find((c) => c.id === selectedAgreement.customerNo) ?? mockCustomers.find((c) => c.id === selectedAgreement.customerNo);
-    const gatepassNo = generateGatepassNo();
-
-    // Convert machines to gatepass items
-    const gatePassItems: GatePassItem[] = agreementInfo.machines.map((machine, index) => ({
-      id: (index + 1).toString(),
-      description: machine.machineDescription,
-      status: 'GOOD',
-      serialNo: machine.serialNo,
-      motorBoxNo: machine.motorBoxNo || 'N/A',
-    }));
-
-    const gatePass: GatePass = {
-      id: Date.now(),
-      gatepassNo,
-      agreementReference: selectedAgreement.agreementNo,
-      dateOfIssue: new Date().toISOString().split('T')[0],
-      returnable,
-      entry,
-      from: 'Needle Technologies',
-      to: selectedAgreement.customerName,
-      toAddress: (customer as { address?: string })?.address ?? agreementInfo.customerAddress ?? '',
-      vehicleNumber,
-      driverName,
-      items: gatePassItems,
-      issuedBy: issuedBy || 'System',
-      receivedBy: '',
-    };
-
-    setGeneratedGatePass(gatePass);
   };
 
   const handlePrintGatePass = () => {
@@ -3009,9 +3082,17 @@ const typeOptions = useMemo(() => {
                       <button
                         type="button"
                         onClick={handleCreateGatePass}
-                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 dark:bg-green-700 rounded-lg hover:bg-green-700 dark:hover:bg-green-800 transition-colors"
+                        disabled={isCreatingGatePass}
+                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 dark:bg-green-700 rounded-lg hover:bg-green-700 dark:hover:bg-green-800 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        Generate Gatepass
+                        {isCreatingGatePass ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          'Generate Gatepass'
+                        )}
                       </button>
                     </div>
                   </div>

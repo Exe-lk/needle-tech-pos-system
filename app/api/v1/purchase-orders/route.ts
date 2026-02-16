@@ -68,6 +68,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
         customerName: po.customer?.name || '',
         customerType: po.customer?.type === 'GARMENT_FACTORY' ? 'Business' : 'Individual',
         requestDate: po.requestDate,
+        startDate: (po as any).startDate ?? null,
+        endDate: (po as any).endDate ?? null,
         totalAmount: parseFloat(po.totalAmount.toString()),
         status: po.status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
         requestedMachines,
@@ -136,6 +138,12 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         machines: !machines.length ? ['At least one machine is required'] : [],
       });
     }
+    if (!startDate || !endDate) {
+      return validationErrorResponse('Rental period is required', {
+        startDate: !startDate ? ['Rental start date is required'] : [],
+        endDate: !endDate ? ['Rental end date is required'] : [],
+      });
+    }
     
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
     
@@ -168,6 +176,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         requestNumber,
         customerId,
         requestDate: new Date(requestDate),
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
         totalAmount: new Decimal(totalAmount || 0),
         status: 'PENDING',
         machines: machineData,
@@ -185,6 +195,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       customerId: newPurchaseOrder.customerId,
       customerName: newPurchaseOrder.customer.name,
       requestDate: newPurchaseOrder.requestDate,
+      startDate: (newPurchaseOrder as any).startDate ?? null,
+      endDate: (newPurchaseOrder as any).endDate ?? null,
       totalAmount: parseFloat(newPurchaseOrder.totalAmount.toString()),
       status: newPurchaseOrder.status,
       machines: machineData,

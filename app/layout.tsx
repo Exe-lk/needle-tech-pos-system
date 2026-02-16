@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Footer from "@/src/components/common/footer";
+import ConditionalFooter from "@/src/components/common/ConditionalFooter";
 import { SidebarProvider } from "@/src/contexts/SidebarContext";
 
 const geistSans = Geist({
@@ -52,7 +52,7 @@ export default function RootLayout({
             {children}
           </div>
           <div className="flex-shrink-0">
-            <Footer />
+            <ConditionalFooter />
           </div>
         </SidebarProvider>
       </body>

@@ -98,7 +98,7 @@ export const PUT = withAuthAndRole(['ADMIN', 'MANAGER'], async (
   }
 });
 
-export const DELETE = withAuthAndRole(['ADMIN'], async (
+export const DELETE = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }

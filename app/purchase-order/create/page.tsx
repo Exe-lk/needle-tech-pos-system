@@ -6,7 +6,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import CreateForm, { FormField } from '@/src/components/form-popup/create';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
-import { X, Plus, Trash2, ChevronDown, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, ChevronRight, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 
@@ -500,11 +500,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
     ]);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-    // API data: registered customers and inventory (available stock by brand+model)
+    // API data: registered customers and inventory (available stock by brand+model+type to match inventory page)
     const [customers, setCustomers] = useState<ApiCustomer[]>([]);
     const [customersLoading, setCustomersLoading] = useState(true);
-    const [inventoryByBrandModel, setInventoryByBrandModel] = useState<Record<string, number>>({});
-    const [brandModelList, setBrandModelList] = useState<{ brand: string; model: string; type: string }[]>([]);
+    const [inventoryByBrandModelType, setInventoryByBrandModelType] = useState<Record<string, number>>({});
+    const [brandModelTypeList, setBrandModelTypeList] = useState<{ brand: string; model: string; type: string }[]>([]);
 
     const getAuthHeaders = useCallback(() => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
@@ -536,44 +536,43 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }
     }, [getAuthHeaders]);
 
-    const fetchMachinesForInventory = useCallback(async () => {
+    // Fetch inventory from same API as inventory page: availableStock per brand+model+type (source of truth)
+    const fetchInventory = useCallback(async () => {
         try {
-            const params = new URLSearchParams({ page: '1', limit: '2000', status: 'AVAILABLE' });
-            const response = await fetch(`${API_BASE_URL}/machines?${params.toString()}`, {
+            const params = new URLSearchParams({ page: '1', limit: '2000' });
+            const response = await fetch(`${API_BASE_URL}/inventory?${params.toString()}`, {
                 method: 'GET',
                 headers: getAuthHeaders(),
                 credentials: 'include',
             });
             const json = await response.json();
-            const list = Array.isArray(json?.data?.items) ? json.data.items : [];
+            const rawItems = json?.data?.items;
+            const list = Array.isArray(rawItems?.inventory) ? rawItems.inventory : Array.isArray(rawItems) ? rawItems : [];
             const countByKey: Record<string, number> = {};
-            const brandModelSet: { brand: string; model: string; type: string }[] = [];
-            const seen = new Set<string>();
-            list.forEach((m: { brand?: string; model?: string; type?: string }) => {
-                const brand = (m.brand || '').trim();
-                const model = (m.model || '').trim();
-                const type = (m.type || 'Other').trim();
+            const listWithType: { brand: string; model: string; type: string }[] = [];
+            list.forEach((item: { brand?: string; model?: string; type?: string; availableStock?: number }) => {
+                const brand = (item.brand || '').trim();
+                const model = (item.model || '').trim();
+                const type = (item.type || 'Other').trim();
+                const availableStock = typeof item.availableStock === 'number' ? item.availableStock : 0;
                 if (brand && model) {
-                    const key = `${brand}|${model}`;
-                    countByKey[key] = (countByKey[key] || 0) + 1;
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        brandModelSet.push({ brand, model, type });
-                    }
+                    const key = `${brand}|${model}|${type}`;
+                    countByKey[key] = availableStock;
+                    listWithType.push({ brand, model, type });
                 }
             });
-            setInventoryByBrandModel(countByKey);
-            setBrandModelList(brandModelSet);
+            setInventoryByBrandModelType(countByKey);
+            setBrandModelTypeList(listWithType);
         } catch {
-            setInventoryByBrandModel({});
-            setBrandModelList([]);
+            setInventoryByBrandModelType({});
+            setBrandModelTypeList([]);
         }
     }, [getAuthHeaders]);
 
     useEffect(() => {
         fetchCustomers();
-        fetchMachinesForInventory();
-    }, [fetchCustomers, fetchMachinesForInventory]);
+        fetchInventory();
+    }, [fetchCustomers, fetchInventory]);
 
     // Get outstanding alerts for selected customer (mock data; when using API customers, match by id string or skip)
     const customerOutstandingAlerts = useMemo(() => {
@@ -596,19 +595,30 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     // Get available models based on selected brand (from API-derived list, fallback to mock)
     const getAvailableModels = (brand: string) => {
-        if (brandModelList.length > 0) {
-            const models = brandModelList.filter((m) => m.brand === brand).map((m) => m.model);
+        if (brandModelTypeList.length > 0) {
+            const models = brandModelTypeList.filter((m) => m.brand === brand).map((m) => m.model);
             return [...new Set(models)].sort();
         }
         const brandData = mockMachineModels.find((m) => m.brand === brand);
         return brandData?.models || [];
     };
 
-    // Get available stock for a brand/model combination (from API inventory, fallback to mock)
-    const getAvailableStock = (brand: string, model: string): number => {
-        const key = `${brand}|${model}`;
-        if (Object.keys(inventoryByBrandModel).length > 0) {
-            return inventoryByBrandModel[key] ?? 0;
+    // Get available types for selected brand+model (from API so only types with stock are shown; fallback to mock)
+    const getAvailableTypes = (brand: string, model: string): string[] => {
+        if (brandModelTypeList.length > 0) {
+            const types = brandModelTypeList
+                .filter((m) => m.brand === brand && m.model === model)
+                .map((m) => m.type);
+            return [...new Set(types)].sort();
+        }
+        return mockMachineTypes;
+    };
+
+    // Get available stock for brand+model+type (matches inventory page grain; fallback to mock by brand+model sum)
+    const getAvailableStock = (brand: string, model: string, type: string): number => {
+        if (Object.keys(inventoryByBrandModelType).length > 0) {
+            const key = `${brand}|${model}|${type}`;
+            return inventoryByBrandModelType[key] ?? 0;
         }
         const inventoryItem = mockInventory.find(
             (item) => item.brand === brand && item.model === model
@@ -618,8 +628,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     // Get unique brands (from API-derived list, fallback to mock)
     const getAvailableBrands = () => {
-        if (brandModelList.length > 0) {
-            const brands = [...new Set(brandModelList.map((m) => m.brand))].filter(Boolean).sort();
+        if (brandModelTypeList.length > 0) {
+            const brands = [...new Set(brandModelTypeList.map((m) => m.brand))].filter(Boolean).sort();
             return brands;
         }
         const allBrands = new Set<string>();
@@ -646,13 +656,13 @@ const CreatePurchaseRequestPage: React.FC = () => {
             }));
     }, [customers]);
 
-    // Prepare brand options
+    // Prepare brand options (from inventory API when loaded)
     const brandOptions = useMemo(() => {
         return getAvailableBrands().map((brand) => ({
             value: brand,
             label: brand,
         }));
-    }, []);
+    }, [brandModelTypeList]);
 
     // Prepare model options for each machine
     const getModelOptions = (brand: string) => {
@@ -662,13 +672,13 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }));
     };
 
-    // Prepare type options
-    const typeOptions = useMemo(() => {
-        return mockMachineTypes.map((type) => ({
+    // Type options are per brand+model (only types with stock for that combination)
+    const getTypeOptions = (brand: string, model: string) => {
+        return getAvailableTypes(brand, model).map((type) => ({
             value: type,
             label: type,
         }));
-    }, []);
+    };
 
     // Calculate pricing
     const pricing = useMemo(() => {
@@ -724,19 +734,24 @@ const CreatePurchaseRequestPage: React.FC = () => {
             machines.map((m) => {
                 if (m.id === id) {
                     const updated = { ...m, [field]: value };
-                    // Reset model when brand changes
+                    // Reset model and type when brand changes
                     if (field === 'brand') {
                         updated.model = '';
+                        updated.type = '';
                         updated.availableStock = 0;
                     }
-                    // Update available stock when model changes
-                    if (field === 'model' && updated.brand) {
-                        updated.availableStock = getAvailableStock(updated.brand, value);
+                    // Reset type when model changes
+                    if (field === 'model') {
+                        updated.type = '';
+                        updated.availableStock = 0;
                     }
-                    // Update standard price when type changes
+                    // Update available stock when type is selected (brand+model+type = inventory grain)
                     if (field === 'type') {
                         updated.unitPrice = standardPrices[value] || 0;
                         updated.totalPrice = (standardPrices[value] || 0) * updated.quantity;
+                        if (updated.brand && updated.model) {
+                            updated.availableStock = getAvailableStock(updated.brand, updated.model, value);
+                        }
                     }
                     // Update total price when quantity changes
                     if (field === 'quantity') {
@@ -802,6 +817,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 customerId: selectedCustomerId,
                 customerName,
                 requestDate: new Date().toISOString().split('T')[0],
+                startDate: startDate || undefined,
+                endDate: endDate || undefined,
                 machines: machinesWithStatus,
                 totalAmount: pricing,
             };
@@ -1041,24 +1058,24 @@ const CreatePurchaseRequestPage: React.FC = () => {
             <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
                 }`}>
                 <div className="max-w-6xl mx-auto space-y-6">
-                    {/* Page header */}
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                            <div>
-                                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                                    Create Purchase Order
-                                </h2>
-                                
-                            </div>
-                        </div>
+                    {/* Page header: back button top left (same as inventory/stock-in) */}
+                    <div className="flex items-center gap-4">
                         <Tooltip content="Back to Purchase Orders">
                             <button
                                 onClick={() => router.push('/purchase-order')}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors"
+                                className="flex items-center justify-center p-2 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors shrink-0"
                             >
-                                Back
+                                <ChevronRight className="w-5 h-5 rotate-180" />
                             </button>
                         </Tooltip>
+                        <div>
+                            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                                Create Purchase Order
+                            </h2>
+                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                Create a new purchase order and select customer, dates, and machines.
+                            </p>
+                        </div>
                     </div>
 
                     {/* Form Card - Letterhead-style document (matches official PO / letterhead) */}
@@ -1211,9 +1228,10 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machine Details</h3>
 
                                 {machines.map((machine, index) => {
-                                    const availableStock = machine.brand && machine.model
-                                        ? getAvailableStock(machine.brand, machine.model)
-                                        : 0;
+                                    const availableStock =
+                                        machine.brand && machine.model && machine.type
+                                            ? getAvailableStock(machine.brand, machine.model, machine.type)
+                                            : 0;
 
                                     return (
                                         <div
@@ -1276,8 +1294,9 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                     <SearchableSelect
                                                         value={machine.type}
                                                         onChange={(value) => handleMachineChange(machine.id, 'type', value)}
-                                                        options={typeOptions}
+                                                        options={getTypeOptions(machine.brand, machine.model)}
                                                         placeholder="Select Type"
+                                                        disabled={!machine.brand || !machine.model}
                                                         error={formErrors[`machine_type_${index}`]}
                                                     />
                                                 </div>
@@ -1288,7 +1307,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
                                                             Quantity <span className="text-red-500">*</span>
                                                         </label>
-                                                        {machine.brand && machine.model && (
+                                                        {machine.brand && machine.model && machine.type && (
                                                             <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md flex-shrink-0 ${
                                                                 availableStock > 0
                                                                     ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
@@ -1327,12 +1346,12 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                             {formErrors[`machine_quantity_${index}`]}
                                                         </p>
                                                     )}
-                                                    {machine.brand && machine.model && machine.quantity > availableStock && (
+                                                    {machine.brand && machine.model && machine.type && machine.quantity > availableStock && (
                                                         <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
                                                             {machine.quantity - availableStock} machine(s) will be marked as pending
                                                         </p>
                                                     )}
-                                                    {machine.brand && machine.model && availableStock === 0 && (
+                                                    {machine.brand && machine.model && machine.type && availableStock === 0 && (
                                                         <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
                                                             No stock available - all will be marked as pending
                                                         </p>

@@ -81,13 +81,13 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
-    
+
     const statusFilter = searchParams.get('status');
     const brandIdFilter = searchParams.get('brandId');
     const typeFilter = searchParams.get('type');
-    
+
     const where: any = {};
-    
+
     if (search) {
       where.OR = [
         { serialNumber: { contains: search, mode: 'insensitive' } },
@@ -97,39 +97,88 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
         { model: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
-    
+
     if (statusFilter) where.status = statusFilter.toUpperCase();
     if (brandIdFilter) where.brandId = brandIdFilter;
     if (typeFilter) {
       where.type = { name: { equals: typeFilter, mode: 'insensitive' } };
     }
-    
-    const totalItems = await prisma.machine.count({ where });
-    const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
-    
+
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
+
+    // Fetch all matching machines (no pagination yet — we paginate over groups)
     const machines = await prisma.machine.findMany({
       where,
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: sortOrder_ },
-      include: { 
-        brand: true, 
-        model: true, 
-        type: true 
-      }
+      orderBy: { createdAt: 'asc' }, // stable order within DB
+      include: {
+        brand: true,
+        model: true,
+        type: true,
+      },
     });
-    
-    // Transform machines for frontend
-    const transformedMachines = machines.map(transformMachineForFrontend);
-    
+
+    // Group by (brandId, modelId, typeId); handle nulls for model/type
+    const groupKey = (m: { brandId: string; modelId: string | null; typeId: string | null }) =>
+      `${m.brandId}|${m.modelId ?? ''}|${m.typeId ?? ''}`;
+
+    const groupMap = new Map<string, typeof machines>();
+    for (const m of machines) {
+      const key = groupKey(m);
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(m);
+    }
+
+    type Group = { machines: typeof machines; first: (typeof machines)[0] };
+    const groups: Group[] = Array.from(groupMap.values()).map((arr) => ({
+      machines: arr,
+      first: arr[0],
+    }));
+
+    // Sort groups by brand name, then model name, then type name (nulls last)
+    const sortByField = sortBy === 'brand' || sortBy === 'model' || sortBy === 'type' ? sortBy : 'brand';
+    groups.sort((a, b) => {
+      const aBrand = a.first.brand?.name ?? '';
+      const aModel = a.first.model?.name ?? '';
+      const aType = a.first.type?.name ?? '';
+      const bBrand = b.first.brand?.name ?? '';
+      const bModel = b.first.model?.name ?? '';
+      const bType = b.first.type?.name ?? '';
+      let cmp = 0;
+      if (sortByField === 'brand') cmp = aBrand.localeCompare(bBrand) || aModel.localeCompare(bModel) || aType.localeCompare(bType);
+      else if (sortByField === 'model') cmp = aModel.localeCompare(bModel) || aBrand.localeCompare(bBrand) || aType.localeCompare(bType);
+      else cmp = aType.localeCompare(bType) || aBrand.localeCompare(bBrand) || aModel.localeCompare(bModel);
+      return sortOrder_ === 'asc' ? cmp : -cmp;
+    });
+
+    const totalItems = groups.length;
+    const skip = (page - 1) * limit;
+    const paginatedGroups = groups.slice(skip, skip + limit);
+
+    // Map each group to one row for the list; keep same shape as before + count
+    const transformedMachines = paginatedGroups.map(({ machines: groupMachines, first }) => {
+      const count = groupMachines.length;
+      const single = count === 1;
+      const transformed = transformMachineForFrontend(first);
+      return {
+        ...transformed,
+        id: first.id,
+        barcode: single ? transformed.barcode : '—',
+        serialNumber: single ? transformed.serialNumber : `${count} units`,
+        boxNo: single ? transformed.boxNo : '—',
+        brand: transformed.brand,
+        model: transformed.model,
+        type: transformed.type,
+        count,
+      };
+    });
+
     const pagination = buildPaginationMeta(totalItems, page, limit);
-    
+
     return paginatedResponse(
       transformedMachines,
       pagination,
       'Machines retrieved successfully',
-      { sortBy, sortOrder: sortOrder_ },
+      { sortBy: sortByField, sortOrder: sortOrder_ },
       search || undefined,
       {
         ...(statusFilter && { status: statusFilter }),

@@ -21,6 +21,8 @@ interface PurchaseRequest {
     customerName: string;
     customerType: CustomerType;
     requestDate: string;
+    startDate?: string | null;
+    endDate?: string | null;
     totalAmount: number;
     status: PurchaseRequestStatus;
     requestedMachines: number;
@@ -202,11 +204,17 @@ const PurchaseOrderPage: React.FC = () => {
             alert('No machines available for rental from this purchase order. You can only create a rental agreement when at least one machine line has available stock.');
             return;
         }
+        const poStart = request.startDate ? (typeof request.startDate === 'string' ? request.startDate : new Date(request.startDate).toISOString().split('T')[0]) : '';
+        const poEnd = request.endDate ? (typeof request.endDate === 'string' ? request.endDate : new Date(request.endDate).toISOString().split('T')[0]) : '';
+        if (!poStart || !poEnd) {
+            alert('This purchase order has no rental period (start/end date). Please edit the purchase order to set the rental period before creating a hiring agreement.');
+            return;
+        }
         setSelectedRequest(request);
         setSelectedMachinesForRental({});
         setModifiedUnitPrices({});
-        setRentalStartDate('');
-        setRentalEndDate('');
+        setRentalStartDate(poStart);
+        setRentalEndDate(poEnd);
         setRentalFormErrors({});
         const availableMachines = request.machines?.map((machine) => {
             const available = Math.min(machine.availableStock, machine.quantity - (machine.rentedQuantity || 0));
@@ -288,7 +296,7 @@ const PurchaseOrderPage: React.FC = () => {
 
     const actions: ActionButton[] = [
         { label: '', icon: <Eye className="w-4 h-4" />, variant: 'secondary', onClick: handleViewRequest, tooltip: 'View Purchase Request', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600' },
-        { label: '', icon: <FileText className="w-4 h-4" />, variant: 'primary', onClick: (row: PurchaseRequest) => handleCreateRentalAgreement(row), tooltip: 'Create Rental Agreement (only when machines are available)', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500', shouldShow: (row: PurchaseRequest) => hasAvailableMachinesForRental(row) },
+        { label: '', icon: <FileText className="w-4 h-4" />, variant: 'primary', onClick: (row: PurchaseRequest) => handleCreateRentalAgreement(row), tooltip: 'Create Hiring Machine Agreement (only when machines are available)', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500', shouldShow: (row: PurchaseRequest) => hasAvailableMachinesForRental(row) },
     ];
 
     const renderStatusBadge = (status: PurchaseRequestStatus) => {
@@ -382,7 +390,7 @@ const PurchaseOrderPage: React.FC = () => {
     /** Printable purchase order in letterhead (used when user clicks Print in view modal). */
     const renderPurchaseOrderDocument = (request: PurchaseRequest) => (
         <div className="bg-white p-8 max-w-[210mm] mx-auto min-h-[297mm] flex flex-col print:p-8">
-            <LetterheadDocument documentTitle="PURCHASE ORDER" footerStyle="simple" className="print:p-0 flex flex-col flex-1">
+            <LetterheadDocument documentTitle="QUOTATION" footerStyle="simple" className="print:p-0 flex flex-col flex-1">
                 <div className="text-center mb-4">
                     <p className="text-lg font-bold text-gray-900">{request.requestNumber}</p>
                 </div>
@@ -475,7 +483,7 @@ const PurchaseOrderPage: React.FC = () => {
                             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                                 <div>
                                     <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Purchase Order Details</h2>
-                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{selectedRequest.requestNumber}</p>
+                                    {/* <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{selectedRequest.requestNumber}</p> */}
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <Tooltip content="Print">
@@ -502,8 +510,8 @@ const PurchaseOrderPage: React.FC = () => {
                         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                                 <div>
-                                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Create Rental Agreement</h2>
-                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">From Purchase Request: {selectedRequest.requestNumber}</p>
+                                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Create Hiring Machine Agreement</h2>
+                                    
                                 </div>
                                 <Tooltip content="Close">
                                     <button onClick={handleCloseRentalModal} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"><X className="w-5 h-5" /></button>
@@ -512,21 +520,25 @@ const PurchaseOrderPage: React.FC = () => {
                             <div className="flex-1 overflow-y-auto p-6">
                                 <div className="space-y-6">
                                     <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-                                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Customer Information</h3>
-                                        <p className="text-sm text-gray-900 dark:text-white">{selectedRequest.customerName}</p>
+                                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Customer : {selectedRequest.customerName}</h3>
+                                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Purchase Request : {selectedRequest.requestNumber}</h3>
+                                        
                                     </div>
                                     <div className="space-y-4">
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Rental Period</h3>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Fetched from the purchase order; cannot be changed.</p>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date <span className="text-red-500">*</span></label>
-                                                <input type="date" value={rentalStartDate} onChange={(e) => setRentalStartDate(e.target.value)} className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${rentalFormErrors.rentalStartDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`} />
-                                                {rentalFormErrors.rentalStartDate && <p className="mt-1 text-sm text-red-500">{rentalFormErrors.rentalStartDate}</p>}
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
+                                                <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-100 dark:bg-slate-700/80 text-gray-700 dark:text-gray-300 cursor-not-allowed">
+                                                    {rentalStartDate ? new Date(rentalStartDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                                                </div>
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date <span className="text-red-500">*</span></label>
-                                                <input type="date" value={rentalEndDate} onChange={(e) => setRentalEndDate(e.target.value)} min={rentalStartDate} className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${rentalFormErrors.rentalEndDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`} />
-                                                {rentalFormErrors.rentalEndDate && <p className="mt-1 text-sm text-red-500">{rentalFormErrors.rentalEndDate}</p>}
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date</label>
+                                                <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-100 dark:bg-slate-700/80 text-gray-700 dark:text-gray-300 cursor-not-allowed">
+                                                    {rentalEndDate ? new Date(rentalEndDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
