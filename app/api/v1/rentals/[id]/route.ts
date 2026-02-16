@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Decimal } from '@prisma/client/runtime/client';
 
 export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,

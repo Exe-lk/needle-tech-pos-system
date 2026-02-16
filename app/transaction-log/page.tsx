@@ -7,7 +7,7 @@ import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn } from '@/src/components/table/table';
 import { Download, Filter, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
-import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
+import { authFetch } from '@/lib/auth-client';
 
 // Align with API response and Prisma enums (API returns title-case; filters sent uppercase)
 type TransactionCategory = 'Inventory' | 'Rental' | 'Return' | 'Invoice' | 'Maintenance' | 'Other';
@@ -71,14 +71,6 @@ const SORT_BY_OPTIONS: { value: string; label: string }[] = [
   { value: 'performedBy', label: 'Performed By' },
 ];
 
-const getAuthHeaders = (): HeadersInit => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-};
-
 const TransactionLogPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
@@ -135,9 +127,8 @@ const TransactionLogPage: React.FC = () => {
     setLoading(true);
     try {
       const params = buildParams(false);
-      const res = await fetch(`${API_BASE_URL}/transaction-log?${params.toString()}`, {
+      const res = await authFetch(`${API_BASE_URL}/transaction-log?${params.toString()}`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -178,9 +169,8 @@ const TransactionLogPage: React.FC = () => {
     setExporting(true);
     try {
       const params = buildParams(true);
-      const res = await fetch(`${API_BASE_URL}/transaction-log/export?${params.toString()}`, {
+      const res = await authFetch(`${API_BASE_URL}/transaction-log/export?${params.toString()}`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
 

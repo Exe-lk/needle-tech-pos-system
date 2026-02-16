@@ -10,13 +10,13 @@ import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, Shield, User } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateEmail, validatePhoneNumber } from '@/src/utils/validation';
+import { authFetch, clearAuth, redirectToLogin } from '@/lib/auth-client';
 
 // ============================================================================
 // CONSTANTS & CONFIGURATION
 // ============================================================================
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
-const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -93,23 +93,14 @@ const formatRoleName = (role: string): string => {
   return roleMap[role] || role;
 };
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-  };
-};
-
 // ============================================================================
-// API FUNCTIONS
+// API FUNCTIONS (authFetch adds token and handles 401 → refresh → retry)
 // ============================================================================
 
 const fetchUsers = async (): Promise<User[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/users?limit=1000`, {
+    const response = await authFetch(`${API_BASE_URL}/users?limit=1000`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -140,9 +131,8 @@ const fetchUsers = async (): Promise<User[]> => {
 
 const fetchUserById = async (userId: string): Promise<ApiUserDetails> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+    const response = await authFetch(`${API_BASE_URL}/users/${userId}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -160,9 +150,8 @@ const fetchUserById = async (userId: string): Promise<ApiUserDetails> => {
 
 const fetchRoles = async (): Promise<RoleOption[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/roles?limit=100`, {
+    const response = await authFetch(`${API_BASE_URL}/roles?limit=100`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -188,9 +177,8 @@ const createUser = async (userData: {
   role: string;
 }): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/users`, {
+    const response = await authFetch(`${API_BASE_URL}/users`, {
       method: 'POST',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(userData),
     });
@@ -226,9 +214,8 @@ const updateUser = async (
   }
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+    const response = await authFetch(`${API_BASE_URL}/users/${userId}`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(userData),
     });
@@ -254,9 +241,8 @@ const updateUser = async (
 
 const deleteUser = async (userId: string): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+    const response = await authFetch(`${API_BASE_URL}/users/${userId}`, {
       method: 'DELETE',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -285,9 +271,8 @@ const createRole = async (roleData: {
   permissions: string[];
 }): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/roles`, {
+    const response = await authFetch(`${API_BASE_URL}/roles`, {
       method: 'POST',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(roleData),
     });
@@ -485,10 +470,8 @@ const UserManagementPage: React.FC = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
-    localStorage.removeItem('needletech_refresh_token');
-    localStorage.removeItem('needletech_user');
-    window.location.href = '/';
+    clearAuth();
+    redirectToLogin();
   };
 
   // Create User / Role Handlers

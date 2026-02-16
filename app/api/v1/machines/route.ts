@@ -45,6 +45,8 @@ const transformMachineForFrontend = (machine: any) => {
     stitchType: machine.stitchType || '',
     maxSpeedSpm: machine.maxSpeedSpm || null,
     currentCustomer: machine.currentCustomer || null,
+    unitPrice: machine.unitPrice != null ? Number(machine.unitPrice) : null,
+    monthlyRentalFee: machine.monthlyRentalFee != null ? Number(machine.monthlyRentalFee) : null,
   };
 };
 
@@ -260,6 +262,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       maxSpeedSpm,
       purchaseDate,
       location,
+      unitPrice,
+      monthlyRentalFee,
       // Legacy support
       serialNumber: providedSerialNumber,
       boxNumber: providedBoxNumber,
@@ -433,6 +437,8 @@ console.log('Photos to save:', allPhotos); // Debug log
     if (warrantyExpiryDate) machineData.warrantyExpiryDate = new Date(warrantyExpiryDate);
     if (purchaseDate) machineData.purchaseDate = new Date(purchaseDate);
     if (notes) machineData.notes = notes;
+    if (unitPrice != null && unitPrice !== '') machineData.unitPrice = parseFloat(unitPrice);
+    if (monthlyRentalFee != null && monthlyRentalFee !== '') machineData.monthlyRentalFee = parseFloat(monthlyRentalFee);
 
     // Create machine with all fields
     const newMachine = await prisma.machine.create({

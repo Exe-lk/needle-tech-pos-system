@@ -9,6 +9,7 @@ import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, History, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
+import { authFetch } from '@/lib/auth-client';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
@@ -22,7 +23,7 @@ interface Machine {
   type: MachineType;
 }
 
-// Machine Profile Data Types
+// Machine Profile Data Types (aligned with Machine schema and API)
 interface MachineInfo {
   id: string;
   barcode: string;
@@ -31,19 +32,28 @@ interface MachineInfo {
   brand: string;
   model: string;
   type: MachineType;
-  status: 'Available' | 'Rented' | 'Maintenance' | 'Retired';
+  status: 'Available' | 'Rented' | 'Maintenance' | 'Retired' | 'Damaged';
   currentCustomer?: string;
   photos?: string[];
-  purchaseDate?: string;
+  purchaseDate?: string | null;
   warrantyExpiry?: string;
   warrantyExpiryDate?: string | null;
   location?: string;
+  currentLocationType?: string;
+  currentLocationAddress?: string;
   notes?: string;
   manufactureYear?: string;
   country?: string;
   conditionOnArrival?: string;
   warrantyStatus?: string;
   registrationLocation?: string;
+  unitPrice?: number | null;
+  monthlyRentalFee?: number | null;
+  voltage?: string;
+  power?: string;
+  stitchType?: string;
+  maxSpeedSpm?: number | null;
+  specsOther?: string;
 }
 
 // Machine Rental History Data Types
@@ -90,16 +100,11 @@ interface MachineTypeData {
 // API Functions
 const API_BASE_URL = '/api/v1';
 
-// Fetch all machines
+// Fetch all machines (authFetch handles 401 → refresh → redirect to login)
 const fetchMachines = async (): Promise<Machine[]> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/machines?limit=1000`, {
+    const response = await authFetch(`${API_BASE_URL}/machines?limit=1000`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
     });
 
@@ -117,14 +122,9 @@ const fetchMachines = async (): Promise<Machine[]> => {
 
 // Fetch active brands
 const fetchActiveBrands = async (): Promise<Brand[]> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/brands/active`, {
+    const response = await authFetch(`${API_BASE_URL}/brands/active`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
     });
 
@@ -142,18 +142,13 @@ const fetchActiveBrands = async (): Promise<Brand[]> => {
 
 // Fetch active models (with optional brandId filter)
 const fetchActiveModels = async (brandId?: string): Promise<Model[]> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
     const url = brandId 
       ? `${API_BASE_URL}/models/active?brandId=${brandId}`
       : `${API_BASE_URL}/models/active`;
     
-    const response = await fetch(url, {
+    const response = await authFetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
     });
 
@@ -171,14 +166,9 @@ const fetchActiveModels = async (brandId?: string): Promise<Model[]> => {
 
 // Fetch active machine types
 const fetchActiveMachineTypes = async (): Promise<MachineTypeData[]> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/machine-types/active`, {
+    const response = await authFetch(`${API_BASE_URL}/machine-types/active`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
     });
 
@@ -206,14 +196,9 @@ interface ToolRecord {
 
 // Fetch tools for dropdown options (distinct tool names, types, brands, models)
 const fetchTools = async (): Promise<ToolRecord[]> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/tools?limit=500`, {
+    const response = await authFetch(`${API_BASE_URL}/tools?limit=500`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
     });
 
@@ -231,14 +216,9 @@ const fetchTools = async (): Promise<ToolRecord[]> => {
 
 // Create tool
 const createTool = async (toolData: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/tools`, {
+    const response = await authFetch(`${API_BASE_URL}/tools`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
       body: JSON.stringify(toolData),
     });
@@ -267,14 +247,9 @@ const createTool = async (toolData: Record<string, any>): Promise<{ success: boo
 
 // Fetch machine by ID
 const fetchMachineById = async (machineId: string): Promise<MachineInfo | null> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/machines/${machineId}`, {
+    const response = await authFetch(`${API_BASE_URL}/machines/${machineId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
     });
 
@@ -292,14 +267,9 @@ const fetchMachineById = async (machineId: string): Promise<MachineInfo | null> 
 
 // Create machine
 const createMachine = async (machineData: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/machines`, {
+    const response = await authFetch(`${API_BASE_URL}/machines`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
       body: JSON.stringify(machineData),
     });
@@ -328,14 +298,9 @@ const createMachine = async (machineData: Record<string, any>): Promise<{ succes
 
 // Update machine
 const updateMachine = async (machineId: string, machineData: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/machines/${machineId}`, {
+    const response = await authFetch(`${API_BASE_URL}/machines/${machineId}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
       body: JSON.stringify(machineData),
     });
@@ -364,14 +329,9 @@ const updateMachine = async (machineId: string, machineData: Record<string, any>
 
 // Delete machine
 const deleteMachine = async (machineId: string): Promise<{ success: boolean; error?: string }> => {
-  const token = localStorage.getItem('needletech_access_token');
   try {
-    const response = await fetch(`${API_BASE_URL}/machines/${machineId}`, {
+    const response = await authFetch(`${API_BASE_URL}/machines/${machineId}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       credentials: 'include',
     });
 
@@ -476,6 +436,9 @@ const MachineListPage: React.FC = () => {
   const [toolBrands, setToolBrands] = useState<string[]>([]);
   const [toolModels, setToolModels] = useState<string[]>([]);
   const [isLoadingToolOptions, setIsLoadingToolOptions] = useState(false);
+
+  // Warranty status from machine form – when "Active", show Warranty Expires Date field
+  const [machineFormWarrantyStatus, setMachineFormWarrantyStatus] = useState<string>('');
 
   // Fetch machines on component mount
   useEffect(() => {
@@ -589,12 +552,14 @@ const MachineListPage: React.FC = () => {
     setIsCreateModalOpen(true);
     setActiveCreateTab('machine');
     setSelectedBrandId(''); // Reset brand selection
+    setMachineFormWarrantyStatus(''); // Reset warranty-based field visibility
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setActiveCreateTab('machine');
     setSelectedBrandId(''); // Reset brand selection
+    setMachineFormWarrantyStatus('');
   };
 
   const handleViewMachine = async (machine: Machine) => {
@@ -622,6 +587,7 @@ const MachineListPage: React.FC = () => {
     const machineDetail = await fetchMachineById(machine.id.toString());
     if (machineDetail) {
       setSelectedMachineDetail(machineDetail);
+      setMachineFormWarrantyStatus(machineDetail.warrantyStatus || '');
     }
     
     // Load dropdown data for update modal
@@ -633,6 +599,7 @@ const MachineListPage: React.FC = () => {
     setSelectedMachine(null);
     setSelectedMachineDetail(null);
     setSelectedBrandId('');
+    setMachineFormWarrantyStatus('');
   };
 
   const handleDeleteMachine = (machine: Machine) => {
@@ -785,19 +752,6 @@ const MachineListPage: React.FC = () => {
       ],
     },
     {
-      name: 'status',
-      label: 'Status',
-      type: 'select',
-      placeholder: 'Select status',
-      required: true,
-      options: [
-        { label: 'Available', value: 'Available' },
-        { label: 'Rented', value: 'Rented' },
-        { label: 'Maintenance', value: 'Maintenance' },
-        { label: 'Retired', value: 'Retired' },
-      ],
-    },
-    {
       name: 'warrantyStatus',
       label: 'Warranty Status',
       type: 'select',
@@ -808,12 +762,31 @@ const MachineListPage: React.FC = () => {
         { label: 'Expired', value: 'Expired' },
         { label: 'No Warranty', value: 'No Warranty' },
       ],
+      onChange: (value: string) => setMachineFormWarrantyStatus(value || ''),
+    },
+    ...(machineFormWarrantyStatus === 'Active'
+      ? [
+          {
+            name: 'warrantyExpiryDate',
+            label: 'Warranty Expires Date',
+            type: 'date' as const,
+            placeholder: 'Select date',
+            required: false,
+          } as FormField,
+        ]
+      : []),
+    {
+      name: 'unitPrice',
+      label: 'Unit Price',
+      type: 'number',
+      placeholder: 'Enter unit price (e.g. 0.00)',
+      required: false,
     },
     {
-      name: 'warrantyExpiryDate',
-      label: 'Warranty Expires Date',
-      type: 'date',
-      placeholder: 'Select date',
+      name: 'monthlyRentalFee',
+      label: 'Monthly Rental Fee',
+      type: 'number',
+      placeholder: 'Enter monthly rental fee (e.g. 0.00)',
       required: false,
     },
     {
@@ -840,6 +813,133 @@ const MachineListPage: React.FC = () => {
       required: false,
       multiple: true,
     },
+  ];
+
+  // Create form: same fields as above but without Invoice/GRN (simplified registration)
+  const getMachineCreateFields = (): FormField[] =>
+    getMachineFields().filter((f) => f.name !== 'invoiceGrn');
+
+  // Update form: full machine details (all Machine table columns editable except id/qr/onboarded)
+  const getMachineUpdateFields = (): FormField[] => [
+    { name: 'serialNumber', label: 'Serial Number', type: 'text', placeholder: 'Enter serial number', required: true },
+    { name: 'boxNo', label: 'Box Number', type: 'text', placeholder: 'Enter box number', required: false },
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      placeholder: 'Select status',
+      required: true,
+      options: [
+        { label: 'Available', value: 'Available' },
+        { label: 'Rented', value: 'Rented' },
+        { label: 'Maintenance', value: 'Maintenance' },
+        { label: 'Retired', value: 'Retired' },
+        { label: 'Damaged', value: 'Damaged' },
+      ],
+    },
+    {
+      name: 'brandId',
+      label: 'Brand',
+      type: 'select',
+      placeholder: isLoadingDropdowns ? 'Loading brands...' : 'Search or select brand, or type new',
+      required: true,
+      searchable: true,
+      creatable: true,
+      options: getBrandOptions(),
+      onChange: (value: string) => {
+        setSelectedBrandId(value);
+        const isExistingBrand = brands.some((b) => b.id === value);
+        if (isExistingBrand) {
+          loadModelsByBrand(value);
+        } else {
+          setModels([]);
+        }
+      },
+    },
+    {
+      name: 'modelId',
+      label: 'Model',
+      type: 'select',
+      placeholder: !selectedBrandId
+        ? 'Select a brand first'
+        : getModelOptions().length === 0
+          ? 'Type model name (new brand or no models yet)'
+          : 'Search or select model, or type new',
+      required: true,
+      searchable: true,
+      creatable: true,
+      options: getModelOptions(),
+      disabled: !selectedBrandId,
+    },
+    {
+      name: 'machineTypeId',
+      label: 'Type',
+      type: 'select',
+      placeholder: isLoadingDropdowns ? 'Loading types...' : 'Search or select machine type, or type new',
+      required: true,
+      searchable: true,
+      creatable: true,
+      options: getMachineTypeOptions(),
+    },
+    { name: 'voltage', label: 'Voltage', type: 'text', placeholder: 'e.g. 220V', required: false },
+    { name: 'power', label: 'Power', type: 'text', placeholder: 'e.g. 500W', required: false },
+    { name: 'stitchType', label: 'Stitch Type', type: 'text', placeholder: 'e.g. Lock Stitch', required: false },
+    { name: 'maxSpeedSpm', label: 'Max Speed (SPM)', type: 'number', placeholder: 'e.g. 5000', required: false },
+    { name: 'specsOther', label: 'Other Specs', type: 'textarea', placeholder: 'Any other technical specs', required: false, rows: 2 },
+    { name: 'currentLocationType', label: 'Location Type', type: 'text', placeholder: 'e.g. Warehouse, Customer Site', required: false },
+    { name: 'location', label: 'Location Name', type: 'text', placeholder: 'Current location name', required: false },
+    { name: 'currentLocationAddress', label: 'Location Address', type: 'textarea', placeholder: 'Full address if applicable', required: false, rows: 2 },
+    {
+      name: 'manufactureYear',
+      label: 'Manufact Year',
+      type: 'date',
+      placeholder: 'Select date',
+      required: false,
+    },
+    { name: 'country', label: 'Country', type: 'text', placeholder: 'Enter country', required: false },
+    {
+      name: 'conditionOnArrival',
+      label: 'Condition on Arrival',
+      type: 'select',
+      placeholder: 'Select condition',
+      required: false,
+      options: [
+        { label: 'New', value: 'New' },
+        { label: 'Used', value: 'Used' },
+        { label: 'Refurbished', value: 'Refurbished' },
+      ],
+    },
+    {
+      name: 'warrantyStatus',
+      label: 'Warranty Status',
+      type: 'select',
+      placeholder: 'Select warranty status',
+      required: false,
+      options: [
+        { label: 'Active', value: 'Active' },
+        { label: 'Expired', value: 'Expired' },
+        { label: 'No Warranty', value: 'No Warranty' },
+      ],
+      onChange: (value: string) => setMachineFormWarrantyStatus(value || ''),
+    },
+    ...(machineFormWarrantyStatus === 'Active'
+      ? [
+          {
+            name: 'warrantyExpiryDate',
+            label: 'Warranty Expires Date',
+            type: 'date' as const,
+            placeholder: 'Select date',
+            required: false,
+          } as FormField,
+        ]
+      : []),
+    { name: 'purchaseDate', label: 'Purchase Date', type: 'date', placeholder: 'Select date', required: false },
+    { name: 'unitPrice', label: 'Unit Price', type: 'number', placeholder: 'Enter unit price (e.g. 0.00)', required: false },
+    { name: 'monthlyRentalFee', label: 'Monthly Rental Fee', type: 'number', placeholder: 'Enter monthly rental fee (e.g. 0.00)', required: false },
+    { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Additional notes', required: false, rows: 3 },
+    { name: 'referencePhoto', label: 'Reference Photo', type: 'file-multiple', accept: 'image/*', required: false, multiple: true },
+    { name: 'serialPlatePhoto', label: 'Serial Plate Photo', type: 'file-multiple', accept: 'image/*', required: false, multiple: true },
+    { name: 'invoiceGrn', label: 'Invoice/GRN', type: 'file-multiple', accept: 'application/pdf,image/*', required: false, multiple: true },
   ];
 
   // Form fields for Tool Registration (options from existing tools, searchable + creatable)
@@ -906,19 +1006,6 @@ const MachineListPage: React.FC = () => {
       required: false,
     },
     {
-      name: 'status',
-      label: 'Status',
-      type: 'select',
-      placeholder: 'Select status',
-      required: true,
-      options: [
-        { label: 'Available', value: 'AVAILABLE' },
-        { label: 'In Use', value: 'IN_USE' },
-        { label: 'Maintenance', value: 'MAINTENANCE' },
-        { label: 'Retired', value: 'RETIRED' },
-      ],
-    },
-    {
       name: 'location',
       label: 'Location',
       type: 'select',
@@ -969,32 +1056,49 @@ const MachineListPage: React.FC = () => {
     },
   ];
 
-  // Get initial data for update form
+  // Format date for HTML date input (YYYY-MM-DD)
+  const toDateInputValue = (d: string | Date | null | undefined): string => {
+    if (d == null) return '';
+    const date = typeof d === 'string' ? new Date(d) : d;
+    return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+  };
+
+  // Get initial data for update form (all Machine fields for update popup)
   const getUpdateInitialData = (machine: Machine | null) => {
     if (!machine) return {};
 
     if (selectedMachineDetail) {
-      // Find the brand and model IDs based on names
       const brand = brands.find(b => b.name === selectedMachineDetail.brand);
       const model = models.find(m => m.name === selectedMachineDetail.model);
       const machineType = machineTypes.find(t => t.name === selectedMachineDetail.type);
+      const purchaseDate = selectedMachineDetail.purchaseDate;
+      const warrantyExpiry = selectedMachineDetail.warrantyExpiryDate ?? selectedMachineDetail.warrantyExpiry;
 
       return {
         barcode: selectedMachineDetail.barcode,
         serialNumber: selectedMachineDetail.serialNumber,
         boxNo: selectedMachineDetail.boxNo,
+        status: selectedMachineDetail.status,
         brandId: brand?.id,
         modelId: model?.id,
         machineTypeId: machineType?.id,
-        manufactureYear: selectedMachineDetail.manufactureYear,
-        country: selectedMachineDetail.country,
-        conditionOnArrival: selectedMachineDetail.conditionOnArrival,
-        status: selectedMachineDetail.status,
-        warrantyStatus: selectedMachineDetail.warrantyStatus,
-        warrantyExpiryDate: selectedMachineDetail.warrantyExpiryDate || selectedMachineDetail.warrantyExpiry,
-        purchaseDate: selectedMachineDetail.purchaseDate,
-        location: selectedMachineDetail.location,
-        notes: selectedMachineDetail.notes,
+        voltage: selectedMachineDetail.voltage ?? '',
+        power: selectedMachineDetail.power ?? '',
+        stitchType: selectedMachineDetail.stitchType ?? '',
+        maxSpeedSpm: selectedMachineDetail.maxSpeedSpm ?? '',
+        specsOther: selectedMachineDetail.specsOther ?? '',
+        currentLocationType: selectedMachineDetail.currentLocationType ?? '',
+        location: selectedMachineDetail.location ?? '',
+        currentLocationAddress: selectedMachineDetail.currentLocationAddress ?? '',
+        manufactureYear: selectedMachineDetail.manufactureYear ?? '',
+        country: selectedMachineDetail.country ?? '',
+        conditionOnArrival: selectedMachineDetail.conditionOnArrival ?? '',
+        warrantyStatus: selectedMachineDetail.warrantyStatus ?? '',
+        warrantyExpiryDate: toDateInputValue(warrantyExpiry),
+        purchaseDate: toDateInputValue(purchaseDate),
+        unitPrice: selectedMachineDetail.unitPrice ?? '',
+        monthlyRentalFee: selectedMachineDetail.monthlyRentalFee ?? '',
+        notes: selectedMachineDetail.notes ?? '',
       };
     }
 
@@ -1077,7 +1181,7 @@ const MachineListPage: React.FC = () => {
         serialNumber: data.serialNumber ? String(data.serialNumber).trim() : null,
         quantity: parseInt(data.quantity, 10) || 1,
         unitPrice: data.unitPrice != null && data.unitPrice !== '' ? parseFloat(data.unitPrice) : null,
-        status: data.status || 'AVAILABLE',
+        status: 'AVAILABLE', // Status field removed from form; new tools default to Available
         location: (data.location || '').trim(),
         purchaseDate: data.purchaseDate || null,
         condition: data.condition || 'NEW',
@@ -1557,7 +1661,7 @@ const MachineListPage: React.FC = () => {
               {activeCreateTab === 'machine' ? (
                 <CreateForm
                   title="Machine Registration"
-                  fields={getMachineFields()}
+                  fields={getMachineCreateFields()}
                   onSubmit={handleMachineSubmit}
                   onClear={handleClear}
                   submitButtonLabel="Register"
@@ -1603,7 +1707,7 @@ const MachineListPage: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-6">
               <UpdateForm
                 title=""
-                fields={getMachineFields()}
+                fields={getMachineUpdateFields()}
                 onSubmit={handleMachineUpdate}
                 onClear={handleClear}
                 submitButtonLabel="Update"

@@ -6,7 +6,7 @@ import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, Pencil } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
-import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
+import { authFetch } from '@/lib/auth-client';
 
 type AlertType = 'Payment Overdue' | 'High Balance' | 'Credit Limit Exceeded' | 'Agreement Expiring';
 type AlertSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
@@ -31,14 +31,6 @@ interface OutstandingAlert {
 }
 
 const API_BASE_URL = '/api/v1';
-
-const getAuthHeaders = (): HeadersInit => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-};
 
 // Table column configuration
 const columns: TableColumn[] = [
@@ -174,9 +166,8 @@ const OutstandingAlertsPage: React.FC = () => {
       params.set('limit', '100');
       params.set('sortBy', 'createdAt');
       params.set('sortOrder', 'desc');
-      const res = await fetch(`${API_BASE_URL}/outstanding-alerts?${params.toString()}`, {
+      const res = await authFetch(`${API_BASE_URL}/outstanding-alerts?${params.toString()}`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -247,9 +238,8 @@ const OutstandingAlertsPage: React.FC = () => {
         body.resolvedAt = undefined;
       }
 
-      const res = await fetch(`${API_BASE_URL}/outstanding-alerts/${selectedAlert.id}`, {
+      const res = await authFetch(`${API_BASE_URL}/outstanding-alerts/${selectedAlert.id}`, {
         method: 'PATCH',
-        headers: getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify(body),
       });

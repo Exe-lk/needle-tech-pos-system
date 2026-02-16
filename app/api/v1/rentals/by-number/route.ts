@@ -92,6 +92,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     
     const transformed = {
       id: rental.agreementNumber,
+      rentalId: rental.id,
       agreementNo: rental.agreementNumber,
       status: rental.status,
       customerName: rental.customer.name,

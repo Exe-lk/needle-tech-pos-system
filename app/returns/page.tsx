@@ -7,7 +7,7 @@ import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, Pencil, Package, FileText, Building2, MapPin, Camera, DollarSign, Calendar } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { useRouter } from 'next/navigation';
-import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
+import { authFetch } from '@/lib/auth-client';
 
 type ReturnType = 'Standard' | 'Damage' | 'Missing' | 'Exchange';
 type ReturnStatus = 'Pending' | 'Completed' | 'Under Review';
@@ -52,14 +52,6 @@ interface Return {
 }
 
 const API_BASE_URL = '/api/v1';
-
-const getAuthHeaders = () => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-};
 
 function toNum(v: unknown): number {
   if (v == null) return 0;
@@ -312,9 +304,8 @@ const ReturnsPage: React.FC = () => {
       params.set('limit', '500');
       params.set('sortBy', 'returnDate');
       params.set('sortOrder', 'desc');
-      const res = await fetch(`${API_BASE_URL}/returns?${params.toString()}`, {
+      const res = await authFetch(`${API_BASE_URL}/returns?${params.toString()}`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -392,9 +383,8 @@ const ReturnsPage: React.FC = () => {
       if (existingNote) notesParts.push(existingNote);
       const notes = notesParts.join(' ').trim();
 
-      const res = await fetch(`${API_BASE_URL}/returns/${selectedReturn.id}`, {
+      const res = await authFetch(`${API_BASE_URL}/returns/${selectedReturn.id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({ notes }),
       });

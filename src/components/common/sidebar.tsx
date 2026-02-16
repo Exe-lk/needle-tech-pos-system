@@ -24,7 +24,8 @@ import {
     ShoppingCart,
     Wrench,
 } from 'lucide-react';
-import { AUTH_ACCESS_TOKEN_KEY, AUTH_REFRESH_TOKEN_KEY, AUTH_USER_KEY } from '@/lib/auth-constants';
+import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
+import { clearAuth, getAccessToken } from '@/lib/auth-client';
 
 interface SidebarProps {
     className?: string;
@@ -167,20 +168,12 @@ const Sidebar: React.FC<SidebarProps> = ({
         }
     };
 
-    const clearAuthStorage = () => {
-        if (typeof window !== 'undefined') {
-            localStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
-            localStorage.removeItem(AUTH_REFRESH_TOKEN_KEY);
-            localStorage.removeItem(AUTH_USER_KEY);
-        }
-    };
-
     const handleLogout = async () => {
         if (isLoggingOut) return;
         setIsLoggingOut(true);
         try {
             if (onLogout) onLogout();
-            const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
+            const token = getAccessToken();
             if (token) {
                 const res = await fetch('/api/v1/auth/logout', {
                     method: 'POST',
@@ -194,7 +187,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         } catch (e) {
             console.warn('Logout request failed:', e);
         } finally {
-            clearAuthStorage();
+            clearAuth();
             setIsLoggingOut(false);
             router.push('/');
         }

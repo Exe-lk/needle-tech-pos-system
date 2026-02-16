@@ -13,7 +13,7 @@ const transformMachineForFrontend = (machine: any) => {
     'RENTED': 'Rented',
     'MAINTENANCE': 'Maintenance',
     'RETIRED': 'Retired',
-    'DAMAGED': 'Maintenance'
+    'DAMAGED': 'Damaged',
   };
 
   return {
@@ -33,6 +33,8 @@ const transformMachineForFrontend = (machine: any) => {
     warrantyExpiryDate: machine.warrantyExpiryDate || null,
     purchaseDate: machine.purchaseDate || null,
     location: machine.currentLocationName || '',
+    currentLocationType: machine.currentLocationType || '',
+    currentLocationAddress: machine.currentLocationAddress || '',
     notes: machine.notes || '',
     qrCodeValue: machine.qrCodeValue || '',
     qrCodeImageUrl: machine.qrCodeImageUrl || '',
@@ -40,7 +42,10 @@ const transformMachineForFrontend = (machine: any) => {
     power: machine.power || '',
     stitchType: machine.stitchType || '',
     maxSpeedSpm: machine.maxSpeedSpm || null,
+    specsOther: machine.specsOther || '',
     currentCustomer: machine.currentCustomer || null,
+    unitPrice: machine.unitPrice != null ? Number(machine.unitPrice) : null,
+    monthlyRentalFee: machine.monthlyRentalFee != null ? Number(machine.monthlyRentalFee) : null,
   };
 };
 
@@ -218,7 +223,8 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         'Available': 'AVAILABLE',
         'Rented': 'RENTED',
         'Maintenance': 'MAINTENANCE',
-        'Retired': 'RETIRED'
+        'Retired': 'RETIRED',
+        'Damaged': 'DAMAGED',
       };
       updateData.status = statusMap[body.status] || body.status.toUpperCase();
     }
@@ -238,11 +244,17 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       updateData.purchaseDate = body.purchaseDate ? new Date(body.purchaseDate) : null;
     }
     if (body.location !== undefined) updateData.currentLocationName = body.location;
+    if (body.currentLocationName !== undefined) updateData.currentLocationName = body.currentLocationName;
+    if (body.currentLocationType !== undefined) updateData.currentLocationType = body.currentLocationType;
+    if (body.currentLocationAddress !== undefined) updateData.currentLocationAddress = body.currentLocationAddress;
     if (body.notes !== undefined) updateData.notes = body.notes;
     if (body.voltage !== undefined) updateData.voltage = body.voltage;
+    if (body.specsOther !== undefined) updateData.specsOther = body.specsOther;
     if (body.power !== undefined) updateData.power = body.power;
     if (body.stitchType !== undefined) updateData.stitchType = body.stitchType;
     if (body.maxSpeedSpm !== undefined) updateData.maxSpeedSpm = body.maxSpeedSpm ? parseInt(body.maxSpeedSpm) : null;
+    if (body.unitPrice !== undefined) updateData.unitPrice = body.unitPrice != null && body.unitPrice !== '' ? parseFloat(body.unitPrice) : null;
+    if (body.monthlyRentalFee !== undefined) updateData.monthlyRentalFee = body.monthlyRentalFee != null && body.monthlyRentalFee !== '' ? parseFloat(body.monthlyRentalFee) : null;
     
     // Handle photos update
     if (body.referencePhoto || body.serialPlatePhoto) {

@@ -9,6 +9,7 @@ import { LetterheadDocument } from '@/src/components/letterhead/letterhead-docum
 import { X, Plus, Trash2, ChevronDown, ChevronRight, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
+import { authFetch } from '@/lib/auth-client';
 
 const API_BASE_URL = '/api/v1';
 
@@ -506,21 +507,12 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const [inventoryByBrandModelType, setInventoryByBrandModelType] = useState<Record<string, number>>({});
     const [brandModelTypeList, setBrandModelTypeList] = useState<{ brand: string; model: string; type: string }[]>([]);
 
-    const getAuthHeaders = useCallback(() => {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
-        return {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        };
-    }, []);
-
     const fetchCustomers = useCallback(async () => {
         setCustomersLoading(true);
         try {
             const params = new URLSearchParams({ page: '1', limit: '500', status: 'ACTIVE' });
-            const response = await fetch(`${API_BASE_URL}/customers?${params.toString()}`, {
+            const response = await authFetch(`${API_BASE_URL}/customers?${params.toString()}`, {
                 method: 'GET',
-                headers: getAuthHeaders(),
                 credentials: 'include',
             });
             const json = await response.json();
@@ -534,15 +526,14 @@ const CreatePurchaseRequestPage: React.FC = () => {
         } finally {
             setCustomersLoading(false);
         }
-    }, [getAuthHeaders]);
+    }, []);
 
     // Fetch inventory from same API as inventory page: availableStock per brand+model+type (source of truth)
     const fetchInventory = useCallback(async () => {
         try {
             const params = new URLSearchParams({ page: '1', limit: '2000' });
-            const response = await fetch(`${API_BASE_URL}/inventory?${params.toString()}`, {
+            const response = await authFetch(`${API_BASE_URL}/inventory?${params.toString()}`, {
                 method: 'GET',
-                headers: getAuthHeaders(),
                 credentials: 'include',
             });
             const json = await response.json();
@@ -567,7 +558,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             setInventoryByBrandModelType({});
             setBrandModelTypeList([]);
         }
-    }, [getAuthHeaders]);
+    }, []);
 
     useEffect(() => {
         fetchCustomers();
@@ -823,13 +814,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 totalAmount: pricing,
             };
 
-            const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
-            const response = await fetch('/api/v1/purchase-orders', {
+            const response = await authFetch('/api/v1/purchase-orders', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
                 credentials: 'include',
                 body: JSON.stringify(payload),
             });
@@ -954,9 +940,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 phones: [data.phone].filter(Boolean),
                 emails: [data.email].filter(Boolean),
             };
-            const response = await fetch(`${API_BASE_URL}/customers`, {
+            const response = await authFetch(`${API_BASE_URL}/customers`, {
                 method: 'POST',
-                headers: getAuthHeaders(),
                 credentials: 'include',
                 body: JSON.stringify(payload),
             });
@@ -991,9 +976,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 phones: [data.phone].filter(Boolean),
                 emails: [data.email].filter(Boolean),
             };
-            const response = await fetch(`${API_BASE_URL}/customers`, {
+            const response = await authFetch(`${API_BASE_URL}/customers`, {
                 method: 'POST',
-                headers: getAuthHeaders(),
                 credentials: 'include',
                 body: JSON.stringify(payload),
             });

@@ -10,6 +10,7 @@ import { Eye, Pencil, X, Plus, Trash2, Printer, FileText, ExternalLink, QrCode, 
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument, LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
+import { authFetch } from '@/lib/auth-client';
 
 type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
 
@@ -997,22 +998,13 @@ const RentalAgreementPage: React.FC = () => {
     activeScanCategoryIndexRef.current = activeScanCategoryIndex;
   }, [activeScanCategoryIndex]);
 
-  const getAuthHeaders = useCallback((): HeadersInit => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }, []);
-
   const fetchRentals = useCallback(async () => {
     setFetchError(null);
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: '1', limit: '500', sortBy: 'createdAt', sortOrder: 'desc' });
-      const res = await fetch(`${API_BASE}/rentals?${params}`, {
+      const res = await authFetch(`${API_BASE}/rentals?${params}`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -1026,13 +1018,12 @@ const RentalAgreementPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [getAuthHeaders]);
+  }, []);
 
   const fetchRentalById = useCallback(async (id: string): Promise<RentalAgreementInfo | null> => {
     try {
-      const res = await fetch(`${API_BASE}/rentals/${id}`, {
+      const res = await authFetch(`${API_BASE}/rentals/${id}`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -1043,14 +1034,13 @@ const RentalAgreementPage: React.FC = () => {
     } catch {
       return null;
     }
-  }, [getAuthHeaders]);
+  }, []);
 
   const fetchCustomers = useCallback(async () => {
     try {
       const params = new URLSearchParams({ page: '1', limit: '1000' });
-      const res = await fetch(`${API_BASE}/customers?${params}`, {
+      const res = await authFetch(`${API_BASE}/customers?${params}`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -1067,7 +1057,7 @@ const RentalAgreementPage: React.FC = () => {
     } catch {
       // keep existing customers (mock or previous)
     }
-  }, [getAuthHeaders]);
+  }, []);
 
   useEffect(() => {
     fetchRentals();
@@ -1343,9 +1333,8 @@ const typeOptions = useMemo(() => {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE}/rentals`, {
+      const res = await authFetch(`${API_BASE}/rentals`, {
         method: 'POST',
-        headers: getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({
           customerId,
@@ -1577,9 +1566,8 @@ const typeOptions = useMemo(() => {
 
     setIsCreatingGatePass(true);
     try {
-      const res = await fetch(`${API_BASE}/gate-passes`, {
+      const res = await authFetch(`${API_BASE}/gate-passes`, {
         method: 'POST',
-        headers: getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({
           rentalId: selectedAgreement.id,
@@ -1709,9 +1697,8 @@ const typeOptions = useMemo(() => {
         ...(data.endDate != null && data.endDate !== '' && { endDate: data.endDate }),
       };
 
-      const res = await fetch(`${API_BASE}/rentals/${selectedAgreement.id}`, {
+      const res = await authFetch(`${API_BASE}/rentals/${selectedAgreement.id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify(body),
       });

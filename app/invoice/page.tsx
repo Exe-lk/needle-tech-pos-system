@@ -7,10 +7,10 @@ import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Download, FileText, Trash2, Printer, Calendar } from 'lucide-react';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
+import { authFetch } from '@/lib/auth-client';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
-const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
@@ -149,14 +149,6 @@ interface CustomerOption {
 }
 
 // Helper Functions
-const getAuthHeaders = () => {
-  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-  };
-};
-
 const mapApiTypeToFrontend = (apiType: 'GARMENT_FACTORY' | 'INDIVIDUAL'): 'Company' | 'Individual' => {
   return apiType === 'GARMENT_FACTORY' ? 'Company' : 'Individual';
 };
@@ -198,9 +190,8 @@ const buildCustomerAddress = (customer: ApiCustomer): string => {
 // API Functions
 const fetchCustomers = async (): Promise<CustomerOption[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers?limit=1000`, {
+    const response = await authFetch(`${API_BASE_URL}/customers?limit=1000`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -226,9 +217,8 @@ const fetchCustomers = async (): Promise<CustomerOption[]> => {
 
 const fetchBrands = async (): Promise<Brand[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/brands/active`, {
+    const response = await authFetch(`${API_BASE_URL}/brands/active`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -250,9 +240,8 @@ const fetchModels = async (brandId?: string): Promise<Model[]> => {
       ? `${API_BASE_URL}/models/active?brandId=${brandId}`
       : `${API_BASE_URL}/models/active`;
     
-    const response = await fetch(url, {
+    const response = await authFetch(url, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -270,9 +259,8 @@ const fetchModels = async (brandId?: string): Promise<Model[]> => {
 
 const fetchMachineTypes = async (): Promise<MachineTypeData[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/machine-types/active`, {
+    const response = await authFetch(`${API_BASE_URL}/machine-types/active`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -290,9 +278,8 @@ const fetchMachineTypes = async (): Promise<MachineTypeData[]> => {
 
 const fetchInvoices = async (): Promise<Invoice[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/invoices?limit=1000`, {
+    const response = await authFetch(`${API_BASE_URL}/invoices?limit=1000`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -349,9 +336,8 @@ const fetchInvoices = async (): Promise<Invoice[]> => {
 
 const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/invoices`, {
+    const response = await authFetch(`${API_BASE_URL}/invoices`, {
       method: 'POST',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(invoiceData),
     });
@@ -407,9 +393,8 @@ const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
 
 const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoice | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/invoices/${invoiceId}`, {
+    const response = await authFetch(`${API_BASE_URL}/invoices/${invoiceId}`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(updateData),
     });

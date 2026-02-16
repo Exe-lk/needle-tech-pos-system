@@ -8,6 +8,7 @@ import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
+import { authFetch } from '@/lib/auth-client';
 
 const API_BASE_URL = '/api/v1';
 
@@ -136,14 +137,9 @@ const PurchaseOrderPage: React.FC = () => {
         setFetchError(null);
         setLoading(true);
         try {
-            const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
             const params = new URLSearchParams({ page: '1', limit: '500', sortBy: 'requestDate', sortOrder: 'desc' });
-            const response = await fetch(`${API_BASE_URL}/purchase-orders?${params.toString()}`, {
+            const response = await authFetch(`${API_BASE_URL}/purchase-orders?${params.toString()}`, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
                 credentials: 'include',
             });
             const json = await response.json();
@@ -268,13 +264,8 @@ const PurchaseOrderPage: React.FC = () => {
                 rentalEndDate: rentalEndDate,
                 machines: machinesToRent,
             };
-            const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
-            const response = await fetch(`${API_BASE_URL}/rentals/from-purchase-request`, {
+            const response = await authFetch(`${API_BASE_URL}/rentals/from-purchase-request`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
                 credentials: 'include',
                 body: JSON.stringify(payload),
             });

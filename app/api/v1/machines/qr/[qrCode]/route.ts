@@ -40,6 +40,8 @@ const transformMachineForFrontend = (machine: any) => {
     stitchType: machine.stitchType || '',
     maxSpeedSpm: machine.maxSpeedSpm || null,
     currentCustomer: machine.currentCustomer || null,
+    unitPrice: machine.unitPrice != null ? Number(machine.unitPrice) : null,
+    monthlyRentalFee: machine.monthlyRentalFee != null ? Number(machine.monthlyRentalFee) : null,
   };
 };
 

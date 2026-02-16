@@ -10,10 +10,10 @@ import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
+import { authFetch, clearAuth, redirectToLogin } from '@/lib/auth-client';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
-const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
 
 // Type Definitions
 type CustomerType = 'Business' | 'Customer';
@@ -125,20 +125,11 @@ const parseAddress = (address: string) => {
   };
 };
 
-// API Functions
-const getAuthHeaders = () => {
-  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-  };
-};
-
+// API Functions (authFetch handles 401 → refresh → redirect to login)
 const fetchCustomers = async (): Promise<Customer[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers?limit=1000`, {
+    const response = await authFetch(`${API_BASE_URL}/customers?limit=1000`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -165,9 +156,8 @@ const fetchCustomers = async (): Promise<Customer[]> => {
 
 const fetchCustomerById = async (customerId: string): Promise<ApiCustomer | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers/${customerId}`, {
+    const response = await authFetch(`${API_BASE_URL}/customers/${customerId}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -185,9 +175,8 @@ const fetchCustomerById = async (customerId: string): Promise<ApiCustomer | null
 
 const fetchCustomerRentalHistory = async (customerId: string): Promise<RentalHistory[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers/${customerId}/rental-history`, {
+    const response = await authFetch(`${API_BASE_URL}/customers/${customerId}/rental-history`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -205,9 +194,8 @@ const fetchCustomerRentalHistory = async (customerId: string): Promise<RentalHis
 
 const createCustomer = async (customerData: any): Promise<{ success: boolean; error?: string; data?: ApiCustomer }> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers`, {
+    const response = await authFetch(`${API_BASE_URL}/customers`, {
       method: 'POST',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(customerData),
     });
@@ -236,9 +224,8 @@ const createCustomer = async (customerData: any): Promise<{ success: boolean; er
 
 const updateCustomer = async (customerId: string, customerData: any): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers/${customerId}`, {
+    const response = await authFetch(`${API_BASE_URL}/customers/${customerId}`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(customerData),
     });
@@ -266,9 +253,8 @@ const updateCustomer = async (customerId: string, customerData: any): Promise<{ 
 
 const deleteCustomer = async (customerId: string): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers/${customerId}`, {
+    const response = await authFetch(`${API_BASE_URL}/customers/${customerId}`, {
       method: 'DELETE',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -422,8 +408,8 @@ const CustomerListPage: React.FC = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
-    window.location.href = '/';
+    clearAuth();
+    redirectToLogin();
   };
 
   const handleCreateCustomer = () => {

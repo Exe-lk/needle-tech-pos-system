@@ -20,19 +20,10 @@ import {
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
+import { authFetch } from '@/lib/auth-client';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
-const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
-
-// Helper Functions
-const getAuthHeaders = () => {
-  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_KEY);
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-  };
-};
 
 // API Response Types – Rental with assigned machines (RentalMachine[] + nested Machine)
 interface ApiRental {
@@ -217,9 +208,8 @@ function mapRentalMachineToGatePassItem(m: NonNullable<ApiRental['machines']>[nu
 // API Functions
 const fetchRentals = async (): Promise<RentalOption[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/rentals?status=ACTIVE&limit=1000`, {
+    const response = await authFetch(`${API_BASE_URL}/rentals?status=ACTIVE&limit=1000`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -246,9 +236,8 @@ const fetchRentals = async (): Promise<RentalOption[]> => {
 // Fetch a single rental by ID with full machine details (fallback when list didn't include machines)
 const fetchRentalById = async (rentalId: string): Promise<RentalOption | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/rentals/${rentalId}`, {
+    const response = await authFetch(`${API_BASE_URL}/rentals/${rentalId}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -273,9 +262,8 @@ const fetchRentalById = async (rentalId: string): Promise<RentalOption | null> =
 
 const fetchGatePasses = async (): Promise<GatePass[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/gate-passes?limit=1000`, {
+    const response = await authFetch(`${API_BASE_URL}/gate-passes?limit=1000`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 
@@ -295,9 +283,8 @@ const fetchGatePasses = async (): Promise<GatePass[]> => {
 
 const createGatePass = async (gatePassData: any): Promise<GatePass | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/gate-passes`, {
+    const response = await authFetch(`${API_BASE_URL}/gate-passes`, {
       method: 'POST',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(gatePassData),
     });
@@ -317,9 +304,8 @@ const createGatePass = async (gatePassData: any): Promise<GatePass | null> => {
 
 const updateGatePass = async (gatePassId: string, updateData: any): Promise<GatePass | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/gate-passes/${gatePassId}`, {
+    const response = await authFetch(`${API_BASE_URL}/gate-passes/${gatePassId}`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(updateData),
     });
@@ -339,9 +325,8 @@ const updateGatePass = async (gatePassId: string, updateData: any): Promise<Gate
 
 const deleteGatePass = async (gatePassId: string): Promise<boolean> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/gate-passes/${gatePassId}`, {
+    const response = await authFetch(`${API_BASE_URL}/gate-passes/${gatePassId}`, {
       method: 'DELETE',
-      headers: getAuthHeaders(),
       credentials: 'include',
     });
 

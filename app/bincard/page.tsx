@@ -6,7 +6,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, TrendingUp, TrendingDown } from 'lucide-react';
-import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
+import { authFetch } from '@/lib/auth-client';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type TransactionType = 'Stock In' | 'Stock Out' | 'Rental Out' | 'Return In' | 'Maintenance Out' | 'Maintenance In' | 'Retired';
@@ -39,14 +39,6 @@ interface BincardSummary {
 }
 
 const API_BASE_URL = '/api/v1';
-
-const getAuthHeaders = () => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_ACCESS_TOKEN_KEY) : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-};
 
 function normalizeMachineType(value: string): MachineType {
   const normalized = value?.trim() || '';
@@ -94,9 +86,8 @@ const BincardPage: React.FC = () => {
       if (dateRange.to) params.set('dateTo', dateRange.to);
       const qs = params.toString();
       const url = `${API_BASE_URL}/bincard/summary${qs ? `?${qs}` : ''}`;
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch bincard summary');
@@ -151,9 +142,8 @@ const BincardPage: React.FC = () => {
     params.set('sortOrder', 'asc');
     if (dateRange.from) params.set('dateFrom', dateRange.from);
     if (dateRange.to) params.set('dateTo', dateRange.to);
-    fetch(`${API_BASE_URL}/bincard/entries?${params}`, {
+    authFetch(`${API_BASE_URL}/bincard/entries?${params}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
       credentials: 'include',
     })
       .then((res) => {

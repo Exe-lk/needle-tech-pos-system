@@ -23,10 +23,14 @@ import {
   XCircle,
   Sun,
   Moon,
+  Loader2,
 } from 'lucide-react';
+import { authFetch } from '@/lib/auth-client';
+
+const API_BASE = '/api/v1';
 
 // ---------------------------------------------------------------------------
-// Types
+// Types (aligned with /api/v1/gate-passes/by-number response)
 // ---------------------------------------------------------------------------
 
 interface GatePassItem {
@@ -38,7 +42,7 @@ interface GatePassItem {
 }
 
 interface GatePass {
-  id: number;
+  id: string;
   gatepassNo: string;
   agreementReference: string;
   dateOfIssue: string;
@@ -77,116 +81,6 @@ interface SecurityScanLogItem {
 
 // Step 2 sub-flow: action menu, details, or scan
 type Step2Mode = 'menu' | 'details' | 'scan';
-
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
-
-const MOCK_GATE_PASSES: GatePass[] = [
-  {
-    id: 1,
-    gatepassNo: '016633',
-    agreementReference: 'RA-2024-001',
-    dateOfIssue: '2024-01-20',
-    returnable: true,
-    entry: 'OUT',
-    from: 'Needle Technologies',
-    to: 'ABC Holdings (Pvt) Ltd',
-    toAddress: '123 Main Street, Colombo 05',
-    vehicleNumber: 'ABC-1234',
-    driverName: 'Nimal Perera',
-    items: [
-      {
-        id: '1',
-        description: 'JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01733',
-        motorBoxNo: 'NMBDH01171',
-      },
-      {
-        id: '2',
-        description: 'JUKI DDL-8700 - HIGH-SPEED LOCKSTITCH MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01734',
-        motorBoxNo: 'NMBDH01172',
-      },
-      {
-        id: '3',
-        description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE',
-        status: 'FAIR',
-        serialNo: 'BR-2024-001',
-        motorBoxNo: 'BOX-2024-001',
-      },
-      {
-        id: '4',
-        description: 'SINGER 4423 - HEAVY DUTY SEWING MACHINE',
-        status: 'GOOD',
-        serialNo: 'SG-2024-001',
-        motorBoxNo: 'BOX-2024-002',
-      },
-      {
-        id: '5',
-        description: 'JUKI MO-2516 - OVERLOCK MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01735',
-        motorBoxNo: 'NMBDH01173',
-      },
-    ],
-    issuedBy: 'Admin User',
-    receivedBy: 'Nimal Perera',
-  },
-  {
-    id: 2,
-    gatepassNo: '016634',
-    agreementReference: 'RA-2024-002',
-    dateOfIssue: '2024-03-05',
-    returnable: false,
-    entry: 'OUT',
-    from: 'Needle Technologies',
-    to: 'John Perera',
-    toAddress: '456 Galle Road, Mount Lavinia',
-    vehicleNumber: 'XYZ-5678',
-    driverName: 'Kamal Silva',
-    items: [
-      {
-        id: '1',
-        description: 'BROTHER XL2600i - DOMESTIC SEWING MACHINE',
-        status: 'GOOD',
-        serialNo: 'BR-2024-002',
-        motorBoxNo: 'BOX-2024-003',
-      },
-      {
-        id: '2',
-        description: 'JUKI DDL-5550N - INDUSTRIAL SEWING MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01736',
-        motorBoxNo: 'NMBDH01174',
-      },
-      {
-        id: '3',
-        description: 'SINGER 9960 - QUANTUM STYLIST MACHINE',
-        status: 'GOOD',
-        serialNo: 'SG-2024-002',
-        motorBoxNo: 'BOX-2024-004',
-      },
-      {
-        id: '4',
-        description: 'BROTHER DB2-B755-403 - OVERLOCK MACHINE',
-        status: 'FAIR',
-        serialNo: 'BR-2024-003',
-        motorBoxNo: 'BOX-2024-005',
-      },
-      {
-        id: '5',
-        description: 'JUKI MO-6700S - OVERLOCK MACHINE',
-        status: 'GOOD',
-        serialNo: '2LIDH01737',
-        motorBoxNo: 'NMBDH01175',
-      },
-    ],
-    issuedBy: 'Admin User',
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Helpers: QR parsing & normalization
@@ -258,24 +152,13 @@ function extractSerialAndBoxFromQR(
   return null;
 }
 
-/** Normalize user input for gatepass lookup: accept 016633, 16633, GP24026633, etc. */
+/** Normalize user input for display / API: accept 016633, 16633, etc. */
 function normalizeGatePassInput(input: string): string {
   const t = (input || '').trim();
   if (!t) return '';
   const digitsOnly = t.replace(/\D/g, '');
   if (digitsOnly.length >= 6) return digitsOnly.slice(-6);
   return digitsOnly.padStart(6, '0');
-}
-
-function findGatePassByNumber(input: string): GatePass | undefined {
-  const normalized = normalizeGatePassInput(input);
-  if (!normalized) return undefined;
-  return MOCK_GATE_PASSES.find(
-    (g) =>
-      normalizeGatePassInput(g.gatepassNo) === normalized ||
-      g.gatepassNo === input.trim() ||
-      g.gatepassNo === input.trim().toUpperCase()
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -286,9 +169,12 @@ const GatePassQRPage: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
   const [gatePassNumberInput, setGatePassNumberInput] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
   const [gatePass, setGatePass] = useState<GatePass | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [approveLoading, setApproveLoading] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   // Step 2 sub-flow
   const [mode, setMode] = useState<Step2Mode>('menu');
@@ -372,24 +258,51 @@ const GatePassQRPage: React.FC = () => {
     setScanResultPopup(null);
   }, []);
 
-  const handleContinueFromStep1 = () => {
+  const handleContinueFromStep1 = async () => {
     const trimmed = gatePassNumberInput.trim();
     if (!trimmed) {
       setLookupError('Please enter a gatepass number.');
       return;
     }
-    const found = findGatePassByNumber(trimmed);
-    if (!found) {
-      setLookupError('Gatepass not found. Please check the number.');
-      return;
-    }
     setLookupError(null);
-    setGatePass(found);
-    setStep(2);
-    setMode('menu'); // show 2-button menu first
-    resetScanSession();
-    setDetailsExpanded(true);
-    setScanHistoryExpanded(false);
+    setLookupLoading(true);
+    try {
+      const number = normalizeGatePassInput(trimmed) || trimmed;
+      const res = await authFetch(
+        `${API_BASE}/gate-passes/by-number?number=${encodeURIComponent(number)}`
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json?.status !== 'success') {
+        const message =
+          json?.message || (res.status === 404 ? 'Gatepass not found. Please check the number.' : 'Failed to load gatepass.');
+        setLookupError(message);
+        return;
+      }
+      const data = json?.data;
+      if (!data || !data.gatepassNo) {
+        setLookupError('Invalid gatepass response. Please try again.');
+        return;
+      }
+      // Normalize dateOfIssue if API returns ISO string or Date
+      const gatePassData: GatePass = {
+        ...data,
+        id: String(data.id),
+        dateOfIssue:
+          typeof data.dateOfIssue === 'string'
+            ? data.dateOfIssue
+            : data.dateOfIssue
+              ? new Date(data.dateOfIssue).toISOString().slice(0, 10)
+              : '',
+      };
+      setGatePass(gatePassData);
+      setStep(2);
+      setMode('menu');
+      resetScanSession();
+      setDetailsExpanded(true);
+      setScanHistoryExpanded(false);
+    } finally {
+      setLookupLoading(false);
+    }
   };
 
   const handleBackToStep1 = () => {
@@ -398,6 +311,7 @@ const GatePassQRPage: React.FC = () => {
     setLookupError(null);
     setGatePass(null);
     setMode('menu');
+    setApproveError(null);
     resetScanSession();
   };
 
@@ -523,7 +437,7 @@ const GatePassQRPage: React.FC = () => {
     restartScannerSoon();
   };
 
-  const handleApproveGatePass = () => {
+  const handleApproveGatePass = async () => {
     if (!gatePass) return;
     if (!canApprove) {
       if (failedScans.length > 0) {
@@ -533,10 +447,32 @@ const GatePassQRPage: React.FC = () => {
       }
       return;
     }
-    alert(
-      `Gate Pass ${gatePass.gatepassNo} approved by Security Officer (frontend only).`
-    );
-    handleBackToStep1();
+    setApproveError(null);
+    setApproveLoading(true);
+    try {
+      const scannedPairs = Array.from(matchedPairs).map((key) => {
+        const [serialNo, motorBoxNo] = key.split('|');
+        return { serialNo: serialNo || '', motorBoxNo: motorBoxNo || '' };
+      });
+      const res = await authFetch(
+        `${API_BASE}/gate-passes/${encodeURIComponent(gatePass.id)}/security-approve`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ scannedPairs }),
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json?.status !== 'success') {
+        const message =
+          json?.message || 'Failed to approve gate pass. Please try again.';
+        setApproveError(message);
+        return;
+      }
+      alert(`Gate Pass ${gatePass.gatepassNo} approved by Security Officer.`);
+      handleBackToStep1();
+    } finally {
+      setApproveLoading(false);
+    }
   };
 
   const handleRejectGatePass = () => {
@@ -621,16 +557,25 @@ const GatePassQRPage: React.FC = () => {
                 </p>
               )}
               <p className="text-xs text-gray-500 dark:text-slate-500">
-                Try: <span className="font-mono">016633</span> or{' '}
-                <span className="font-mono">016634</span>
+                Enter the gatepass number (e.g. 016633) and continue to verify.
               </p>
               <button
                 type="button"
-                onClick={handleContinueFromStep1}
-                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2"
+                onClick={() => void handleContinueFromStep1()}
+                disabled={lookupLoading}
+                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 active:scale-[0.98] transition-all touch-manipulation flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <CheckCircle2 className="w-5 h-5" />
-                Continue
+                {lookupLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Loading…
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5" />
+                    Continue
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -1139,20 +1084,40 @@ const GatePassQRPage: React.FC = () => {
             )}
           </p>
 
+          {/* Approve error message */}
+          {approveError && (
+            <p
+              className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2"
+              role="alert"
+            >
+              <XCircle className="w-4 h-4 flex-shrink-0" />
+              {approveError}
+            </p>
+          )}
+
           {/* Approve / Reject buttons */}
           <div className="pb-4 space-y-3">
             <button
               type="button"
-              onClick={handleApproveGatePass}
-              disabled={!canApprove}
+              onClick={() => void handleApproveGatePass()}
+              disabled={!canApprove || approveLoading}
               className={`w-full min-h-[56px] px-5 py-3 rounded-2xl text-base font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
-                canApprove
+                canApprove && !approveLoading
                   ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-900/30 dark:shadow-emerald-900/40'
                   : 'bg-gray-300 dark:bg-slate-700 text-gray-500 dark:text-slate-400 cursor-not-allowed'
               }`}
             >
-              <ShieldCheck className="w-5 h-5" />
-              Approve Gatepass
+              {approveLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Approving…
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-5 h-5" />
+                  Approve Gatepass
+                </>
+              )}
             </button>
             {canReject && (
               <button

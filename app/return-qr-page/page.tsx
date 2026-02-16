@@ -15,8 +15,14 @@ import {
   Trash2,
   X,
   RotateCcw,
+  Loader2,
+  Activity,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { authFetch } from '@/lib/auth-client';
+import { AUTH_USER_KEY } from '@/lib/auth-constants';
+
+const API_BASE = '/api/v1';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,6 +40,8 @@ interface RentalAgreementMachine {
 
 interface RentalAgreement {
   id: string;
+  /** UUID of the rental for API (POST returns) */
+  rentalId?: string;
   customerName: string;
   customerAddress: string;
   customerPhone: string;
@@ -59,24 +67,6 @@ interface MachineReturnState extends RentalAgreementMachine {
   photoPreviews?: string[];
 }
 
-interface CreatedReturnPayload {
-  id: number;
-  returnNumber: string;
-  agreementId: string;
-  createdAt: string;
-  createdBy: string;
-  customerName: string;
-  totalMachines: number;
-  machines: Array<{
-    serialNumber: string;
-    boxNumber: string;
-    model: string;
-    description: string;
-    returnType: ReturnCondition;
-    damageNote?: string;
-    photosCount?: number;
-  }>;
-}
 
 // ---------------------------------------------------------------------------
 // QR helpers
@@ -131,147 +121,110 @@ function extractSerialAndBoxFromQR(decodedText: string): { serial: string; box: 
 }
 
 // ---------------------------------------------------------------------------
-// Mock data (same idea as your current file)
+// API response types
 // ---------------------------------------------------------------------------
 
-const mockRentalAgreements: RentalAgreement[] = [
-  {
-    id: 'AGR-2024-001',
-    customerName: 'ABC Holdings (Pvt) Ltd',
-    customerAddress: '123 Main Street, Colombo 05',
-    customerPhone: '+94 11 2345678',
-    customerEmail: 'contact@abcholdings.lk',
-    rentalStartDate: '2024-01-15',
-    rentalEndDate: '2024-07-15',
-    rentalPeriod: '6 months',
-    monthlyRate: 25000,
-    totalAmount: 150000,
-    paidAmount: 100000,
-    outstandingAmount: 50000,
-    securityDeposit: 50000,
-    dispatchedDate: '2024-01-15',
-    expectedReturnDate: '2024-07-15',
-    machines: [
-      {
-        id: 'MACH-001-01',
-        model: 'CAT 320',
-        serialNumber: 'Brother-XL2600i-SN0001',
-        boxNumber: 'Brother-XL2600i-B001',
-        description: 'Excavator CAT 320 - Unit 01',
-      },
-      {
-        id: 'MACH-001-02',
-        model: 'CAT 320',
-        serialNumber: 'Brother-XL2600i-SN0002',
-        boxNumber: 'Brother-XL2600i-B002',
-        description: 'Excavator CAT 320 - Unit 02',
-      },
-      {
-        id: 'MACH-001-03',
-        model: 'CAT 320',
-        serialNumber: 'Brother-XL2600i-SN0003',
-        boxNumber: 'Brother-XL2600i-B003',
-        description: 'Excavator CAT 320 - Unit 03',
-      },
-      {
-        id: 'MACH-001-04',
-        model: 'CAT 320',
-        serialNumber: 'Brother-XL2600i-SN0004',
-        boxNumber: 'Brother-XL2600i-B004',
-        description: 'Excavator CAT 320 - Unit 04',
-      },
-      {
-        id: 'MACH-001-05',
-        model: 'CAT 320',
-        serialNumber: 'Brother-XL2600i-SN0005',
-        boxNumber: 'Brother-XL2600i-B005',
-        description: 'Excavator CAT 320 - Unit 05',
-      },
-      {
-        id: 'MACH-002-01',
-        model: 'CAT D6',
-        serialNumber: 'SN-CATD6-2023-001',
-        boxNumber: 'BOX-CATD6-001',
-        description: 'Bulldozer CAT D6 - Unit 01',
-      },
-      {
-        id: 'MACH-002-02',
-        model: 'CAT D6',
-        serialNumber: 'SN-CATD6-2023-002',
-        boxNumber: 'BOX-CATD6-002',
-        description: 'Bulldozer CAT D6 - Unit 02',
-      },
-      {
-        id: 'MACH-002-03',
-        model: 'CAT D6',
-        serialNumber: 'SN-CATD6-2023-003',
-        boxNumber: 'BOX-CATD6-003',
-        description: 'Bulldozer CAT D6 - Unit 03',
-      },
-      {
-        id: 'MACH-002-04',
-        model: 'CAT D6',
-        serialNumber: 'SN-CATD6-2023-004',
-        boxNumber: 'BOX-CATD6-004',
-        description: 'Bulldozer CAT D6 - Unit 04',
-      },
-      {
-        id: 'MACH-002-05',
-        model: 'CAT D6',
-        serialNumber: 'SN-CATD6-2023-005',
-        boxNumber: 'BOX-CATD6-005',
-        description: 'Bulldozer CAT D6 - Unit 05',
-      },
-    ],
-  },
-  {
-    id: 'AGR-2024-002',
-    customerName: 'Mega Constructions',
-    customerAddress: '654 High Level Road, Maharagama',
-    customerPhone: '+94 11 3456789',
-    customerEmail: 'info@megaconstructions.lk',
-    rentalStartDate: '2024-03-01',
-    rentalEndDate: '2024-09-01',
-    rentalPeriod: '6 months',
-    monthlyRate: 33333.33,
-    totalAmount: 200000,
-    paidAmount: 100000,
-    outstandingAmount: 100000,
-    securityDeposit: 75000,
-    dispatchedDate: '2024-03-01',
-    expectedReturnDate: '2024-09-01',
-    machines: [
-      {
-        id: 'MACH-010-01',
-        model: 'Loader CAT 950',
-        serialNumber: 'SN-CAT950-2022-001',
-        boxNumber: 'BOX-CAT950-001',
-        description: 'Loader CAT 950 - Unit 01',
-      },
-      {
-        id: 'MACH-010-02',
-        model: 'Loader CAT 950',
-        serialNumber: 'SN-CAT950-2022-002',
-        boxNumber: 'BOX-CAT950-002',
-        description: 'Loader CAT 950 - Unit 02',
-      },
-      {
-        id: 'MACH-010-03',
-        model: 'Loader CAT 950',
-        serialNumber: 'SN-CAT950-2022-003',
-        boxNumber: 'BOX-CAT950-003',
-        description: 'Loader CAT 950 - Unit 03',
-      },
-      {
-        id: 'MACH-010-04',
-        model: 'Loader CAT 950',
-        serialNumber: 'SN-CAT950-2022-004',
-        boxNumber: 'BOX-CAT950-004',
-        description: 'Loader CAT 950 - Unit 04',
-      },
-    ],
-  },
-];
+/** Response from GET /api/v1/rentals/by-number */
+interface RentalByNumberApiData {
+  id: string;
+  rentalId?: string;
+  agreementNo?: string;
+  customerName: string;
+  customerAddress: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  rentalStartDate: string;
+  rentalEndDate: string;
+  rentalPeriod: string;
+  monthlyRate: number;
+  totalAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  securityDeposit: number;
+  dispatchedDate: string;
+  expectedReturnDate: string;
+  machines: Array<{
+    id: string;
+    model: string;
+    serialNumber: string;
+    boxNumber: string;
+    description: string;
+  }>;
+}
+
+/** Response from POST /api/v1/returns (data payload) */
+interface CreateReturnApiResponse {
+  id: string;
+  returnNumber: string;
+  agreementId: string;
+  createdAt: string;
+  createdBy: string;
+  customerName: string;
+  totalMachines: number;
+  machines: Array<{
+    serialNumber: string;
+    boxNumber: string;
+    model: string;
+    description: string;
+    returnType: string;
+    damageNote?: string;
+    photosCount?: number;
+  }>;
+}
+
+/** Single transaction from GET /api/v1/inventory/transactions */
+interface InventoryTransactionItem {
+  id: string;
+  brand: string;
+  model: string;
+  type: string;
+  transactionType: string;
+  stockType: string | null;
+  quantity: number;
+  transactionDate: string;
+  notes: string;
+}
+
+function getCreatedByDisplayName(): string {
+  if (typeof window === 'undefined') return 'System';
+  try {
+    const raw = localStorage.getItem(AUTH_USER_KEY);
+    if (!raw) return 'Current User';
+    const user = JSON.parse(raw) as { name?: string; username?: string; fullName?: string };
+    return user?.name || user?.fullName || user?.username || 'Current User';
+  } catch {
+    return 'Current User';
+  }
+}
+
+function mapRentalByNumberToAgreement(data: RentalByNumberApiData): RentalAgreement {
+  const id = data.id || data.agreementNo || '';
+  return {
+    id,
+    rentalId: data.rentalId,
+    customerName: data.customerName ?? '',
+    customerAddress: data.customerAddress ?? '',
+    customerPhone: data.customerPhone ?? '',
+    customerEmail: data.customerEmail ?? '',
+    rentalStartDate: data.rentalStartDate ?? '',
+    rentalEndDate: data.rentalEndDate ?? '',
+    rentalPeriod: data.rentalPeriod ?? '',
+    monthlyRate: Number(data.monthlyRate) || 0,
+    totalAmount: Number(data.totalAmount) || 0,
+    paidAmount: Number(data.paidAmount) || 0,
+    outstandingAmount: Number(data.outstandingAmount) || 0,
+    securityDeposit: Number(data.securityDeposit) || 0,
+    dispatchedDate: data.dispatchedDate ?? '',
+    expectedReturnDate: data.expectedReturnDate ?? '',
+    machines: (data.machines ?? []).map((m) => ({
+      id: String(m.id),
+      model: m.model ?? '',
+      serialNumber: m.serialNumber ?? '',
+      boxNumber: m.boxNumber ?? '',
+      description: m.description ?? '',
+    })),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -290,6 +243,7 @@ const ReturnQRPage: React.FC = () => {
 
   const [agreementNumberInput, setAgreementNumberInput] = useState('');
   const [agreementError, setAgreementError] = useState<string | null>(null);
+  const [agreementLoading, setAgreementLoading] = useState(false);
   const [selectedAgreement, setSelectedAgreement] = useState<RentalAgreement | null>(null);
 
   // Theme (light / dark) – same pattern as gatepass-qr-page
@@ -317,6 +271,10 @@ const ReturnQRPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const step2TopRef = useRef<HTMLDivElement | null>(null);
+
+  // Recent inventory transactions (details view) – from GET /api/v1/inventory/transactions
+  const [recentTransactions, setRecentTransactions] = useState<InventoryTransactionItem[]>([]);
+  const [recentTransactionsLoading, setRecentTransactionsLoading] = useState(false);
 
   // Derived
   const totalMachines = machines.length;
@@ -354,6 +312,31 @@ const ReturnQRPage: React.FC = () => {
     }
   }, []);
 
+  // Fetch recent inventory transactions when on details view (GET /api/v1/inventory/transactions)
+  useEffect(() => {
+    if (step !== 2 || view !== 'details') {
+      return;
+    }
+    let cancelled = false;
+    setRecentTransactionsLoading(true);
+    authFetch(`${API_BASE}/inventory/transactions?limit=5&page=1`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        const items = json?.data?.items?.transactions ?? json?.data?.transactions ?? json?.items ?? [];
+        setRecentTransactions(Array.isArray(items) ? items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentTransactions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRecentTransactionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, view]);
+
   const toggleTheme = () => {
     const nextDark = !isDarkMode;
     setIsDarkMode(nextDark);
@@ -383,6 +366,7 @@ const ReturnQRPage: React.FC = () => {
     setView('menu');
     setAgreementNumberInput('');
     setAgreementError(null);
+    setAgreementLoading(false);
     setSelectedAgreement(null);
     setMachines([]);
     setCurrentMachineIndex(null);
@@ -390,6 +374,7 @@ const ReturnQRPage: React.FC = () => {
     setLastFeedback(null);
     setIsSubmitting(false);
     setShowMachinePopup(false);
+    setRecentTransactions([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -408,10 +393,10 @@ const ReturnQRPage: React.FC = () => {
   };
 
   // -------------------------------------------------------------------------
-  // Step 1: Agreement lookup
+  // Step 1: Agreement lookup (GET /api/v1/rentals/by-number)
   // -------------------------------------------------------------------------
 
-  const handleFindAgreement = () => {
+  const handleFindAgreement = async () => {
     const input = agreementNumberInput.trim();
     setAgreementError(null);
 
@@ -420,31 +405,53 @@ const ReturnQRPage: React.FC = () => {
       return;
     }
 
-    const agreement = mockRentalAgreements.find(
-      (a) => a.id.toLowerCase() === input.toLowerCase()
-    );
+    setAgreementLoading(true);
+    try {
+      const res = await authFetch(
+        `${API_BASE}/rentals/by-number?number=${encodeURIComponent(input)}`
+      );
+      const json = await res.json();
 
-    if (!agreement) {
-      setAgreementError('Agreement not found. Please check the number.');
+      if (!res.ok) {
+        const message =
+          json?.message ??
+          (res.status === 404 ? 'Agreement not found. Please check the number.' : 'Failed to load agreement.');
+        setAgreementError(message);
+        setSelectedAgreement(null);
+        setMachines([]);
+        return;
+      }
+
+      const data = json?.data as RentalByNumberApiData | undefined;
+      if (!data || !Array.isArray(data.machines) || data.machines.length === 0) {
+        setAgreementError('Agreement has no machines assigned. Cannot process return.');
+        setSelectedAgreement(null);
+        setMachines([]);
+        return;
+      }
+
+      const agreement = mapRentalByNumberToAgreement(data);
+      const initialMachines: MachineReturnState[] = agreement.machines.map((m) => ({
+        ...m,
+        scanned: false,
+        returnType: undefined,
+        damageNote: '',
+        photos: [],
+        photoPreviews: [],
+      }));
+
+      setSelectedAgreement(agreement);
+      setMachines(initialMachines);
+      setCurrentMachineIndex(null);
+      setStep(2);
+      setView('menu');
+    } catch (_err) {
+      setAgreementError('Network error. Please try again.');
       setSelectedAgreement(null);
       setMachines([]);
-      return;
+    } finally {
+      setAgreementLoading(false);
     }
-
-    const initialMachines: MachineReturnState[] = agreement.machines.map((m) => ({
-      ...m,
-      scanned: false,
-      returnType: undefined,
-      damageNote: '',
-      photos: [],
-      photoPreviews: [],
-    }));
-
-    setSelectedAgreement(agreement);
-    setMachines(initialMachines);
-    setCurrentMachineIndex(null);
-    setStep(2);
-    setView('menu'); // show menu with two buttons
   };
 
   // -------------------------------------------------------------------------
@@ -568,14 +575,8 @@ const ReturnQRPage: React.FC = () => {
   };
 
   // -------------------------------------------------------------------------
-  // Submit
+  // Submit (POST /api/v1/returns)
   // -------------------------------------------------------------------------
-
-  const generateReturnNumber = (): string => {
-    return `RET-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000000)
-      .toString()
-      .padStart(4, '0')}`;
-  };
 
   const handleSubmitReturn = async () => {
     if (!selectedAgreement || !canSubmit) return;
@@ -598,31 +599,67 @@ const ReturnQRPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const payload: CreatedReturnPayload = {
-        id: Date.now(),
-        returnNumber: generateReturnNumber(),
-        agreementId: selectedAgreement.id,
-        createdAt: new Date().toISOString(),
-        createdBy: 'Current User',
+      const body = {
+        ...(selectedAgreement.rentalId && { rentalId: selectedAgreement.rentalId }),
+        ...(!selectedAgreement.rentalId && { agreementId: selectedAgreement.id }),
         customerName: selectedAgreement.customerName,
         totalMachines: machines.length,
+        createdBy: getCreatedByDisplayName(),
+        notes: '',
         machines: machines.map((m) => ({
           serialNumber: m.serialNumber,
-          boxNumber: m.boxNumber,
+          boxNumber: m.boxNumber ?? '',
           model: m.model,
           description: m.description,
           returnType: m.returnType as ReturnCondition,
           damageNote:
-            m.returnType === 'Damage' || m.returnType === 'Missing' ? m.damageNote : undefined,
+            m.returnType === 'Damage' || m.returnType === 'Missing' ? (m.damageNote ?? '') : undefined,
           photosCount:
             m.returnType === 'Damage' || m.returnType === 'Missing'
               ? (m.photos || []).length
-              : undefined,
+              : 0,
         })),
       };
-      console.log('Return payload:', payload);
-      await new Promise((r) => setTimeout(r, 800));
-      alert(`Return ${payload.returnNumber} created successfully.`);
+
+      const res = await authFetch(`${API_BASE}/returns`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        const message = json?.message ?? 'Failed to create return.';
+        const errors = json?.data as Record<string, string[]> | undefined;
+        const details =
+          errors && typeof errors === 'object'
+            ? Object.values(errors)
+                .flat()
+                .filter(Boolean)
+                .join(' ')
+            : '';
+        alert(details ? `${message} ${details}` : message);
+        return;
+      }
+
+      const created = json?.data as CreateReturnApiResponse | undefined;
+      const returnNumber = created?.returnNumber ?? 'Return';
+      const returnId = created?.id;
+
+      if (returnId) {
+        try {
+          const getRes = await authFetch(`${API_BASE}/returns/${returnId}`);
+          if (getRes.ok) {
+            const getJson = await getRes.json();
+            if (getJson?.data) {
+              // Optional: use full return record for confirmation
+            }
+          }
+        } catch {
+          // Non-blocking: we already have success
+        }
+      }
+
+      alert(`Return ${returnNumber} created successfully.`);
       resetAll();
       router.push('/returns');
     } catch (e) {
@@ -904,10 +941,20 @@ const ReturnQRPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleFindAgreement}
-                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                disabled={agreementLoading}
+                className="w-full min-h-[52px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Scan className="w-5 h-5" />
-                Find Agreement
+                {agreementLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Finding...
+                  </>
+                ) : (
+                  <>
+                    <Scan className="w-5 h-5" />
+                    Find Agreement
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -1104,6 +1151,40 @@ const ReturnQRPage: React.FC = () => {
                   <div className="py-6 px-4 text-center text-xs text-gray-500 dark:text-slate-500">
                     No machines found for this agreement.
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* Recent stock activity (GET /api/v1/inventory/transactions) */}
+            <div className="bg-white dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm dark:shadow-none">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-gray-500 dark:text-slate-400" />
+                <p className="text-xs font-semibold text-gray-900 dark:text-slate-100">Recent stock activity</p>
+              </div>
+              <div className="max-h-[140px] overflow-y-auto px-4 py-2">
+                {recentTransactionsLoading ? (
+                  <div className="flex items-center justify-center py-4 gap-2 text-xs text-gray-500 dark:text-slate-400">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </div>
+                ) : recentTransactions.length === 0 ? (
+                  <p className="text-[11px] text-gray-500 dark:text-slate-500 py-2">No recent transactions</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {recentTransactions.slice(0, 5).map((tx) => (
+                      <li
+                        key={tx.id}
+                        className="text-[11px] text-gray-700 dark:text-slate-300 flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate">
+                          {tx.brand} {tx.model} · {tx.transactionType}
+                        </span>
+                        <span className="text-gray-500 dark:text-slate-400 shrink-0">
+                          {tx.transactionDate} ({tx.quantity})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             </div>

@@ -4,10 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { LogIn, Eye, EyeOff } from 'lucide-react';
-
-const AUTH_ACCESS_TOKEN_KEY = 'needletech_access_token';
-const AUTH_REFRESH_TOKEN_KEY = 'needletech_refresh_token';
-const AUTH_USER_KEY = 'needletech_user';
+import { AUTH_ACCESS_TOKEN_KEY, AUTH_REFRESH_TOKEN_KEY, AUTH_USER_KEY } from '@/lib/auth-constants';
 
 export default function LoginPage() {
   const router = useRouter();

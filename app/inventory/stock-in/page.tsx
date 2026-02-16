@@ -8,6 +8,7 @@ import { X, ChevronDown, Check, Plus, Trash2, QrCode, Download, ChevronRight, Ch
 import { QRCodeSVG } from 'qrcode.react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateSerialNumber, validateBoxNumber } from '@/src/utils/validation';
+import { authFetch } from '@/lib/auth-client';
 
 const API_BASE = '/api/v1';
 
@@ -33,14 +34,6 @@ interface ModelRecord {
   name: string;
   brandId: string;
   brand?: { name: string };
-}
-
-function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
 }
 
 interface SearchableSelectProps {
@@ -302,8 +295,8 @@ const StockInPage: React.FC = () => {
     setBrandsModelsLoading(true);
     try {
       const [brandsRes, modelsRes] = await Promise.all([
-        fetch(`${API_BASE}/brands?page=1&limit=200`, { headers: getAuthHeaders(), credentials: 'include' }),
-        fetch(`${API_BASE}/models?page=1&limit=500`, { headers: getAuthHeaders(), credentials: 'include' }),
+        authFetch(`${API_BASE}/brands?page=1&limit=200`, { credentials: 'include' }),
+        authFetch(`${API_BASE}/models?page=1&limit=500`, { credentials: 'include' }),
       ]);
       const brandsJson = await brandsRes.json();
       const modelsJson = await modelsRes.json();
@@ -610,9 +603,8 @@ const StockInPage: React.FC = () => {
         })),
       }));
 
-      const res = await fetch(`${API_BASE}/inventory/stock-in`, {
+      const res = await authFetch(`${API_BASE}/inventory/stock-in`, {
         method: 'POST',
-        headers: getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({ transactions: transactionsPayload }),
       });

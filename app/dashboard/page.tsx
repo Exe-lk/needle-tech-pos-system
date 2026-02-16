@@ -29,6 +29,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import Tooltip from '@/src/components/common/tooltip';
+import { authFetch } from '@/lib/auth-client';
 
 const API_BASE = '/api/v1';
 
@@ -205,16 +206,15 @@ function getMonthsForPeriod(period: '6M' | '12M' | 'YTD'): { year: number; month
   return out;
 }
 
-/** Fetch month-end analytics for a given year and month */
+/** Fetch month-end analytics for a given year and month (uses authFetch for token refresh on 401) */
 async function fetchMonthEndAnalytics(
   year: number,
-  month: number,
-  getAuthHeaders: () => HeadersInit
+  month: number
 ): Promise<MonthEndAnalyticsPayload | null> {
   try {
-    const res = await fetch(
+    const res = await authFetch(
       `${API_BASE}/analytics/month-end?year=${year}&month=${month}`,
-      { method: 'GET', headers: getAuthHeaders(), credentials: 'include' }
+      { method: 'GET', credentials: 'include' }
     );
     const json = await res.json();
     if (!res.ok || json?.status !== 'success') return null;
@@ -236,21 +236,13 @@ const AnalyticsPage: React.FC = () => {
   const [apiMonthlyRevenue, setApiMonthlyRevenue] = useState<MonthlyRevenue[]>([]);
   const [latestAnalytics, setLatestAnalytics] = useState<MonthEndAnalyticsPayload | null>(null);
 
-  const getAuthHeaders = useCallback((): HeadersInit => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }, []);
-
   const fetchAnalytics = useCallback(async () => {
     setAnalyticsError(null);
     setAnalyticsLoading(true);
     const months = getMonthsForPeriod(selectedPeriod);
     try {
       const results = await Promise.all(
-        months.map(({ year, month }) => fetchMonthEndAnalytics(year, month, getAuthHeaders))
+        months.map(({ year, month }) => fetchMonthEndAnalytics(year, month))
       );
       const valid = results.filter((r): r is MonthEndAnalyticsPayload => r != null);
       if (valid.length === 0) {
@@ -279,7 +271,7 @@ const AnalyticsPage: React.FC = () => {
     } finally {
       setAnalyticsLoading(false);
     }
-  }, [selectedPeriod, getAuthHeaders]);
+  }, [selectedPeriod]);
 
   useEffect(() => {
     fetchAnalytics();

@@ -9,6 +9,7 @@ import UpdateForm from '@/src/components/form-popup/update';
 import type { FormField } from '@/src/components/form-popup/update';
 import { Eye, Clock, Pencil, X, QrCode, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { authFetch } from '@/lib/auth-client';
 
 const API_BASE = '/api/v1';
 
@@ -57,14 +58,6 @@ interface StockTransaction {
   performedBy?: string;
 }
 
-function getAuthHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('needletech_access_token') : null;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 /** Expand inventory items into individual machine units (one per physical machine). */
 function expandInventoryToMachineUnits(items: InventoryItem[]): MachineUnit[] {
   const units: MachineUnit[] = [];
@@ -111,9 +104,8 @@ const InventoryManagementPage: React.FC = () => {
     setInventoryLoading(true);
     setInventoryError(null);
     try {
-      const res = await fetch(`${API_BASE}/inventory?page=1&limit=1000`, {
+      const res = await authFetch(`${API_BASE}/inventory?page=1&limit=1000`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
@@ -143,9 +135,8 @@ const InventoryManagementPage: React.FC = () => {
         model,
         limit: '500',
       });
-      const res = await fetch(`${API_BASE}/inventory/transactions?${params}`, {
+      const res = await authFetch(`${API_BASE}/inventory/transactions?${params}`, {
         method: 'GET',
-        headers: getAuthHeaders(),
         credentials: 'include',
       });
       const json = await res.json();
