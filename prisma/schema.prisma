@@ -302,7 +302,8 @@ model Machine {
   type          MachineType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
   rentalMachines  RentalMachine[]
   gatePassMachines GatePassMachine[]
-  returns         Return[]
+  returns         Return[] @relation("ReturnMachine")
+  returnMachines  ReturnMachine[] @relation("ReturnMachineItems")
   damageReports   DamageReport[]
 
   @@index([serialNumber])
@@ -714,7 +715,7 @@ model Return {
   returnNumber        String   @unique
   rentalId            String   @db.Uuid
   customerId          String   @db.Uuid
-  machineId           String   @db.Uuid
+  machineId           String?  @db.Uuid // Optional for backward compatibility, use ReturnMachine for multiple machines
   
   returnDate          DateTime @db.Timestamptz(6)
   condition           String?
@@ -732,9 +733,10 @@ model Return {
   // Relations
   rental              Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
   customer            Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  machine             Machine  @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  machine             Machine? @relation("ReturnMachine", fields: [machineId], references: [id], onDelete: Restrict)
   inspectedBy         User     @relation("ReturnInspector", fields: [inspectedByUserId], references: [id], onDelete: Restrict)
   damageReport        DamageReport? @relation(fields: [damageReportId], references: [id], onDelete: SetNull)
+  machines            ReturnMachine[]
 
   @@index([returnNumber])
   @@index([rentalId])
@@ -742,6 +744,27 @@ model Return {
   @@index([returnDate])
   @@index([triageCategory])
   @@map("returns")
+}
+
+model ReturnMachine {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  returnId             String   @db.Uuid
+  machineId            String   @db.Uuid
+  
+  returnType           String   // "Good", "Standard", "Damage", "Missing", "Exchange"
+  damageNote           String?
+  photos               String[] // Array of photo URLs for this machine
+  
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  return              Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  machine             Machine  @relation("ReturnMachineItems", fields: [machineId], references: [id], onDelete: Restrict)
+
+  @@index([returnId])
+  @@index([machineId])
+  @@map("return_machines")
 }
 
 enum TriageCategory {

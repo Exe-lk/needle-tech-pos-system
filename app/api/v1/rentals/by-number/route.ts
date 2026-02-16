@@ -33,6 +33,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       },
       include: {
         customer: true,
+        purchaseOrder: true,
         machines: {
           include: {
             machine: {
@@ -67,8 +68,32 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       description: `${rm.machine.brand?.name || ''} ${rm.machine.model?.name || ''} - ${rm.machine.type?.name || ''}`.trim(),
     }));
     
+    // Get expected machine categories from purchase order if available
+    let expectedMachineCategories: any[] = [];
+    if (rental.purchaseOrder && Array.isArray(rental.purchaseOrder.machines)) {
+      // Group by brand/model/type and sum quantities
+      const categoryMap = new Map<string, any>();
+      rental.purchaseOrder.machines.forEach((m: any) => {
+        const key = `${m.brand || ''}_${m.model || ''}_${m.type || ''}`;
+        if (!categoryMap.has(key)) {
+          categoryMap.set(key, {
+            id: m.id || m.machineId || key,
+            brand: m.brand || '',
+            model: m.model || '',
+            type: m.type || '',
+            quantity: 0,
+          });
+        }
+        const category = categoryMap.get(key);
+        category.quantity += m.quantity || 0;
+      });
+      expectedMachineCategories = Array.from(categoryMap.values());
+    }
+    
     const transformed = {
       id: rental.agreementNumber,
+      agreementNo: rental.agreementNumber,
+      status: rental.status,
       customerName: rental.customer.name,
       customerAddress: [
         rental.customer.billingAddressLine1,
@@ -91,6 +116,11 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       dispatchedDate: rental.startDate,
       expectedReturnDate: rental.expectedEndDate,
       machines,
+      expectedMachines: expectedMachineCategories.reduce((sum, cat) => sum + cat.quantity, 0),
+      addedMachines: rental.machines.length,
+      expectedMachineCategories,
+      purchaseRequestId: rental.purchaseOrderId,
+      purchaseRequestNumber: rental.purchaseOrder?.requestNumber,
     };
     
     return successResponse(transformed, 'Rental agreement retrieved successfully');
