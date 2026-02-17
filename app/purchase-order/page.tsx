@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer } from 'lucide-react';
+import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer, Pencil } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
 
 const API_BASE_URL = '/api/v1';
 
-type PurchaseRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Completed' | 'Cancelled' | 'Partially Fulfilled';
+type PurchaseRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Active' | 'Completed' | 'Cancelled' | 'Partially Fulfilled';
 type CustomerType = 'Business' | 'Customer';
 
 interface PurchaseRequest {
@@ -106,11 +106,13 @@ const columns: TableColumn[] = [
         key: 'status', label: 'Status', sortable: true, filterable: true,
         render: (value: PurchaseRequestStatus) => {
             const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
-            if (value === 'Approved') return <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>Approved</span>;
-            if (value === 'Completed') return <span className={`${base} bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}>Completed</span>;
-            if (value === 'Partially Fulfilled') return <span className={`${base} bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300`}>Partially Fulfilled</span>;
-            if (value === 'Rejected') return <span className={`${base} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`}>Rejected</span>;
-            if (value === 'Cancelled') return <span className={`${base} bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200`}>Cancelled</span>;
+            const s = typeof value === 'string' ? value.toUpperCase().replace(/\s/g, '_') : '';
+            if (s === 'APPROVED') return <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>Approved</span>;
+            if (s === 'ACTIVE') return <span className={`${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300`}>Active</span>;
+            if (s === 'COMPLETED') return <span className={`${base} bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}>Completed</span>;
+            if (s === 'PARTIALLY_FULFILLED') return <span className={`${base} bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300`}>Partially Fulfilled</span>;
+            if (s === 'REJECTED') return <span className={`${base} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`}>Rejected</span>;
+            if (s === 'CANCELLED') return <span className={`${base} bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200`}>Cancelled</span>;
             return <span className={`${base} bg-yellow-100 text-yellow-700 dark:text-yellow-900/30 dark:text-yellow-300`}>Pending</span>;
         },
     },
@@ -125,6 +127,8 @@ const PurchaseOrderPage: React.FC = () => {
     const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedMachinesForRental, setSelectedMachinesForRental] = useState<Record<string, number>>({});
+    /** Which machine lines are included in the hiring agreement (checkbox). Only included lines with qty > 0 are sent. */
+    const [machineIncludedInRental, setMachineIncludedInRental] = useState<Record<string, boolean>>({});
     const [modifiedUnitPrices, setModifiedUnitPrices] = useState<Record<string, number>>({});
     const [rentalStartDate, setRentalStartDate] = useState('');
     const [rentalEndDate, setRentalEndDate] = useState('');
@@ -132,6 +136,10 @@ const PurchaseOrderPage: React.FC = () => {
     const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
+    const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+    const [updateForm, setUpdateForm] = useState<{ status: PurchaseRequestStatus; startDate: string; endDate: string; machines: MachineRequestItem[]; notes: string }>({ status: 'Pending', startDate: '', endDate: '', machines: [], notes: '' });
+    const [updateFormErrors, setUpdateFormErrors] = useState<Record<string, string>>({});
+    const [isUpdateSubmitting, setIsUpdateSubmitting] = useState(false);
 
     const fetchPurchaseOrders = useCallback(async () => {
         setFetchError(null);
@@ -217,8 +225,14 @@ const PurchaseOrderPage: React.FC = () => {
             return { ...machine, canRent: available };
         }).filter(m => m.canRent > 0) || [];
         const initialSelection: Record<string, number> = {};
-        availableMachines.forEach((machine) => { initialSelection[String(machine.id)] = machine.canRent; });
+        const initialIncluded: Record<string, boolean> = {};
+        availableMachines.forEach((machine) => {
+            const id = String(machine.id);
+            initialSelection[id] = machine.canRent;
+            initialIncluded[id] = true;
+        });
         setSelectedMachinesForRental(initialSelection);
+        setMachineIncludedInRental(initialIncluded);
         setIsRentalModalOpen(true);
     };
 
@@ -226,10 +240,115 @@ const PurchaseOrderPage: React.FC = () => {
         setIsRentalModalOpen(false);
         setSelectedRequest(null);
         setSelectedMachinesForRental({});
+        setMachineIncludedInRental({});
         setModifiedUnitPrices({});
         setRentalStartDate('');
         setRentalEndDate('');
         setRentalFormErrors({});
+    };
+
+    const handleUpdateRequest = (request: PurchaseRequest) => {
+        const startDateStr = request.startDate ? (typeof request.startDate === 'string' ? request.startDate : new Date(request.startDate).toISOString().split('T')[0]) : '';
+        const endDateStr = request.endDate ? (typeof request.endDate === 'string' ? request.endDate : new Date(request.endDate).toISOString().split('T')[0]) : '';
+        setSelectedRequest(request);
+        setUpdateForm({
+            status: request.status,
+            startDate: startDateStr,
+            endDate: endDateStr,
+            machines: (request.machines || []).map(m => ({ ...m, totalPrice: (m.unitPrice || 0) * (m.quantity || 0) })),
+            notes: '',
+        });
+        setUpdateFormErrors({});
+        setIsUpdateModalOpen(true);
+    };
+
+    const handleCloseUpdateModal = () => {
+        setIsUpdateModalOpen(false);
+        setSelectedRequest(null);
+        setUpdateForm({ status: 'Pending', startDate: '', endDate: '', machines: [], notes: '' });
+        setUpdateFormErrors({});
+    };
+
+    const handleUpdateFormMachineChange = (machineId: string, field: 'quantity' | 'unitPrice', value: number) => {
+        setUpdateForm(prev => {
+            const machines = prev.machines.map(m => {
+                if (m.id !== machineId) return m;
+                if (field === 'quantity') {
+                    const qty = Math.max(0, Math.round(value));
+                    const rented = m.rentedQuantity || 0;
+                    const minQty = Math.max(0, rented);
+                    const finalQty = Math.max(minQty, qty);
+                    return { ...m, quantity: finalQty, totalPrice: (m.unitPrice || 0) * finalQty };
+                }
+                const unitPrice = Math.max(0, value);
+                return { ...m, unitPrice, totalPrice: unitPrice * (m.quantity || 0) };
+            });
+            return { ...prev, machines };
+        });
+    };
+
+    const validateUpdateForm = (): boolean => {
+        const errors: Record<string, string> = {};
+        if (!updateForm.startDate) errors.startDate = 'Start date is required';
+        if (!updateForm.endDate) errors.endDate = 'End date is required';
+        if (updateForm.startDate && updateForm.endDate && new Date(updateForm.endDate) <= new Date(updateForm.startDate)) {
+            errors.endDate = 'End date must be after start date';
+        }
+        if (!updateForm.machines.length) errors.machines = 'At least one machine is required';
+        updateForm.machines.forEach((m, i) => {
+            const rented = m.rentedQuantity || 0;
+            if (m.quantity < rented) errors[`machine_${i}_qty`] = `Quantity cannot be less than already rented (${rented})`;
+        });
+        setUpdateFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const handleSubmitUpdate = async () => {
+        if (!selectedRequest || !validateUpdateForm()) return;
+        setIsUpdateSubmitting(true);
+        try {
+            const machinesPayload = updateForm.machines.map(m => ({
+                id: m.id,
+                machineId: m.id,
+                brand: m.brand,
+                model: m.model,
+                type: m.type,
+                quantity: m.quantity,
+                availableStock: m.availableStock ?? 0,
+                unitPrice: m.unitPrice,
+                totalPrice: m.unitPrice * m.quantity,
+                monthlyRentalFee: m.unitPrice,
+                rentedQuantity: m.rentedQuantity ?? 0,
+                pendingQuantity: (m.quantity - (m.rentedQuantity || 0)),
+            }));
+            const totalAmount = updateForm.machines.reduce((sum, m) => sum + (m.unitPrice || 0) * (m.quantity || 0), 0);
+            const payload = {
+                status: updateForm.status,
+                startDate: updateForm.startDate || undefined,
+                endDate: updateForm.endDate || undefined,
+                machines: machinesPayload,
+                totalAmount: Math.round(totalAmount * 100) / 100,
+                notes: updateForm.notes || undefined,
+            };
+            const response = await authFetch(`${API_BASE_URL}/purchase-orders/${selectedRequest.id}`, {
+                method: 'PUT',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const json = await response.json();
+            if (!response.ok) {
+                const msg = json?.message || (json?.data ? Object.values(json.data).flat().join(' ') : '') || 'Failed to update purchase order';
+                throw new Error(msg);
+            }
+            handleCloseUpdateModal();
+            fetchPurchaseOrders();
+        } catch (error: any) {
+            console.error('Error updating purchase order:', error);
+            alert(error?.message || 'Failed to update purchase order. Please try again.');
+        } finally {
+            setIsUpdateSubmitting(false);
+        }
     };
 
     const handleUnitPriceChange = (machineId: string, newPrice: number) => {
@@ -241,10 +360,23 @@ const PurchaseOrderPage: React.FC = () => {
         if (!rentalStartDate) errors.rentalStartDate = 'Start date is required';
         if (!rentalEndDate) errors.rentalEndDate = 'End date is required';
         if (rentalStartDate && rentalEndDate && new Date(rentalEndDate) <= new Date(rentalStartDate)) errors.rentalEndDate = 'End date must be after start date';
-        const hasSelection = Object.values(selectedMachinesForRental).some(qty => qty > 0);
-        if (!hasSelection) errors.machines = 'Please select at least one machine to rent';
+        const hasSelection = availableMachinesForRental.some(
+            m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0
+        );
+        if (!hasSelection) errors.machines = 'Please select at least one machine (check the box and set quantity) to include in the hiring agreement';
         setRentalFormErrors(errors);
         return Object.keys(errors).length === 0;
+    };
+
+    const handleToggleMachineIncluded = (machineId: string, included: boolean) => {
+        setMachineIncludedInRental(prev => ({ ...prev, [machineId]: included }));
+        const machine = availableMachinesForRental.find(m => m.id === machineId);
+        if (machine) {
+            setSelectedMachinesForRental(prev => ({
+                ...prev,
+                [machineId]: included ? machine.canRent : 0,
+            }));
+        }
     };
 
     const handleSubmitRentalAgreement = async () => {
@@ -252,7 +384,7 @@ const PurchaseOrderPage: React.FC = () => {
         setIsSubmitting(true);
         try {
             const machinesToRent = availableMachinesForRental
-                .filter(m => selectedMachinesForRental[m.id] > 0)
+                .filter(m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0)
                 .map(m => ({
                     machineId: m.id,
                     quantity: selectedMachinesForRental[m.id],
@@ -287,16 +419,19 @@ const PurchaseOrderPage: React.FC = () => {
 
     const actions: ActionButton[] = [
         { label: '', icon: <Eye className="w-4 h-4" />, variant: 'secondary', onClick: handleViewRequest, tooltip: 'View Purchase Request', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600' },
+        { label: '', icon: <Pencil className="w-4 h-4" />, variant: 'secondary', onClick: handleUpdateRequest, tooltip: 'Update Purchase Order', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800/50 border border-amber-300 dark:border-amber-700' },
         { label: '', icon: <FileText className="w-4 h-4" />, variant: 'primary', onClick: (row: PurchaseRequest) => handleCreateRentalAgreement(row), tooltip: 'Create Hiring Machine Agreement (only when machines are available)', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500', shouldShow: (row: PurchaseRequest) => hasAvailableMachinesForRental(row) },
     ];
 
     const renderStatusBadge = (status: PurchaseRequestStatus) => {
         const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
-        if (status === 'Approved') return <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>Approved</span>;
-        if (status === 'Completed') return <span className={`${base} bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}>Completed</span>;
-        if (status === 'Partially Fulfilled') return <span className={`${base} bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300`}>Partially Fulfilled</span>;
-        if (status === 'Rejected') return <span className={`${base} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`}>Rejected</span>;
-        if (status === 'Cancelled') return <span className={`${base} bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200`}>Cancelled</span>;
+        const s = typeof status === 'string' ? status.toUpperCase().replace(/\s/g, '_') : '';
+        if (s === 'APPROVED') return <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>Approved</span>;
+        if (s === 'ACTIVE') return <span className={`${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300`}>Active</span>;
+        if (s === 'COMPLETED') return <span className={`${base} bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}>Completed</span>;
+        if (s === 'PARTIALLY_FULFILLED') return <span className={`${base} bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300`}>Partially Fulfilled</span>;
+        if (s === 'REJECTED') return <span className={`${base} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`}>Rejected</span>;
+        if (s === 'CANCELLED') return <span className={`${base} bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200`}>Cancelled</span>;
         return <span className={`${base} bg-yellow-100 text-yellow-700 dark:text-yellow-900/30 dark:text-yellow-300`}>Pending</span>;
     };
 
@@ -318,6 +453,18 @@ const PurchaseOrderPage: React.FC = () => {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Request Date</label>
                             <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50 text-gray-900 dark:text-white">{new Date(selectedRequest.requestDate).toLocaleDateString('en-LK')}</div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
+                            <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50 text-gray-900 dark:text-white">
+                                {selectedRequest.startDate ? new Date(selectedRequest.startDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date</label>
+                            <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50 text-gray-900 dark:text-white">
+                                {selectedRequest.endDate ? new Date(selectedRequest.endDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
@@ -389,6 +536,8 @@ const PurchaseOrderPage: React.FC = () => {
                     <div><span className="font-semibold text-gray-700">Customer:</span> <span className="text-gray-900">{request.customerName}</span></div>
                     <div><span className="font-semibold text-gray-700">Customer Type:</span> <span className="text-gray-900">{request.customerType}</span></div>
                     <div><span className="font-semibold text-gray-700">Request Date:</span> <span className="text-gray-900">{new Date(request.requestDate).toLocaleDateString('en-LK')}</span></div>
+                    <div><span className="font-semibold text-gray-700">Start Date:</span> <span className="text-gray-900">{request.startDate ? new Date(request.startDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
+                    <div><span className="font-semibold text-gray-700">End Date:</span> <span className="text-gray-900">{request.endDate ? new Date(request.endDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
                     <div><span className="font-semibold text-gray-700">Status:</span> <span className="text-gray-900">{request.status}</span></div>
                 </div>
                 <div className="mb-4 flex-1">
@@ -480,7 +629,7 @@ const PurchaseOrderPage: React.FC = () => {
                                     <Tooltip content="Print">
                                         <button onClick={handlePrintPurchaseOrder} className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"><Printer className="w-4 h-4" /><span>Print</span></button>
                                     </Tooltip>
-                                    {(selectedRequest.status === 'Pending' || selectedRequest.status === 'Approved' || selectedRequest.status === 'Partially Fulfilled') && availableMachinesForRental.length > 0 && (
+                                    {['PENDING', 'APPROVED', 'ACTIVE', 'PARTIALLY_FULFILLED'].includes(String(selectedRequest.status).toUpperCase().replace(/\s/g, '_')) && availableMachinesForRental.length > 0 && (
                                         <Tooltip content="Create Rental Agreement">
                                             <button onClick={() => handleCreateRentalAgreement(selectedRequest)} className="px-4 py-2 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-800 flex items-center space-x-2"><FileText className="w-4 h-4" /><span>Create Rental</span></button>
                                         </Tooltip>
@@ -535,7 +684,7 @@ const PurchaseOrderPage: React.FC = () => {
                                     </div>
                                     <div className="space-y-4">
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Select Machines to Rent</h3>
-                                        <p className="text-sm text-gray-600 dark:text-gray-400">Choose quantity for each machine. You can adjust the unit price if needed.</p>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Check the items you want to include in this hiring agreement, then set quantity and unit price. Only selected items will be added to the agreement (e.g. if only Model A is in stock, select only Model A).</p>
                                         {availableMachinesForRental.length === 0 ? (
                                             <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
                                                 <p className="text-sm text-yellow-800 dark:text-yellow-200">No machines available for rental from this purchase request.</p>
@@ -543,27 +692,39 @@ const PurchaseOrderPage: React.FC = () => {
                                         ) : (
                                             <div className="space-y-4">
                                                 {availableMachinesForRental.map((machine) => {
+                                                    const included = machineIncludedInRental[machine.id] !== false;
                                                     const currentPrice = modifiedUnitPrices[machine.id] ?? machine.unitPrice;
                                                     const originalPrice = selectedRequest.machines?.find(m => m.id === machine.id)?.unitPrice ?? machine.unitPrice;
                                                     const isPriceModified = modifiedUnitPrices[machine.id] !== undefined && modifiedUnitPrices[machine.id] !== originalPrice;
-                                                    const qty = selectedMachinesForRental[machine.id] || 0;
+                                                    const qty = included ? (selectedMachinesForRental[machine.id] || 0) : 0;
                                                     const subtotal = currentPrice * qty;
                                                     return (
-                                                        <div key={machine.id} className="bg-white dark:bg-slate-700/80 rounded-xl border border-gray-200 dark:border-slate-600 p-4 shadow-sm hover:shadow-md transition-shadow">
+                                                        <div key={machine.id} className={`rounded-xl border p-4 shadow-sm transition-shadow ${included ? 'bg-white dark:bg-slate-700/80 border-gray-200 dark:border-slate-600 hover:shadow-md' : 'bg-gray-100 dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 opacity-80'}`}>
                                                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                                                <div className="min-w-0 flex-1">
-                                                                    <h4 className="font-medium text-gray-900 dark:text-white truncate">{machine.brand} {machine.model} <span className="text-gray-500 dark:text-gray-400 font-normal">({machine.type})</span></h4>
-                                                                    <div className="flex items-center gap-2 mt-1">
-                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">Available: {machine.canRent}</span>
-                                                                        {machine.stillPending > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{machine.stillPending} pending</span>}
-                                                                        {isPriceModified && <span className="text-xs text-blue-600 dark:text-blue-400">Original: Rs. {originalPrice.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>}
+                                                                <div className="min-w-0 flex-1 flex items-center gap-3">
+                                                                    <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={included}
+                                                                            onChange={(e) => handleToggleMachineIncluded(machine.id, e.target.checked)}
+                                                                            className="w-4 h-4 rounded border-gray-300 dark:border-slate-500 text-blue-600 dark:text-indigo-500 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                                                        />
+                                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Include</span>
+                                                                    </label>
+                                                                    <div className="min-w-0">
+                                                                        <h4 className="font-medium text-gray-900 dark:text-white truncate">{machine.brand} {machine.model} <span className="text-gray-500 dark:text-gray-400 font-normal">({machine.type})</span></h4>
+                                                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">Available: {machine.canRent}</span>
+                                                                            {machine.stillPending > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{machine.stillPending} pending</span>}
+                                                                            {isPriceModified && included && <span className="text-xs text-blue-600 dark:text-blue-400">Original: Rs. {originalPrice.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Rs.</span>
-                                                                        <input type="number" min="0" step="0.01" value={currentPrice} onChange={(e) => handleUnitPriceChange(machine.id, parseFloat(e.target.value) || 0)} className="w-24 sm:w-28 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500" />
-                                                                        {isPriceModified && (
+                                                                        <input type="number" min="0" step="0.01" value={currentPrice} onChange={(e) => handleUnitPriceChange(machine.id, parseFloat(e.target.value) || 0)} disabled={!included} className="w-24 sm:w-28 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed" />
+                                                                        {isPriceModified && included && (
                                                                             <Tooltip content="Reset to original price">
                                                                                 <button type="button" onClick={() => setModifiedUnitPrices(prev => { const u = { ...prev }; delete u[machine.id]; return u; })} className="text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap">Reset</button>
                                                                             </Tooltip>
@@ -571,7 +732,7 @@ const PurchaseOrderPage: React.FC = () => {
                                                                     </div>
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Qty</span>
-                                                                        <input type="number" min="0" max={machine.canRent} value={qty} onChange={(e) => { const val = Math.max(0, Math.min(parseInt(e.target.value) || 0, machine.canRent)); setSelectedMachinesForRental({ ...selectedMachinesForRental, [machine.id]: val }); }} className="w-16 sm:w-20 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500" />
+                                                                        <input type="number" min="0" max={machine.canRent} value={qty} onChange={(e) => { const val = Math.max(0, Math.min(parseInt(e.target.value) || 0, machine.canRent)); setSelectedMachinesForRental({ ...selectedMachinesForRental, [machine.id]: val }); }} disabled={!included} className="w-16 sm:w-20 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed" />
                                                                         <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">/ {machine.canRent}</span>
                                                                     </div>
                                                                     <div className="flex items-center gap-1 sm:min-w-[120px]">
@@ -587,13 +748,13 @@ const PurchaseOrderPage: React.FC = () => {
                                         )}
                                         {rentalFormErrors.machines && <p className="text-sm text-red-500">{rentalFormErrors.machines}</p>}
                                     </div>
-                                    {Object.values(selectedMachinesForRental).some(qty => qty > 0) && (
+                                    {availableMachinesForRental.some(m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0) && (
                                         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                                             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Rental Summary</h3>
                                             <div className="space-y-2 text-sm">
-                                                {availableMachinesForRental.filter(m => selectedMachinesForRental[m.id] > 0).map((machine) => {
+                                                {availableMachinesForRental.filter(m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0).map((machine) => {
                                                     const finalPrice = modifiedUnitPrices[machine.id] ?? machine.unitPrice;
-                                                    const quantity = selectedMachinesForRental[machine.id];
+                                                    const quantity = selectedMachinesForRental[machine.id] || 0;
                                                     const subtotal = finalPrice * quantity;
                                                     return (
                                                         <div key={machine.id} className="flex justify-between">
@@ -604,7 +765,7 @@ const PurchaseOrderPage: React.FC = () => {
                                                 })}
                                                 <div className="border-t border-blue-200 dark:border-blue-800 pt-2 mt-2 flex justify-between">
                                                     <span className="font-semibold text-gray-900 dark:text-white">Total Monthly Rent:</span>
-                                                    <span className="font-bold text-lg text-blue-600 dark:text-blue-400">Rs. {availableMachinesForRental.reduce((sum, m) => sum + ((modifiedUnitPrices[m.id] ?? m.unitPrice) * (selectedMachinesForRental[m.id] || 0)), 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                    <span className="font-bold text-lg text-blue-600 dark:text-blue-400">Rs. {availableMachinesForRental.reduce((sum, m) => sum + (machineIncludedInRental[m.id] ? (modifiedUnitPrices[m.id] ?? m.unitPrice) * (selectedMachinesForRental[m.id] || 0) : 0), 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -617,6 +778,145 @@ const PurchaseOrderPage: React.FC = () => {
                                 </Tooltip>
                                 <Tooltip content="Create Rental Agreement">
                                     <button type="button" onClick={handleSubmitRentalAgreement} disabled={isSubmitting} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? 'Creating...' : 'Create Rental Agreement'}</button>
+                                </Tooltip>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Update Purchase Order Modal */}
+                {isUpdateModalOpen && selectedRequest && (
+                    <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                                <div>
+                                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Update Purchase Order</h2>
+                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{selectedRequest.requestNumber} · {selectedRequest.customerName}</p>
+                                </div>
+                                <Tooltip content="Close">
+                                    <button type="button" onClick={handleCloseUpdateModal} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"><X className="w-5 h-5" /></button>
+                                </Tooltip>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6">
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
+                                            <select
+                                                value={updateForm.status}
+                                                onChange={(e) => setUpdateForm(prev => ({ ...prev, status: e.target.value as PurchaseRequestStatus }))}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                            >
+                                                <option value="Pending">Pending</option>
+                                                <option value="Approved">Approved</option>
+                                                <option value="Active">Active</option>
+                                                <option value="Rejected">Rejected</option>
+                                                <option value="Completed">Completed</option>
+                                                <option value="Cancelled">Cancelled</option>
+                                                <option value="Partially Fulfilled">Partially Fulfilled</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
+                                            <input
+                                                type="date"
+                                                value={updateForm.startDate}
+                                                onChange={(e) => setUpdateForm(prev => ({ ...prev, startDate: e.target.value }))}
+                                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 ${updateFormErrors.startDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                                            />
+                                            {updateFormErrors.startDate && <p className="mt-1 text-sm text-red-500">{updateFormErrors.startDate}</p>}
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date</label>
+                                            <input
+                                                type="date"
+                                                value={updateForm.endDate}
+                                                min={updateForm.startDate || undefined}
+                                                onChange={(e) => setUpdateForm(prev => ({ ...prev, endDate: e.target.value }))}
+                                                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 ${updateFormErrors.endDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                                            />
+                                            {updateFormErrors.endDate && <p className="mt-1 text-sm text-red-500">{updateFormErrors.endDate}</p>}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Machines</h3>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">Quantity cannot be less than already rented. Unit price and total are recalculated automatically.</p>
+                                        {updateFormErrors.machines && <p className="text-sm text-red-500 mb-2">{updateFormErrors.machines}</p>}
+                                        <div className="overflow-x-auto border border-gray-200 dark:border-slate-600 rounded-lg">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50 dark:bg-slate-700/80">
+                                                    <tr>
+                                                        <th className="text-left px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Brand / Model</th>
+                                                        <th className="text-left px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Type</th>
+                                                        <th className="text-center px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Quantity</th>
+                                                        <th className="text-right px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Unit Price (Rs.)</th>
+                                                        <th className="text-right px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Total (Rs.)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-200 dark:divide-slate-600">
+                                                    {updateForm.machines.map((m, idx) => {
+                                                        const rented = m.rentedQuantity || 0;
+                                                        const minQty = Math.max(0, rented);
+                                                        return (
+                                                            <tr key={m.id} className="bg-white dark:bg-slate-800/50 hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                                                                <td className="px-4 py-3 text-gray-900 dark:text-white">{m.brand} {m.model}</td>
+                                                                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{m.type}</td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <input
+                                                                        type="number"
+                                                                        min={minQty}
+                                                                        value={m.quantity}
+                                                                        onChange={(e) => handleUpdateFormMachineChange(m.id, 'quantity', parseInt(e.target.value, 10) || 0)}
+                                                                        className="w-20 px-2 py-1.5 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-center"
+                                                                    />
+                                                                    {rented > 0 && <span className="block text-xs text-amber-600 dark:text-amber-400 mt-0.5">min: {minQty} (rented)</span>}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        step="0.01"
+                                                                        value={m.unitPrice}
+                                                                        onChange={(e) => handleUpdateFormMachineChange(m.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                                                        className="w-28 px-2 py-1.5 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-right"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">{(m.unitPrice * m.quantity).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                                <tfoot className="bg-gray-50 dark:bg-slate-700/80 font-semibold">
+                                                    <tr>
+                                                        <td colSpan={4} className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">Total Amount</td>
+                                                        <td className="px-4 py-3 text-right text-gray-900 dark:text-white">
+                                                            Rs. {updateForm.machines.reduce((sum, m) => sum + (m.unitPrice || 0) * (m.quantity || 0), 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes (optional)</label>
+                                        <textarea
+                                            value={updateForm.notes}
+                                            onChange={(e) => setUpdateForm(prev => ({ ...prev, notes: e.target.value }))}
+                                            rows={3}
+                                            placeholder="Internal notes..."
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-slate-700">
+                                <Tooltip content="Cancel">
+                                    <button type="button" onClick={handleCloseUpdateModal} disabled={isUpdateSubmitting} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
+                                </Tooltip>
+                                <Tooltip content="Save changes">
+                                    <button type="button" onClick={handleSubmitUpdate} disabled={isUpdateSubmitting} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-600 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{isUpdateSubmitting ? 'Saving...' : 'Update Purchase Order'}</button>
                                 </Tooltip>
                             </div>
                         </div>

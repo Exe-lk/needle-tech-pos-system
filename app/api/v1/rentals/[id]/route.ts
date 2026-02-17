@@ -50,22 +50,23 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
     const { id } = await params;
     const body = await request.json();
     
-    const existingRental = await prisma.rental.findUnique({ 
+    const existingRental = await prisma.rental.findUnique({
       where: { id },
       include: {
         purchaseOrder: true,
         machines: true,
       },
-    });
+    } as any);
     if (!existingRental) {
       return notFoundResponse('Rental not found');
     }
-    
-    const statusMap: Record<string, 'ACTIVE' | 'COMPLETED' | 'CANCELLED'> = {
+    const existing = existingRental as any;
+
+    const statusMap: Record<string, 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'> = {
       Active: 'ACTIVE',
       Completed: 'COMPLETED',
       Cancelled: 'CANCELLED',
-      Pending: 'ACTIVE', // Pending rentals become Active when machines are assigned
+      Pending: 'PENDING',
     };
     const mappedStatus = body.status && statusMap[body.status];
     
@@ -91,7 +92,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
         }
         
         // Check if machine is already assigned to this rental
-        const existingAssignment = existingRental.machines.find(
+        const existingAssignment = existing.machines.find(
           (rm: any) => rm.machineId === machine.id
         );
         
@@ -100,8 +101,8 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
         }
         
         // Get machine pricing from the machine or use defaults
-        const dailyRate = machine.monthlyRentalFee 
-          ? parseFloat(machine.monthlyRentalFee.toString()) / 30 
+        const dailyRate = (machine as any).monthlyRentalFee
+          ? parseFloat((machine as any).monthlyRentalFee.toString()) / 30
           : parseFloat(existingRental.subtotal.toString()) / 30;
         
         machinesToAdd.push({
@@ -124,15 +125,15 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
     
     // Determine if all expected machines are added
     let finalStatus = mappedStatus || existingRental.status;
-    if (existingRental.purchaseOrder && Array.isArray(existingRental.purchaseOrder.machines)) {
-      const expectedCount = existingRental.purchaseOrder.machines.reduce(
-        (sum: number, m: any) => sum + (m.quantity || 0), 
+    if (existing.purchaseOrder && Array.isArray(existing.purchaseOrder.machines)) {
+      const expectedCount = existing.purchaseOrder.machines.reduce(
+        (sum: number, m: any) => sum + (m.quantity || 0),
         0
       );
-      const currentCount = existingRental.machines.length + (body.machines?.length || 0);
-      
-      // If all expected machines are added and status is Pending, set to Active
-      if (currentCount >= expectedCount && existingRental.status === 'ACTIVE' && !mappedStatus) {
+      const currentCount = existing.machines.length + (body.machines?.length || 0);
+
+      // When machines are assigned from machine-assign-page and all expected are added, move PENDING -> ACTIVE
+      if (currentCount >= expectedCount && String(existingRental.status) === 'PENDING' && !mappedStatus) {
         finalStatus = 'ACTIVE';
       }
     }

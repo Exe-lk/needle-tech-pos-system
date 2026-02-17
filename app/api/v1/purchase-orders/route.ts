@@ -82,6 +82,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
           availableStock: m.availableStock || 0,
           unitPrice: m.unitPrice,
           totalPrice: m.totalPrice,
+          monthlyRentalFee: m.monthlyRentalFee ?? m.unitPrice ?? 0,
           rentedQuantity: m.rentedQuantity || 0,
           pendingQuantity: m.quantity - (m.rentedQuantity || 0),
           expectedAvailabilityDate: m.expectedAvailabilityDate || null,
@@ -157,19 +158,25 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     const count = await prisma.purchaseOrder.count();
     const requestNumber = `PO${new Date().getFullYear().toString().substr(2)}${String(count + 1).padStart(6, '0')}`;
     
-    // Store machines as JSON with all details
-    const machineData = machines.map((m: any) => ({
-      id: m.id || m.machineId,
-      brand: m.brand,
-      model: m.model,
-      type: m.type,
-      quantity: m.quantity,
-      availableStock: m.availableStock || 0,
-      unitPrice: m.unitPrice,
-      totalPrice: m.totalPrice,
-      rentedQuantity: m.rentedQuantity || 0,
-      pendingQuantity: m.pendingQuantity || 0,
-    }));
+    // Store machines as JSON with all details (monthlyRentalFee optional; used for total when provided)
+    const machineData = machines.map((m: any) => {
+      const monthlyRentalFee = typeof m.monthlyRentalFee === 'number' ? m.monthlyRentalFee : (m.unitPrice ?? 0);
+      const qty = Number(m.quantity) || 0;
+      return {
+        id: m.id || m.machineId,
+        brand: m.brand,
+        model: m.model,
+        type: m.type,
+        quantity: m.quantity,
+        availableStock: m.availableStock || 0,
+        unitPrice: m.unitPrice ?? monthlyRentalFee,
+        totalPrice: m.totalPrice ?? monthlyRentalFee * qty,
+        monthlyRentalFee,
+        rentedQuantity: m.rentedQuantity || 0,
+        pendingQuantity: m.pendingQuantity ?? 0,
+      };
+    });
+    const computedTotal = machineData.reduce((sum: number, m: any) => sum + (Number(m.totalPrice) || 0), 0);
     
     const newPurchaseOrder = await prisma.purchaseOrder.create({
       data: {
@@ -178,7 +185,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         requestDate: new Date(requestDate),
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
-        totalAmount: new Decimal(totalAmount || 0),
+        totalAmount: new Decimal(totalAmount != null ? totalAmount : computedTotal),
         status: 'PENDING',
         machines: machineData,
       },

@@ -35,6 +35,7 @@ interface MachineRequestItem {
     availableStock: number;
     unitPrice: number;
     totalPrice: number;
+    monthlyRentalFee: number;
 }
 
 interface SearchableSelectProps {
@@ -405,6 +406,24 @@ const mockCustomers = [
     },
 ];
 
+// API types for brands, models, machine types (master data)
+interface ApiBrand {
+    id: string;
+    name: string;
+    code?: string;
+}
+interface ApiModel {
+    id: string;
+    name: string;
+    brandId: string;
+    brand?: { id: string; name: string };
+}
+interface ApiMachineType {
+    id: string;
+    name: string;
+    code?: string;
+}
+
 // Mock inventory data
 const mockInventory = [
     {
@@ -474,16 +493,6 @@ const mockMachineModels = [
 ];
 const mockMachineTypes = ['Industrial', 'Domestic', 'Embroidery', 'Overlock', 'Buttonhole', 'Other'];
 
-// Mock standard prices per machine type
-const standardPrices: Record<string, number> = {
-    Industrial: 50000,
-    Domestic: 35000,
-    Embroidery: 45000,
-    Overlock: 40000,
-    Buttonhole: 30000,
-    Other: 35000,
-};
-
 const CreatePurchaseRequestPage: React.FC = () => {
     const router = useRouter();
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -497,15 +506,19 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const [endDate, setEndDate] = useState('');
     const [activeCreateTab, setActiveCreateTab] = useState<'company' | 'individual'>('company');
     const [machines, setMachines] = useState<MachineRequestItem[]>([
-        { id: '1', brand: '', model: '', type: '', quantity: 1, availableStock: 0, unitPrice: 0, totalPrice: 0 },
+        { id: '1', brand: '', model: '', type: '', quantity: 1, availableStock: 0, unitPrice: 0, totalPrice: 0, monthlyRentalFee: 0 },
     ]);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-    // API data: registered customers and inventory (available stock by brand+model+type to match inventory page)
+    // API data: registered customers, inventory, and master data (brands, models, machine types)
     const [customers, setCustomers] = useState<ApiCustomer[]>([]);
     const [customersLoading, setCustomersLoading] = useState(true);
     const [inventoryByBrandModelType, setInventoryByBrandModelType] = useState<Record<string, number>>({});
     const [brandModelTypeList, setBrandModelTypeList] = useState<{ brand: string; model: string; type: string }[]>([]);
+    const [apiBrands, setApiBrands] = useState<ApiBrand[]>([]);
+    const [apiModels, setApiModels] = useState<ApiModel[]>([]);
+    const [apiMachineTypes, setApiMachineTypes] = useState<ApiMachineType[]>([]);
+    const [masterDataLoading, setMasterDataLoading] = useState(true);
 
     const fetchCustomers = useCallback(async () => {
         setCustomersLoading(true);
@@ -560,10 +573,38 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }
     }, []);
 
+    // Fetch master data: brands, models, machine types (so user can select any brand/model/type, not only from inventory)
+    const fetchMasterData = useCallback(async () => {
+        setMasterDataLoading(true);
+        try {
+            const [brandsRes, modelsRes, typesRes] = await Promise.all([
+                authFetch(`${API_BASE_URL}/brands?page=1&limit=200`, { credentials: 'include' }),
+                authFetch(`${API_BASE_URL}/models?page=1&limit=500`, { credentials: 'include' }),
+                authFetch(`${API_BASE_URL}/machine-types?page=1&limit=200`, { credentials: 'include' }),
+            ]);
+            const brandsJson = await brandsRes.json();
+            const modelsJson = await modelsRes.json();
+            const typesJson = await typesRes.json();
+            const brandsList = brandsJson?.data?.items ?? [];
+            const modelsList = modelsJson?.data?.items ?? [];
+            const typesList = typesJson?.data?.items ?? [];
+            setApiBrands(Array.isArray(brandsList) ? brandsList : []);
+            setApiModels(Array.isArray(modelsList) ? modelsList : []);
+            setApiMachineTypes(Array.isArray(typesList) ? typesList : []);
+        } catch {
+            setApiBrands([]);
+            setApiModels([]);
+            setApiMachineTypes([]);
+        } finally {
+            setMasterDataLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         fetchCustomers();
         fetchInventory();
-    }, [fetchCustomers, fetchInventory]);
+        fetchMasterData();
+    }, [fetchCustomers, fetchInventory, fetchMasterData]);
 
     // Get outstanding alerts for selected customer (mock data; when using API customers, match by id string or skip)
     const customerOutstandingAlerts = useMemo(() => {
@@ -584,8 +625,16 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }, customerOutstandingAlerts[0].severity);
     }, [customerOutstandingAlerts]);
 
-    // Get available models based on selected brand (from API-derived list, fallback to mock)
+    // Get available models based on selected brand (prefer master data API, then inventory list, then mock)
     const getAvailableModels = (brand: string) => {
+        if (apiModels.length > 0 && brand) {
+            const brandObj = apiBrands.find((b) => b.name === brand);
+            const forBrand = brandObj
+                ? apiModels.filter((m) => m.brandId === brandObj.id)
+                : apiModels.filter((m) => (m.brand as { name?: string })?.name === brand);
+            const names = [...new Set(forBrand.map((m) => m.name))].filter(Boolean).sort();
+            if (names.length > 0) return names;
+        }
         if (brandModelTypeList.length > 0) {
             const models = brandModelTypeList.filter((m) => m.brand === brand).map((m) => m.model);
             return [...new Set(models)].sort();
@@ -594,13 +643,16 @@ const CreatePurchaseRequestPage: React.FC = () => {
         return brandData?.models || [];
     };
 
-    // Get available types for selected brand+model (from API so only types with stock are shown; fallback to mock)
-    const getAvailableTypes = (brand: string, model: string): string[] => {
+    // Get available types: prefer all machine types from API so user can select any type; else inventory types for brand+model, then mock
+    const getAvailableTypes = (_brand: string, _model: string): string[] => {
+        if (apiMachineTypes.length > 0) {
+            return apiMachineTypes.map((t) => t.name).filter(Boolean).sort();
+        }
         if (brandModelTypeList.length > 0) {
             const types = brandModelTypeList
-                .filter((m) => m.brand === brand && m.model === model)
+                .filter((m) => m.brand === _brand && m.model === _model)
                 .map((m) => m.type);
-            return [...new Set(types)].sort();
+            return [...new Set(types)].length > 0 ? [...new Set(types)].sort() : mockMachineTypes;
         }
         return mockMachineTypes;
     };
@@ -617,8 +669,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
         return inventoryItem?.availableStock || 0;
     };
 
-    // Get unique brands (from API-derived list, fallback to mock)
+    // Get unique brands (prefer master data API, then inventory-derived list, then mock)
     const getAvailableBrands = () => {
+        if (apiBrands.length > 0) {
+            return apiBrands.map((b) => b.name).filter(Boolean).sort();
+        }
         if (brandModelTypeList.length > 0) {
             const brands = [...new Set(brandModelTypeList.map((m) => m.brand))].filter(Boolean).sort();
             return brands;
@@ -653,7 +708,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             value: brand,
             label: brand,
         }));
-    }, [brandModelTypeList]);
+    }, [brandModelTypeList, apiBrands]);
 
     // Prepare model options for each machine
     const getModelOptions = (brand: string) => {
@@ -671,18 +726,13 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }));
     };
 
-    // Calculate pricing
+    // Calculate pricing from monthly rental fee × quantity per line (read-only summary; row totals updated in handleMachineChange)
     const pricing = useMemo(() => {
-        let totalPrice = 0;
-        machines.forEach((machine) => {
-            if (machine.type && machine.quantity > 0) {
-                const pricePerMachine = standardPrices[machine.type] || 0;
-                machine.unitPrice = pricePerMachine;
-                machine.totalPrice = pricePerMachine * machine.quantity;
-                totalPrice += machine.totalPrice;
-            }
-        });
-        return totalPrice;
+        return machines.reduce((sum, m) => {
+            const fee = Number(m.monthlyRentalFee) || 0;
+            const qty = Math.max(0, Number(m.quantity) || 0);
+            return sum + fee * qty;
+        }, 0);
     }, [machines]);
 
     const handleMenuClick = () => {
@@ -710,7 +760,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleAddMachine = () => {
         setMachines([
             ...machines,
-            { id: Date.now().toString(), brand: '', model: '', type: '', quantity: 1, availableStock: 0, unitPrice: 0, totalPrice: 0 },
+            { id: Date.now().toString(), brand: '', model: '', type: '', quantity: 1, availableStock: 0, unitPrice: 0, totalPrice: 0, monthlyRentalFee: 0 },
         ]);
     };
 
@@ -723,34 +773,29 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleMachineChange = (id: string, field: keyof MachineRequestItem, value: any) => {
         setMachines(
             machines.map((m) => {
-                if (m.id === id) {
-                    const updated = { ...m, [field]: value };
-                    // Reset model and type when brand changes
-                    if (field === 'brand') {
-                        updated.model = '';
-                        updated.type = '';
-                        updated.availableStock = 0;
-                    }
-                    // Reset type when model changes
-                    if (field === 'model') {
-                        updated.type = '';
-                        updated.availableStock = 0;
-                    }
-                    // Update available stock when type is selected (brand+model+type = inventory grain)
-                    if (field === 'type') {
-                        updated.unitPrice = standardPrices[value] || 0;
-                        updated.totalPrice = (standardPrices[value] || 0) * updated.quantity;
-                        if (updated.brand && updated.model) {
-                            updated.availableStock = getAvailableStock(updated.brand, updated.model, value);
-                        }
-                    }
-                    // Update total price when quantity changes
-                    if (field === 'quantity') {
-                        updated.totalPrice = updated.unitPrice * (value || 1);
-                    }
-                    return updated;
+                if (m.id !== id) return m;
+                const updated = { ...m, [field]: value };
+                // Reset model and type when brand changes
+                if (field === 'brand') {
+                    updated.model = '';
+                    updated.type = '';
+                    updated.availableStock = 0;
                 }
-                return m;
+                // Reset type when model changes
+                if (field === 'model') {
+                    updated.type = '';
+                    updated.availableStock = 0;
+                }
+                // Update available stock when type is selected (brand+model+type = inventory grain)
+                if (field === 'type' && updated.brand && updated.model) {
+                    updated.availableStock = getAvailableStock(updated.brand, updated.model, value);
+                }
+                // Derive unitPrice/totalPrice from monthlyRentalFee and quantity
+                const fee = Number(updated.monthlyRentalFee) || 0;
+                const qty = Math.max(0, Number(updated.quantity) || 1);
+                updated.unitPrice = fee;
+                updated.totalPrice = fee * qty;
+                return updated;
             })
         );
     };
@@ -770,6 +815,12 @@ const CreatePurchaseRequestPage: React.FC = () => {
             if (!machine.model) errors[`machine_model_${index}`] = 'Model is required';
             if (!machine.type) errors[`machine_type_${index}`] = 'Type is required';
             if (machine.quantity < 1) errors[`machine_quantity_${index}`] = 'Quantity must be at least 1';
+            if (typeof machine.monthlyRentalFee !== 'number' && isNaN(Number(machine.monthlyRentalFee))) {
+                errors[`machine_monthlyRentalFee_${index}`] = 'Monthly rental fee must be a number';
+            }
+            if (Number(machine.monthlyRentalFee) < 0) {
+                errors[`machine_monthlyRentalFee_${index}`] = 'Monthly rental fee cannot be negative';
+            }
         });
 
         setFormErrors(errors);
@@ -790,6 +841,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
             const machinesWithStatus = machines.map((machine) => {
                 const available = Math.min(machine.availableStock, machine.quantity);
                 const pending = machine.quantity - available;
+                const fee = Number(machine.monthlyRentalFee) || 0;
+                const qty = Math.max(0, Number(machine.quantity) || 1);
                 return {
                     id: machine.id,
                     brand: machine.brand,
@@ -797,8 +850,9 @@ const CreatePurchaseRequestPage: React.FC = () => {
                     type: machine.type,
                     quantity: machine.quantity,
                     availableStock: machine.availableStock ?? 0,
-                    unitPrice: machine.unitPrice,
-                    totalPrice: machine.totalPrice,
+                    unitPrice: fee,
+                    totalPrice: fee * qty,
+                    monthlyRentalFee: fee,
                     rentedQuantity: 0,
                     pendingQuantity: pending,
                 };
@@ -1239,27 +1293,46 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                 )}
                                             </div>
 
-                                            {/* Machine Input Fields - All in One Row */}
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                {/* Brand Field */}
-                                                <div className="flex flex-col">
-                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            {/* Machine Input Fields - two-row grid so all inputs align regardless of label length */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-x-4 gap-y-2">
+                                                {/* Row 1: Labels (each can wrap; row height varies) */}
+                                                <div className="min-w-0">
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                                         Brand <span className="text-red-500">*</span>
                                                     </label>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                        Model <span className="text-red-500">*</span>
+                                                    </label>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                        Type <span className="text-red-500">*</span>
+                                                    </label>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                        Quantity <span className="text-red-500">*</span>
+                                                    </label>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                        Monthly Rental Fee (Rs.)
+                                                    </label>
+                                                </div>
+                                                {/* Row 2: Inputs (always on same baseline) */}
+                                                <div className="min-w-0 flex flex-col">
                                                     <SearchableSelect
                                                         value={machine.brand}
                                                         onChange={(value) => handleMachineChange(machine.id, 'brand', value)}
                                                         options={brandOptions}
-                                                        placeholder="Select Brand"
+                                                        placeholder={masterDataLoading ? 'Loading brands...' : 'Select Brand'}
+                                                        disabled={masterDataLoading}
                                                         error={formErrors[`machine_brand_${index}`]}
                                                     />
                                                 </div>
-
-                                                {/* Model Field */}
-                                                <div className="flex flex-col">
-                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                        Model <span className="text-red-500">*</span>
-                                                    </label>
+                                                <div className="min-w-0 flex flex-col">
                                                     <SearchableSelect
                                                         value={machine.model}
                                                         onChange={(value) => handleMachineChange(machine.id, 'model', value)}
@@ -1269,12 +1342,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         error={formErrors[`machine_model_${index}`]}
                                                     />
                                                 </div>
-
-                                                {/* Type Field */}
-                                                <div className="flex flex-col">
-                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                        Type <span className="text-red-500">*</span>
-                                                    </label>
+                                                <div className="min-w-0 flex flex-col">
                                                     <SearchableSelect
                                                         value={machine.type}
                                                         onChange={(value) => handleMachineChange(machine.id, 'type', value)}
@@ -1284,34 +1352,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         error={formErrors[`machine_type_${index}`]}
                                                     />
                                                 </div>
-
-                                                {/* Quantity Field */}
-                                                <div className="flex flex-col">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                                            Quantity <span className="text-red-500">*</span>
-                                                        </label>
-                                                        {machine.brand && machine.model && machine.type && (
-                                                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md flex-shrink-0 ${
-                                                                availableStock > 0
-                                                                    ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
-                                                                    : 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'
-                                                            }`}>
-                                                                <Package className={`w-3.5 h-3.5 ${
-                                                                    availableStock > 0
-                                                                        ? 'text-green-700 dark:text-green-400'
-                                                                        : 'text-red-700 dark:text-red-400'
-                                                                }`} />
-                                                                <span className={`text-xs font-semibold whitespace-nowrap ${
-                                                                    availableStock > 0
-                                                                        ? 'text-green-700 dark:text-green-400'
-                                                                        : 'text-red-700 dark:text-red-400'
-                                                                }`}>
-                                                                    Available: <span className="text-sm">{availableStock}</span>
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                <div className="min-w-0 flex flex-col">
                                                     <input
                                                         type="number"
                                                         min="1"
@@ -1325,6 +1366,22 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                                 : 'border-gray-300 dark:border-slate-600'
                                                             } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
                                                     />
+                                                    {machine.brand && machine.model && machine.type && (
+                                                        <div className={`mt-1.5 inline-flex items-center gap-1.5 w-fit px-2 py-1 rounded-md ${
+                                                            availableStock > 0
+                                                                ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                                                                : 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'
+                                                        }`}>
+                                                            <Package className={`w-3.5 h-3.5 ${
+                                                                availableStock > 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
+                                                            }`} />
+                                                            <span className={`text-xs font-semibold ${
+                                                                availableStock > 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
+                                                            }`}>
+                                                                Available: {availableStock}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                     {formErrors[`machine_quantity_${index}`] && (
                                                         <p className="mt-1 text-sm text-red-500">
                                                             {formErrors[`machine_quantity_${index}`]}
@@ -1341,14 +1398,37 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         </p>
                                                     )}
                                                 </div>
+                                                <div className="min-w-0 flex flex-col">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={machine.monthlyRentalFee || ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            const num = val === '' ? 0 : parseFloat(val) || 0;
+                                                            handleMachineChange(machine.id, 'monthlyRentalFee', num);
+                                                        }}
+                                                        placeholder="0"
+                                                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`machine_monthlyRentalFee_${index}`]
+                                                                ? 'border-red-500'
+                                                                : 'border-gray-300 dark:border-slate-600'
+                                                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                                                    />
+                                                    {formErrors[`machine_monthlyRentalFee_${index}`] && (
+                                                        <p className="mt-1 text-sm text-red-500">
+                                                            {formErrors[`machine_monthlyRentalFee_${index}`]}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
 
-                                            {/* Show price info if machine is fully selected */}
-                                            {machine.brand && machine.model && machine.type && machine.quantity > 0 && (
+                                            {/* Show price info when monthly fee or quantity is set */}
+                                            {(Number(machine.monthlyRentalFee) > 0 || machine.quantity > 0) && (
                                                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-600">
                                                     <div className="text-sm text-gray-600 dark:text-gray-400">
                                                         <span>
-                                                            Unit Price: Rs. {machine.unitPrice.toLocaleString('en-LK')} | Sub Total: Rs. {machine.totalPrice.toLocaleString('en-LK')} ({machine.unitPrice.toLocaleString('en-LK')} × {machine.quantity})
+                                                            Monthly rental: Rs. {(machine.monthlyRentalFee || 0).toLocaleString('en-LK')} × {machine.quantity} = Rs. {(machine.totalPrice || 0).toLocaleString('en-LK')}
                                                         </span>
                                                     </div>
                                                 </div>

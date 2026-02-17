@@ -72,21 +72,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             href: '/dashboard',
         },
         {
-            icon: Users,
-            label: 'Customer Management',
-            href: '/customers',
-        },
-        {
-            icon: Wrench,
-            label: 'Machine & Tools Management',
-            href: '/machines',
-        },
-        {
-            icon: Boxes,
-            label: 'Inventory Management',
-            href: '/inventory',
-        },
-        {
             icon: ShoppingCart,
             label: 'Purchase Order',
             href: '/purchase-order',
@@ -110,6 +95,21 @@ const Sidebar: React.FC<SidebarProps> = ({
             icon: CreditCard,
             label: 'Invoice & Payments',
             href: '/invoice',
+        },
+        {
+            icon: Boxes,
+            label: 'Inventory Management',
+            href: '/inventory',
+        },
+        {
+            icon: Wrench,
+            label: 'Machine & Tools Management',
+            href: '/machines',
+        },
+        {
+            icon: Users,
+            label: 'Customer Management',
+            href: '/customers',
         },
         {
             icon: Bell,

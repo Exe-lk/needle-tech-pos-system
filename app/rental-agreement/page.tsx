@@ -194,6 +194,7 @@ function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
   const total = Number(r.total);
   const balance = Number(r.balance);
   const statusMap: Record<string, RentalStatus> = {
+    PENDING: 'Pending',
     ACTIVE: 'Active',
     COMPLETED: 'Completed',
     CANCELLED: 'Cancelled',
@@ -247,6 +248,7 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     };
   });
   const statusMap: Record<string, RentalStatus> = {
+    PENDING: 'Pending',
     ACTIVE: 'Active',
     COMPLETED: 'Completed',
     CANCELLED: 'Cancelled',
@@ -1333,6 +1335,17 @@ const typeOptions = useMemo(() => {
 
     setIsSubmitting(true);
     try {
+      // Build machines payload: backend expects brand, model, type, quantity, dailyRate (standardPrice is monthly → dailyRate = standardPrice/30)
+      const machinesPayload = machines
+        .filter((m) => m.brand && m.model && m.type && m.quantity >= 1)
+        .map((m) => ({
+          brand: m.brand.trim(),
+          model: m.model.trim(),
+          type: m.type.trim() || undefined,
+          quantity: m.quantity,
+          dailyRate: (m.standardPrice > 0 ? m.standardPrice : (standardPrices[m.type] || 0)) / 30,
+        }));
+
       const res = await authFetch(`${API_BASE}/rentals`, {
         method: 'POST',
         credentials: 'include',
@@ -1340,6 +1353,7 @@ const typeOptions = useMemo(() => {
           customerId,
           startDate,
           endDate,
+          machines: machinesPayload,
         }),
       });
       const json = await res.json();

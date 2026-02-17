@@ -33,8 +33,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       });
     }
     
-    // Get purchase order
-    const purchaseOrder = await prisma.purchaseOrder.findUnique({
+    // Get purchase order (PurchaseOrder model on PrismaClient)
+    const purchaseOrder = await (prisma as any).purchaseOrder.findUnique({
       where: { id: purchaseRequestId },
       include: { customer: true },
     });
@@ -43,10 +43,10 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       return notFoundResponse('Purchase request not found');
     }
     
-    const allowedStatuses = ['APPROVED', 'PARTIALLY_FULFILLED','PENDING'];
+    const allowedStatuses = ['APPROVED', 'PARTIALLY_FULFILLED', 'PENDING', 'ACTIVE'];
     if (!allowedStatuses.includes(purchaseOrder.status)) {
       return validationErrorResponse('Invalid purchase request status', {
-        purchaseRequestId: ['Purchase request must be approved or partially fulfilled to create another hiring agreement'],
+        purchaseRequestId: ['Purchase request must be approved, active, or partially fulfilled to create another hiring agreement'],
       });
     }
     
@@ -87,13 +87,13 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     
     const userId = context.id;
     
-    // Create rental agreement
+    // Create rental agreement (PENDING until machines are assigned via machine-assign-page)
     const newRental = await prisma.rental.create({
       data: {
         agreementNumber,
         customerId: purchaseOrder.customerId,
         purchaseOrderId: purchaseRequestId,
-        status: 'ACTIVE',
+        status: 'PENDING',
         startDate: new Date(rentalStartDate),
         expectedEndDate: new Date(rentalEndDate),
         subtotal: new Decimal(subtotal),
@@ -103,7 +103,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         paidAmount: new Decimal(0),
         depositTotal: new Decimal(0),
         createdByUserId: userId,
-      },
+      } as any,
       include: {
         customer: true,
         machines: true,
@@ -185,14 +185,15 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       return { ...m, rentedQuantity: prevRented + added };
     });
     const allFulfilled = updatedMachines.every((m: any) => (m.rentedQuantity || 0) >= (m.quantity || 0));
-    const newStatus = allFulfilled ? 'COMPLETED' : 'PARTIALLY_FULFILLED';
+    // When at least one hiring agreement is created from this PO, mark PO as ACTIVE; COMPLETED when all lines fulfilled
+    const newStatus = allFulfilled ? 'COMPLETED' : 'ACTIVE';
     
-    await prisma.purchaseOrder.update({
+    await (prisma as any).purchaseOrder.update({
       where: { id: purchaseRequestId },
       data: { machines: updatedMachines, status: newStatus },
     });
     
-    // Transform response
+    // Transform response (status PENDING until machines assigned in machine-assign-page)
     const rentalWithCustomer = newRental as typeof newRental & { customer?: { name: string } };
     const transformed = {
       id: newRental.id,
@@ -201,7 +202,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       customerName: rentalWithCustomer.customer?.name ?? '',
       startDate: newRental.startDate,
       endDate: newRental.expectedEndDate,
-      status: 'Pending',
+      status: newRental.status,
     };
     
     return successResponse(transformed, 'Rental agreement created successfully', 201);

@@ -95,6 +95,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       rentalId: rental.id,
       agreementNo: rental.agreementNumber,
       status: rental.status,
+      customerId: rental.customerId,
       customerName: rental.customer.name,
       customerAddress: [
         rental.customer.billingAddressLine1,

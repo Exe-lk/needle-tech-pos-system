@@ -91,7 +91,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
 export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest, auth: { id: string }) => {
   try {
     const body = await request.json();
-    const { customerId, startDate, endDate, machineIds = [] } = body;
+    const { customerId, startDate, endDate, machines: machinesInput = [] } = body;
     
     if (!customerId || !startDate || !endDate) {
       return validationErrorResponse('Missing required fields', {
@@ -113,10 +113,73 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
     const agreementNumber = `RA${new Date().getFullYear().toString().slice(-2)}${String(count + 1).padStart(6, '0')}`;
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const subtotal = new Decimal(0);
-    const vatAmount = new Decimal(0);
-    const total = new Decimal(0);
-    const balance = new Decimal(0);
+
+    // Compute totals from machines (daily rates); if no machines, use zero
+    let subtotalNum = 0;
+    const resolvedMachines: { machineId: string; quantity: number; dailyRate: number }[] = [];
+
+    if (Array.isArray(machinesInput) && machinesInput.length > 0) {
+      for (const row of machinesInput) {
+        const brandName = String(row.brand || '').trim();
+        const modelName = String(row.model || '').trim();
+        const typeName = row.type != null && row.type !== '' ? String(row.type).trim() : null;
+        const quantity = Math.max(1, parseInt(String(row.quantity), 10) || 1);
+        const dailyRate = parseFloat(String(row.dailyRate ?? 0)) || 0;
+
+        if (!brandName || !modelName) {
+          return validationErrorResponse('Invalid machine line', {
+            machines: ['Each machine must have brand and model'],
+          });
+        }
+
+        const brand = await prisma.brand.findFirst({
+          where: { name: { equals: brandName, mode: 'insensitive' }, isActive: true },
+        });
+        if (!brand) {
+          return validationErrorResponse('Brand not found', {
+            machines: [`No brand "${brandName}" found in database`],
+          });
+        }
+        const model = await prisma.model.findFirst({
+          where: { name: { equals: modelName, mode: 'insensitive' }, brandId: brand.id, isActive: true },
+        });
+        if (!model) {
+          return validationErrorResponse('Model not found', {
+            machines: [`No model "${modelName}" for brand "${brandName}" found in database`],
+          });
+        }
+        let typeId: string | null = null;
+        if (typeName) {
+          const machineType = await prisma.machineType.findFirst({
+            where: { name: { equals: typeName, mode: 'insensitive' }, isActive: true },
+          });
+          if (machineType) typeId = machineType.id;
+        }
+        const machineWhere: { brandId: string; modelId: string; typeId?: string | null } = {
+          brandId: brand.id,
+          modelId: model.id,
+        };
+        if (typeId != null) machineWhere.typeId = typeId;
+        const machine = await prisma.machine.findFirst({
+          where: machineWhere,
+        });
+        if (!machine) {
+          return validationErrorResponse('No machine found for this line', {
+            machines: [`No machine in inventory for ${brandName} / ${modelName}${typeName ? ` / ${typeName}` : ''}. Ensure at least one machine exists with this brand and model.`],
+          });
+        }
+
+        resolvedMachines.push({ machineId: machine.id, quantity, dailyRate });
+        subtotalNum += quantity * dailyRate;
+      }
+    }
+
+    const vatNum = subtotalNum * 0.15;
+    const totalNum = subtotalNum + vatNum;
+    const subtotal = new Decimal(subtotalNum);
+    const vatAmount = new Decimal(vatNum);
+    const total = new Decimal(totalNum);
+    const balance = new Decimal(totalNum);
     
     const newRental = await prisma.rental.create({
       data: {
@@ -135,8 +198,27 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
       },
       include: { customer: true, machines: true }
     });
+
+    // Create RentalMachine records for each resolved machine
+    for (const { machineId, quantity, dailyRate } of resolvedMachines) {
+      await prisma.rentalMachine.create({
+        data: {
+          rentalId: newRental.id,
+          machineId,
+          dailyRate: new Decimal(dailyRate),
+          securityDeposit: new Decimal(0),
+          quantity,
+        },
+      });
+    }
+
+    // Re-fetch rental with machines included for response
+    const rentalWithMachines = await prisma.rental.findUnique({
+      where: { id: newRental.id },
+      include: { customer: true, machines: { include: { machine: { include: { brand: true, model: true, type: true } } } } },
+    });
     
-    return successResponse(newRental, 'Rental created successfully', 201);
+    return successResponse(rentalWithMachines ?? newRental, 'Rental created successfully', 201);
   } catch (error: any) {
     console.error('Error creating rental:', error);
     return errorResponse('Failed to create rental', 500);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
@@ -58,29 +58,6 @@ interface StockTransaction {
   performedBy?: string;
 }
 
-/** Expand inventory items into individual machine units (one per physical machine). */
-function expandInventoryToMachineUnits(items: InventoryItem[]): MachineUnit[] {
-  const units: MachineUnit[] = [];
-  let globalIndex = 0;
-  for (const item of items) {
-    const prefix = `${item.brand}-${item.model}`.replace(/\s+/g, '-');
-    for (let i = 0; i < item.totalStock; i++) {
-      globalIndex += 1;
-      const serialNum = String(globalIndex).padStart(4, '0');
-      const boxNum = `${prefix}-B${String(i + 1).padStart(3, '0')}`;
-      units.push({
-        id: `unit-${item.id}-${i + 1}`,
-        brand: item.brand,
-        model: item.model,
-        type: item.type,
-        serialNumber: `${prefix}-SN${serialNum}`,
-        boxNumber: boxNum,
-      });
-    }
-  }
-  return units;
-}
-
 const InventoryManagementPage: React.FC = () => {
   const router = useRouter();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -97,6 +74,9 @@ const InventoryManagementPage: React.FC = () => {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedMachineForQR, setSelectedMachineForQR] = useState<MachineUnit | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [machineUnits, setMachineUnits] = useState<MachineUnit[]>([]);
+  const [machineUnitsLoading, setMachineUnitsLoading] = useState(true);
+  const [machineUnitsError, setMachineUnitsError] = useState<string | null>(null);
   const qrCodeRef = useRef<HTMLDivElement>(null);
 
   // Fetch inventory from API
@@ -125,6 +105,43 @@ const InventoryManagementPage: React.FC = () => {
   useEffect(() => {
     fetchInventory();
   }, [fetchInventory]);
+
+  // Fetch machine units (real serialNumber, boxNumber from DB) for view modal and QR codes
+  const fetchMachineUnits = useCallback(async () => {
+    setMachineUnitsLoading(true);
+    setMachineUnitsError(null);
+    try {
+      const res = await authFetch(`${API_BASE}/inventory/machines`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.message || 'Failed to load machines');
+      }
+      const list = json?.data?.machines ?? [];
+      const units: MachineUnit[] = Array.isArray(list)
+        ? list.map((m: { id: string; brand: string; model: string; type: string; serialNumber: string; boxNumber: string }) => ({
+            id: m.id,
+            brand: m.brand,
+            model: m.model,
+            type: m.type as MachineType,
+            serialNumber: m.serialNumber,
+            boxNumber: m.boxNumber,
+          }))
+        : [];
+      setMachineUnits(units);
+    } catch (err: unknown) {
+      setMachineUnitsError(err instanceof Error ? err.message : 'Failed to load machines');
+      setMachineUnits([]);
+    } finally {
+      setMachineUnitsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMachineUnits();
+  }, [fetchMachineUnits]);
 
   // Fetch transactions for history modal (filtered by brand/model)
   const fetchTransactionsForItem = useCallback(async (brand: string, model: string) => {
@@ -159,8 +176,8 @@ const InventoryManagementPage: React.FC = () => {
     }
   }, [isHistoryModalOpen, selectedItem?.brand, selectedItem?.model, fetchTransactionsForItem]);
 
-  /** All individual machine units (70 total from 5 inventory rows). */
-  const allMachineUnits = useMemo(() => expandInventoryToMachineUnits(inventory), [inventory]);
+  /** All individual machine units from database (real serialNumber, boxNumber). */
+  const allMachineUnits = machineUnits;
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -741,15 +758,30 @@ const InventoryManagementPage: React.FC = () => {
 
             {/* Modal Content - Table with pagination */}
             <div className="flex-1 overflow-y-auto p-6">
-              <Table
-                data={allMachineUnits}
-                columns={viewDetailsColumns}
-                actions={viewDetailsActions}
-                itemsPerPage={10}
-                searchable
-                filterable
-                emptyMessage="No machines found."
-              />
+              {machineUnitsLoading ? (
+                <p className="text-gray-600 dark:text-gray-400 text-center py-8">Loading machines...</p>
+              ) : machineUnitsError ? (
+                <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-sm text-red-700 dark:text-red-300">{machineUnitsError}</p>
+                  <button
+                    type="button"
+                    onClick={() => fetchMachineUnits()}
+                    className="px-3 py-1.5 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/40 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <Table
+                  data={allMachineUnits}
+                  columns={viewDetailsColumns}
+                  actions={viewDetailsActions}
+                  itemsPerPage={10}
+                  searchable
+                  filterable
+                  emptyMessage="No machines found."
+                />
+              )}
             </div>
           </div>
         </div>

@@ -150,7 +150,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
         customerId,
         rentalId: rentalId || null,
         type,
-        taxCategory: taxCategory || 'STANDARD',
+        taxCategory: taxCategory === 'NON_VAT' ? 'NON_VAT' : 'VAT',
         status: 'DRAFT',
         issueDate: issueDate ? new Date(issueDate) : now,
         dueDate: dueDate ? new Date(dueDate) : now,

@@ -62,6 +62,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
         availableStock: m.availableStock || 0,
         unitPrice: m.unitPrice,
         totalPrice: m.totalPrice,
+        monthlyRentalFee: m.monthlyRentalFee ?? m.unitPrice ?? 0,
         rentedQuantity: m.rentedQuantity || 0,
         pendingQuantity: m.quantity - (m.rentedQuantity || 0),
         expectedAvailabilityDate: m.expectedAvailabilityDate || null,
@@ -112,6 +113,12 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     }
     if (body.notes !== undefined) {
       updateData.notes = body.notes;
+    }
+    if (body.startDate !== undefined) {
+      updateData.startDate = body.startDate ? new Date(body.startDate) : null;
+    }
+    if (body.endDate !== undefined) {
+      updateData.endDate = body.endDate ? new Date(body.endDate) : null;
     }
     
     const updatedPO = await prisma.purchaseOrder.update({

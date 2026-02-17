@@ -407,6 +407,7 @@ enum PurchaseOrderStatus {
   PENDING
   APPROVED
   REJECTED
+  ACTIVE
   COMPLETED
   CANCELLED
   PARTIALLY_FULFILLED
@@ -528,6 +529,7 @@ model RentalMachine {
 }
 
 enum RentalStatus {
+  PENDING
   ACTIVE
   COMPLETED
   CANCELLED
