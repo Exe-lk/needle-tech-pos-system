@@ -406,7 +406,7 @@ const PurchaseOrderPage: React.FC = () => {
                 const msg = json?.message || (json?.data ? Object.values(json.data).flat().join(' ') : '') || 'Failed to create rental agreement';
                 throw new Error(msg);
             }
-            alert(`Rental agreement created successfully. Agreement: ${json?.data?.agreementNo ?? 'N/A'}`);
+            alert(`Rental agreement created successfully. Agreement: ${json?.data?.agreementNo ?? 'N/A'}. It is in Pending status—assign all machines on the Rental Agreement page to activate and enable print or gate pass.`);
             handleCloseRentalModal();
             fetchPurchaseOrders();
         } catch (error: any) {

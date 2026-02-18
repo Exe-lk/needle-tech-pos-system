@@ -51,9 +51,9 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     }
     
     // Validate requested quantities do not exceed available per line (stock-aware)
-    const poMachines = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
+    const poMachinesList = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
     for (const req of machines) {
-      const line = poMachines.find((m: any) => String(m.id || m.machineId) === String(req.machineId));
+      const line = poMachinesList.find((m: any) => String(m.id || m.machineId) === String(req.machineId));
       if (!line) {
         return validationErrorResponse('Invalid machine for this purchase order', {
           machines: [`Machine ${req.machineId} is not part of this purchase order`],
@@ -69,25 +69,58 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         });
       }
     }
-    
-    // Calculate totals
-    let subtotal = 0;
+
+    // Number of months in rental period (same formula as rental-agreement page for consistent display)
+    const start = new Date(rentalStartDate);
+    const end = new Date(rentalEndDate);
+    const monthsInPeriod = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+
+    // Calculate totals: use PO line monthly fee as single source of truth (full period = monthly × months)
+    let subtotalMonthly = 0;
     for (const machine of machines) {
-      const quantity = machine.quantity || 0;
-      const unitPrice = machine.unitPrice || 0;
-      subtotal += quantity * unitPrice;
+      const line = poMachinesList.find((m: any) => String(m.id || m.machineId) === String(machine.machineId));
+      const monthlyFee = line != null
+        ? (typeof (line as any).monthlyRentalFee === 'number' ? (line as any).monthlyRentalFee : parseFloat(String((line as any).unitPrice ?? 0)) || 0)
+        : (parseFloat(String(machine.unitPrice ?? 0)) || 0);
+      const quantity = Math.max(0, Number(machine.quantity) || 0);
+      subtotalMonthly += quantity * monthlyFee;
     }
-    
-    const vatAmount = subtotal * 0.15; // 15% VAT
-    const total = subtotal + vatAmount;
+    const periodSubtotal = subtotalMonthly * monthsInPeriod;
+    const vatAmount = periodSubtotal * 0.15; // 15% VAT
+    const total = periodSubtotal + vatAmount;
     
     // Generate agreement number
     const count = await prisma.rental.count();
     const agreementNumber = `RA${new Date().getFullYear().toString().substr(2)}${String(count + 1).padStart(6, '0')}`;
     
     const userId = context.id;
-    
-    // Create rental agreement (PENDING until machines are assigned via machine-assign-page)
+
+    // Build expected machine categories for this rental (for UI and for PUT expected count). No machines assigned yet.
+    const expectedMachineCategories: { id: string; brand: string; model: string; type: string; quantity: number }[] = [];
+    let expectedMachineCount = 0;
+    for (const machine of machines) {
+      const line = poMachinesList.find((m: any) => String(m.id || m.machineId) === String(machine.machineId));
+      if (!line || !line.brand || !line.model) {
+        return validationErrorResponse('Invalid machine line', {
+          machines: [`Could not find PO line or missing brand/model for line ${machine.machineId}`],
+        });
+      }
+      const qty = machine.quantity || 1;
+      expectedMachineCount += qty;
+      expectedMachineCategories.push({
+        id: String(machine.machineId),
+        brand: String(line.brand || '').trim(),
+        model: String(line.model || '').trim(),
+        type: line.type ? String(line.type).trim() : '',
+        quantity: qty,
+      });
+    }
+    const expectedPayload = JSON.stringify({
+      expectedMachineCount,
+      expectedMachineCategories,
+    });
+
+    // Create rental agreement (PENDING, no machines assigned; assign via machine-assign / Update Agreement)
     const newRental = await prisma.rental.create({
       data: {
         agreementNumber,
@@ -96,81 +129,21 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         status: 'PENDING',
         startDate: new Date(rentalStartDate),
         expectedEndDate: new Date(rentalEndDate),
-        subtotal: new Decimal(subtotal),
+        subtotal: new Decimal(periodSubtotal),
         vatAmount: new Decimal(vatAmount),
         total: new Decimal(total),
         balance: new Decimal(total),
         paidAmount: new Decimal(0),
         depositTotal: new Decimal(0),
         createdByUserId: userId,
+        lockedReason: expectedPayload,
       } as any,
       include: {
         customer: true,
         machines: true,
       },
     });
-    
-    // Resolve PO line (brand, model, type) to a Machine.id (UUID) for each request line
-    const poMachinesList = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
-    for (const machine of machines) {
-      const line = poMachinesList.find((m: any) => String(m.id || m.machineId) === String(machine.machineId));
-      if (!line || !line.brand || !line.model) {
-        return validationErrorResponse('Invalid machine line', {
-          machines: [`Could not find PO line or missing brand/model for line ${machine.machineId}`],
-        });
-      }
-      const brandName = String(line.brand).trim();
-      const modelName = String(line.model).trim();
-      const typeName = line.type ? String(line.type).trim() : null;
 
-      const brand = await prisma.brand.findFirst({
-        where: { name: { equals: brandName, mode: 'insensitive' }, isActive: true },
-      });
-      if (!brand) {
-        return validationErrorResponse('Brand not found', {
-          machines: [`No brand "${brandName}" found in database for line ${line.brand} / ${line.model}`],
-        });
-      }
-      const model = await prisma.model.findFirst({
-        where: { name: { equals: modelName, mode: 'insensitive' }, brandId: brand.id, isActive: true },
-      });
-      if (!model) {
-        return validationErrorResponse('Model not found', {
-          machines: [`No model "${modelName}" for brand "${brandName}" found in database`],
-        });
-      }
-      let typeId: string | null = null;
-      if (typeName) {
-        const machineType = await prisma.machineType.findFirst({
-          where: { name: { equals: typeName, mode: 'insensitive' }, isActive: true },
-        });
-        if (machineType) typeId = machineType.id;
-      }
-      const machineWhere: { brandId: string; modelId?: string; typeId?: string | null } = {
-        brandId: brand.id,
-        modelId: model.id,
-      };
-      if (typeId != null) machineWhere.typeId = typeId;
-      const resolvedMachine = await prisma.machine.findFirst({
-        where: machineWhere,
-      });
-      if (!resolvedMachine) {
-        return validationErrorResponse('No machine found for this line', {
-          machines: [`No machine in inventory for ${brandName} / ${modelName}${typeName ? ` / ${typeName}` : ''}. Ensure at least one machine exists with this brand and model.`],
-        });
-      }
-
-      await prisma.rentalMachine.create({
-        data: {
-          rentalId: newRental.id,
-          machineId: resolvedMachine.id,
-          dailyRate: new Decimal(machine.unitPrice || 0),
-          securityDeposit: new Decimal(0),
-          quantity: machine.quantity || 1,
-        },
-      });
-    }
-    
     // Update purchase order: add rented quantities to each line and set status
     const currentMachines = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
     const machineIdToRented = new Map<string, number>();

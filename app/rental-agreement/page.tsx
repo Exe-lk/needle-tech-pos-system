@@ -160,7 +160,7 @@ interface ApiRental {
   agreementNumber: string;
   customerId: string;
   purchaseOrderId: string | null;
-  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
   startDate: string;
   expectedEndDate: string;
   actualEndDate: string | null;
@@ -170,6 +170,9 @@ interface ApiRental {
   balance: number | string;
   paidAmount: number | string;
   depositTotal: number | string;
+  /** From API when rental was created from PO with no machines assigned yet */
+  expectedMachineCount?: number;
+  expectedMachineCategories?: { id: string; brand: string; model: string; type: string; quantity: number }[];
   customer: {
     id: string;
     code: string;
@@ -200,6 +203,7 @@ function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
     CANCELLED: 'Cancelled',
   };
   const firstSerial = r.machines?.[0]?.machine?.serialNumber ?? '';
+  const expectedMachines = r.expectedMachineCount ?? r.machines?.length ?? 0;
   return {
     id: r.id,
     agreementNo: r.agreementNumber,
@@ -213,8 +217,9 @@ function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
     status: statusMap[r.status] ?? 'Active',
     purchaseRequestId: r.purchaseOrder?.id,
     purchaseRequestNumber: r.purchaseOrder?.requestNumber,
-    expectedMachines: r.machines?.length ?? 0,
+    expectedMachines,
     addedMachines: r.machines?.length ?? 0,
+    expectedMachineCategories: r.expectedMachineCategories,
   };
 }
 
@@ -270,7 +275,7 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     deposit: Number(r.depositTotal),
     purchaseRequestId: r.purchaseOrder?.id,
     purchaseRequestNumber: r.purchaseOrder?.requestNumber,
-    expectedMachines: r.machines?.length,
+    expectedMachines: r.expectedMachineCount ?? r.machines?.length,
     addedMachines: r.machines?.length,
   };
 }
@@ -1503,10 +1508,13 @@ const typeOptions = useMemo(() => {
     }
   };
 
-  // Handle Generate Gatepass
+  // Handle Generate Gatepass (only allowed when agreement is Active and all machines assigned)
   const handleGenerateGatePass = (agreement: RentalAgreement) => {
+    if (agreement.status !== 'Active') {
+      alert('Assign all machines and activate the agreement before creating a gate pass.');
+      return;
+    }
     setSelectedAgreement(agreement);
-    // Reset gatepass form
     setVehicleNumber('');
     setDriverName('');
     setReturnable(true);
@@ -1985,8 +1993,9 @@ const typeOptions = useMemo(() => {
       icon: <Truck className="w-4 h-4" />,
       variant: 'secondary',
       onClick: handleGenerateGatePass,
-      tooltip: 'Generate Gatepass',
+      tooltip: 'Generate Gatepass (available when agreement is Active)',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-green-600 dark:bg-green-700 text-white hover:bg-green-700 dark:hover:bg-green-800 focus:ring-green-500 dark:focus:ring-green-500',
+      shouldShow: (row: RentalAgreement) => row.status === 'Active',
     },
   ];
 
@@ -2473,13 +2482,19 @@ const typeOptions = useMemo(() => {
                   
                 </div>
                 <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handlePrintAgreement}
-                    className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
-                  >
-                    <Printer className="w-4 h-4" />
-                    <span>Print</span>
-                  </button>
+                  <Tooltip content={selectedAgreement?.status !== 'Active' ? 'Assign all machines and activate the agreement to print.' : 'Print agreement'}>
+                    <span className={selectedAgreement?.status !== 'Active' ? 'inline-block' : ''}>
+                      <button
+                        type="button"
+                        onClick={handlePrintAgreement}
+                        disabled={selectedAgreement?.status !== 'Active'}
+                        className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span>Print</span>
+                      </button>
+                    </span>
+                  </Tooltip>
                   <button
                     onClick={handleCloseViewModal}
                     className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"

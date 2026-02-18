@@ -4,6 +4,33 @@ import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole, AuthUser } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
+/** VAT rate for invoices (18%) - applied when taxCategory is VAT */
+const INVOICE_VAT_RATE = 0.18;
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Compute invoice totals from line items on the API (single source of truth).
+ * Each line item must have quantity and unitPrice (or unit price in item).
+ */
+function computeInvoiceTotals(
+  lineItems: Array<{ quantity?: number; unitPrice?: number; [k: string]: unknown }>,
+  taxCategory: string
+): { subtotal: number; vatAmount: number; grandTotal: number } {
+  const subtotal = lineItems.reduce((sum, item) => {
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.unitPrice) ?? 0;
+    return sum + qty * price;
+  }, 0);
+  const subtotalRounded = roundMoney(subtotal);
+  const isVat = taxCategory === 'VAT';
+  const vatAmount = isVat ? roundMoney(subtotalRounded * INVOICE_VAT_RATE) : 0;
+  const grandTotal = roundMoney(subtotalRounded + vatAmount);
+  return { subtotal: subtotalRounded, vatAmount, grandTotal };
+}
+
 /**
  * @swagger
  * /api/v1/invoices:
@@ -143,22 +170,29 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
     const now = new Date();
     const invoiceNumber = `INV-${Date.now()}`;
     const userId = auth.id;
-    
+    const resolvedTaxCategory = taxCategory === 'NON_VAT' ? 'NON_VAT' : 'VAT';
+
+    // Always compute totals on API from line items (single source of truth)
+    const { subtotal: computedSubtotal, vatAmount: computedVatAmount, grandTotal: computedGrandTotal } = computeInvoiceTotals(
+      lineItems,
+      resolvedTaxCategory
+    );
+
     const newInvoice = await prisma.invoice.create({
       data: {
         invoiceNumber,
         customerId,
         rentalId: rentalId || null,
         type,
-        taxCategory: taxCategory === 'NON_VAT' ? 'NON_VAT' : 'VAT',
+        taxCategory: resolvedTaxCategory,
         status: 'DRAFT',
         issueDate: issueDate ? new Date(issueDate) : now,
         dueDate: dueDate ? new Date(dueDate) : now,
         lineItems,
-        subtotal: subtotal || 0,
-        vatAmount: vatAmount || 0,
-        grandTotal: grandTotal || 0,
-        balance: grandTotal || 0,
+        subtotal: computedSubtotal,
+        vatAmount: computedVatAmount,
+        grandTotal: computedGrandTotal,
+        balance: computedGrandTotal,
         createdByUserId: userId,
       },
       include: { customer: true, rental: true }

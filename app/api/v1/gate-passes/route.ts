@@ -129,6 +129,18 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
         rentalId: ['Rental does not exist'],
       });
     }
+
+    if (rental.status !== 'ACTIVE') {
+      return validationErrorResponse('Rental must be active to create a gate pass', {
+        rentalId: ['Assign all machines and activate the agreement first. Print and gate pass are only available when the agreement is Active.'],
+      });
+    }
+
+    if (!rental.machines?.length) {
+      return validationErrorResponse('Rental has no machines assigned', {
+        rentalId: ['Assign all machines to this agreement before creating a gate pass.'],
+      });
+    }
     
     // Get settings for gate pass number generation
     const settings = await prisma.settings.findUnique({ where: { id: 'global' } });

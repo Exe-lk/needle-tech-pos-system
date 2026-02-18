@@ -176,6 +176,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         pendingQuantity: m.pendingQuantity ?? 0,
       };
     });
+    // Always compute total on API from line items (single source of truth)
     const computedTotal = machineData.reduce((sum: number, m: any) => sum + (Number(m.totalPrice) || 0), 0);
     
     const newPurchaseOrder = await prisma.purchaseOrder.create({
@@ -185,7 +186,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         requestDate: new Date(requestDate),
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
-        totalAmount: new Decimal(totalAmount != null ? totalAmount : computedTotal),
+        totalAmount: new Decimal(computedTotal),
         status: 'PENDING',
         machines: machineData,
       },

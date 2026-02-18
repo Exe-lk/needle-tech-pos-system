@@ -33,8 +33,23 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
     if (!rental) {
       return notFoundResponse('Rental not found');
     }
+
+    let expectedPayload: { expectedMachineCount?: number; expectedMachineCategories?: { id: string; brand: string; model: string; type: string; quantity: number }[] } = {};
+    try {
+      if (rental.lockedReason) {
+        const p = JSON.parse(rental.lockedReason);
+        if (p && typeof p.expectedMachineCount === 'number') {
+          expectedPayload = {
+            expectedMachineCount: p.expectedMachineCount,
+            expectedMachineCategories: Array.isArray(p.expectedMachineCategories) ? p.expectedMachineCategories : undefined,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
     
-    return successResponse(rental, 'Rental retrieved successfully');
+    return successResponse({ ...rental, ...expectedPayload }, 'Rental retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching rental:', error);
     return errorResponse('Failed to retrieve rental', 500);
@@ -69,7 +84,8 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
       Pending: 'PENDING',
     };
     const mappedStatus = body.status && statusMap[body.status];
-    
+    let machinesAddedThisRequest = 0;
+
     // Handle machine assignment from QR scans
     if (body.machines && Array.isArray(body.machines)) {
       const machinesToAdd: any[] = [];
@@ -120,19 +136,29 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
             rentalId: id,
           })),
         });
+        machinesAddedThisRequest = machinesToAdd.length;
       }
     }
     
-    // Determine if all expected machines are added
+    // Determine if all expected machines are added (use lockedReason expected count when from PO with no machines at creation)
     let finalStatus = mappedStatus || existingRental.status;
-    if (existing.purchaseOrder && Array.isArray(existing.purchaseOrder.machines)) {
-      const expectedCount = existing.purchaseOrder.machines.reduce(
+    let expectedCount: number | null = null;
+    try {
+      const parsed = existingRental.lockedReason && JSON.parse(existingRental.lockedReason);
+      if (parsed && typeof parsed.expectedMachineCount === 'number') {
+        expectedCount = parsed.expectedMachineCount;
+      }
+    } catch {
+      // ignore
+    }
+    if (expectedCount == null && existing.purchaseOrder && Array.isArray(existing.purchaseOrder.machines)) {
+      expectedCount = existing.purchaseOrder.machines.reduce(
         (sum: number, m: any) => sum + (m.quantity || 0),
         0
       );
-      const currentCount = existing.machines.length + (body.machines?.length || 0);
-
-      // When machines are assigned from machine-assign-page and all expected are added, move PENDING -> ACTIVE
+    }
+    if (expectedCount != null) {
+      const currentCount = existing.machines.length + machinesAddedThisRequest;
       if (currentCount >= expectedCount && String(existingRental.status) === 'PENDING' && !mappedStatus) {
         finalStatus = 'ACTIVE';
       }

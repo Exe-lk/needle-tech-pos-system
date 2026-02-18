@@ -5,6 +5,22 @@ import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import { Decimal } from '@prisma/client/runtime/client';
 
+function parseExpectedFromLockedReason(lockedReason: string | null): { expectedMachineCount?: number; expectedMachineCategories?: { id: string; brand: string; model: string; type: string; quantity: number }[] } {
+  if (!lockedReason) return {};
+  try {
+    const p = JSON.parse(lockedReason);
+    if (p && typeof p.expectedMachineCount === 'number') {
+      return {
+        expectedMachineCount: p.expectedMachineCount,
+        expectedMachineCategories: Array.isArray(p.expectedMachineCategories) ? p.expectedMachineCategories : undefined,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
 /**
  * @swagger
  * /api/v1/rentals:
@@ -58,11 +74,12 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
         },
       },
     });
-    
+
+    const withExpected = rentals.map((r: any) => ({ ...r, ...parseExpectedFromLockedReason(r.lockedReason) }));
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      rentals,
+      withExpected,
       pagination,
       'Rentals retrieved successfully',
       { sortBy, sortOrder: sortOrder_ },

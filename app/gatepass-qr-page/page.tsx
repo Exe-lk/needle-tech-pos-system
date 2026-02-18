@@ -152,13 +152,20 @@ function extractSerialAndBoxFromQR(
   return null;
 }
 
-/** Normalize user input for display / API: accept 016633, 16633, etc. */
+/**
+ * Normalize user input for API lookup.
+ * - Numeric-only (e.g. 016633, 16633): pad to 6 digits for backward compatibility.
+ * - Alphanumeric (e.g. GP-016633, ABC123): trim and pass through so letters work on mobile.
+ */
 function normalizeGatePassInput(input: string): string {
   const t = (input || '').trim();
   if (!t) return '';
   const digitsOnly = t.replace(/\D/g, '');
-  if (digitsOnly.length >= 6) return digitsOnly.slice(-6);
-  return digitsOnly.padStart(6, '0');
+  if (digitsOnly === t) {
+    if (digitsOnly.length >= 6) return digitsOnly.slice(-6);
+    return digitsOnly.padStart(6, '0');
+  }
+  return t;
 }
 
 // ---------------------------------------------------------------------------
@@ -535,7 +542,7 @@ const GatePassQRPage: React.FC = () => {
               <input
                 id="gatepass-input"
                 type="text"
-                inputMode="numeric"
+                inputMode="text"
                 autoComplete="off"
                 value={gatePassNumberInput}
                 onChange={(e) => {
@@ -543,7 +550,7 @@ const GatePassQRPage: React.FC = () => {
                   setLookupError(null);
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleContinueFromStep1()}
-                placeholder="e.g. 016633"
+                placeholder="e.g. GP-016633"
                 className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
                 autoFocus
               />
@@ -557,7 +564,7 @@ const GatePassQRPage: React.FC = () => {
                 </p>
               )}
               <p className="text-xs text-gray-500 dark:text-slate-500">
-                Enter the gatepass number (e.g. 016633) and continue to verify.
+                Enter the gatepass number and continue to verify.
               </p>
               <button
                 type="button"

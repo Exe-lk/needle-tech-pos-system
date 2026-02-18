@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import { Decimal } from '@prisma/client/runtime/client';
 
 /**
  * @swagger
@@ -106,10 +107,28 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       updateData.status = body.status.toUpperCase().replace(/ /g, '_');
     }
     if (body.machines !== undefined) {
-      updateData.machines = body.machines;
-    }
-    if (body.totalAmount !== undefined) {
-      updateData.totalAmount = body.totalAmount;
+      // Normalize machines and compute total on API (single source of truth)
+      const machines = Array.isArray(body.machines) ? body.machines : [];
+      const machineData = machines.map((m: any) => {
+        const monthlyRentalFee = typeof m.monthlyRentalFee === 'number' ? m.monthlyRentalFee : (m.unitPrice ?? 0);
+        const qty = Number(m.quantity) || 0;
+        return {
+          id: m.id || m.machineId,
+          brand: m.brand,
+          model: m.model,
+          type: m.type,
+          quantity: m.quantity,
+          availableStock: m.availableStock ?? 0,
+          unitPrice: m.unitPrice ?? monthlyRentalFee,
+          totalPrice: m.totalPrice ?? monthlyRentalFee * qty,
+          monthlyRentalFee,
+          rentedQuantity: m.rentedQuantity ?? 0,
+          pendingQuantity: m.pendingQuantity ?? 0,
+        };
+      });
+      const computedTotal = machineData.reduce((sum: number, m: any) => sum + (Number(m.totalPrice) || 0), 0);
+      updateData.machines = machineData;
+      updateData.totalAmount = new Decimal(computedTotal);
     }
     if (body.notes !== undefined) {
       updateData.notes = body.notes;
