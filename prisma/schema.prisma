@@ -709,6 +709,7 @@ enum GatePassStatus {
   PENDING
   DEPARTED
   RETURNED
+  REJECTED
 }
 
 

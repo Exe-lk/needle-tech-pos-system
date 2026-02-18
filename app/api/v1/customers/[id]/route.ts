@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
-import { withAuthAndRole } from '@/lib/auth-middleware';
+import { withAuthAndPermission } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
 /**
@@ -12,7 +12,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
+export const GET = withAuthAndPermission(['customers:view', 'management:*', '*'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -44,7 +44,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
  *     security:
  *       - bearerAuth: []
  */
-export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
+export const PUT = withAuthAndPermission(['customers:update', 'management:*', '*'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -88,7 +88,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
  *     security:
  *       - bearerAuth: []
  */
-export const DELETE = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (
+export const DELETE = withAuthAndPermission(['customers:delete', 'management:*', '*'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }

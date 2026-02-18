@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
-import { withAuthAndRole } from '@/lib/auth-middleware';
+import { withAuthAndPermission } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
 /**
@@ -42,7 +42,7 @@ import prisma from '@/lib/prisma';
  *       200:
  *         description: Customers retrieved successfully
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndPermission(['customers:view', 'management:*', '*'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -141,7 +141,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
  *       400:
  *         description: Validation error
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndPermission(['customers:create', 'management:*', '*'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { code, type, name, contactPerson, phones = [], emails = [] } = body;
