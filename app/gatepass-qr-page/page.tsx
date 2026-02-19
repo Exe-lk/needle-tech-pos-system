@@ -182,6 +182,7 @@ const GatePassQRPage: React.FC = () => {
   const [mounted, setMounted] = useState(false);
   const [approveLoading, setApproveLoading] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [rejectLoading, setRejectLoading] = useState(false);
 
   // Step 2 sub-flow
   const [mode, setMode] = useState<Step2Mode>('menu');
@@ -482,13 +483,28 @@ const GatePassQRPage: React.FC = () => {
     }
   };
 
-  const handleRejectGatePass = () => {
+  const handleRejectGatePass = async () => {
     if (!gatePass) return;
     if (!canReject) return;
-    alert(
-      `Gate Pass ${gatePass.gatepassNo} rejected by Security Officer (frontend only).`
-    );
-    handleBackToStep1();
+    setApproveError(null);
+    setRejectLoading(true);
+    try {
+      const res = await authFetch(
+        `${API_BASE}/gate-passes/${encodeURIComponent(gatePass.id)}/security-reject`,
+        { method: 'POST', body: JSON.stringify({}) }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json?.status !== 'success') {
+        const message =
+          json?.message || 'Failed to reject gate pass. Please try again.';
+        setApproveError(message);
+        return;
+      }
+      alert(`Gate Pass ${gatePass.gatepassNo} rejected by Security Officer.`);
+      handleBackToStep1();
+    } finally {
+      setRejectLoading(false);
+    }
   };
 
   const isItemVerified = useCallback(
@@ -1091,7 +1107,7 @@ const GatePassQRPage: React.FC = () => {
             )}
           </p>
 
-          {/* Approve error message */}
+          {/* Approve / Reject error message */}
           {approveError && (
             <p
               className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2"
@@ -1129,11 +1145,25 @@ const GatePassQRPage: React.FC = () => {
             {canReject && (
               <button
                 type="button"
-                onClick={handleRejectGatePass}
-                className="w-full min-h-[52px] px-5 py-3 rounded-2xl text-base font-semibold flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white active:scale-[0.98] transition-all"
+                onClick={() => void handleRejectGatePass()}
+                disabled={rejectLoading}
+                className={`w-full min-h-[52px] px-5 py-3 rounded-2xl text-base font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
+                  !rejectLoading
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-gray-300 dark:bg-slate-700 text-gray-500 dark:text-slate-400 cursor-not-allowed'
+                }`}
               >
-                <XCircle className="w-5 h-5" />
-                Reject Gatepass
+                {rejectLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Rejecting…
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-5 h-5" />
+                    Reject Gatepass
+                  </>
+                )}
               </button>
             )}
           </div>

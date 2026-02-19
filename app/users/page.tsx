@@ -1,22 +1,64 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import CreateForm, { FormField } from '@/src/components/form-popup/create';
 import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
-import { Eye, Pencil, Trash2, X, Shield, User } from 'lucide-react';
+import { Eye, Pencil, Trash2, X, Shield, User, Search, Lock } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 import { authFetch, clearAuth, redirectToLogin } from '@/lib/auth-client';
+import { FEATURES } from '@/lib/permissions';
 
 // ============================================================================
 // CONSTANTS & CONFIGURATION
 // ============================================================================
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+
+/**
+ * Permission matrix: one row per form/module with View, Add (create), Edit (update), Delete.
+ * Maps to permission strings in lib/permissions.ts. Used for role creation UI.
+ */
+const PERMISSION_ACTIONS = ['view', 'create', 'update', 'delete'] as const;
+type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
+
+interface FormPermissionRow {
+  key: string;
+  label: string;
+  permissions: Partial<Record<PermissionAction, string | string[]>>;
+}
+
+const PERMISSION_MATRIX_ROWS: FormPermissionRow[] = [
+  { key: 'dashboard', label: 'Dashboard', permissions: { view: 'reports:view' } },
+  { key: 'purchase-order', label: 'Purchase Order', permissions: { view: 'purchase-orders:view', create: 'purchase-orders:create', update: 'purchase-orders:approve' } },
+  { key: 'rental', label: 'Hiring Machine Agreement', permissions: { view: 'rentals:view', create: 'rentals:create', update: 'rentals:update', delete: 'rentals:delete' } },
+  { key: 'gatepass', label: 'Gate Pass', permissions: { view: 'gatepasses:view', create: 'gatepasses:create', update: 'gatepasses:approve', delete: 'gatepasses:delete' } },
+  { key: 'returns', label: 'Returns Management', permissions: { view: 'returns:view', create: 'returns:create' } },
+  { key: 'invoice', label: 'Invoice & Payments', permissions: { view: 'invoices:view', create: 'invoices:create', update: 'invoices:update' } },
+  { key: 'inventory', label: 'Inventory Management', permissions: { view: 'inventory:view', create: 'inventory:stock-in' } },
+  { key: 'machines', label: 'Machine & Tools Management', permissions: { view: ['machines:view', 'tools:view'], create: ['machines:create', 'tools:create'], update: ['machines:update', 'tools:update'], delete: ['machines:delete', 'tools:delete'] } },
+  { key: 'customers', label: 'Customer Management', permissions: { view: 'customers:view', create: 'customers:create', update: 'customers:update', delete: 'customers:delete' } },
+  { key: 'outstanding-alerts', label: 'Outstanding Alerts', permissions: { view: 'alerts:view' } },
+  { key: 'transaction-log', label: 'Transaction Log', permissions: { view: 'transaction-log:view' } },
+  { key: 'bincard', label: 'Bincard', permissions: { view: 'bincard:view' } },
+  { key: 'users', label: 'User Management', permissions: { view: 'users:view', create: 'users:create', update: 'users:update', delete: 'users:delete' } },
+  { key: 'settings', label: 'Settings', permissions: { view: 'settings:view', update: 'settings:update' } },
+];
+
+/** Permission strings used for users page (see lib/permissions.ts & docs/API_PERMISSIONS.md) */
+const USERS_VIEW = 'users:view';
+const USERS_CREATE = 'users:create';
+const USERS_UPDATE = 'users:update';
+const USERS_DELETE = 'users:delete';
+const ROLES_VIEW = 'roles:view';
+const ROLES_CREATE = 'roles:create';
+const ROLES_UPDATE = 'roles:update';
+const ADMINISTRATION_WILDCARD = 'administration:*';
+const GLOBAL_WILDCARD = '*';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -70,6 +112,15 @@ interface RoleOption {
   permissions: string[];
 }
 
+/** Response shape from GET /api/v1/auth/permissions (see app/api/v1/auth/permissions/route.ts) */
+interface PermissionsResponse {
+  user?: { id: string; username: string; fullName: string; email: string; role: { id: string; name: string } };
+  permissions: string[];
+  accessibleRoutes: string[];
+  features?: Record<string, { id: string; name: string; description: string; route: string; permission: string; accessible: boolean }[]>;
+  allFeatures?: { id: string; name: string; description: string; route: string; permission: string; category: string; accessible: boolean }[];
+}
+
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
@@ -88,10 +139,27 @@ const formatRoleName = (role: string): string => {
     'SUPER_ADMIN': 'Super Admin',
     'MANAGER': 'Manager',
     'OPERATOR': 'Operator',
-    'USER': 'User'
+    'USER': 'User',
+    'SECURITY_OFFICER': 'Security Officer',
+    'STOCKKEEPER': 'Stockkeeper',
+    'OPERATIONAL_OFFICER': 'Operational Officer',
   };
   return roleMap[role] || role;
 };
+
+/**
+ * Check if user has a permission (aligns with lib/permissions.ts and docs/API_PERMISSIONS.md).
+ * Supports exact permission, global wildcard (*), and category wildcard (e.g. administration:*).
+ */
+function hasPermission(userPermissions: string[], permission: string): boolean {
+  if (!userPermissions?.length) return false;
+  if (userPermissions.includes(GLOBAL_WILDCARD)) return true;
+  if (userPermissions.includes(permission)) return true;
+  const feature = Object.values(FEATURES).find((f) => f.permission === permission);
+  const category = feature?.category;
+  if (category && userPermissions.includes(`${category}:*`)) return true;
+  return false;
+}
 
 // ============================================================================
 // API FUNCTIONS (authFetch adds token and handles 401 → refresh → retry)
@@ -265,6 +333,17 @@ const deleteUser = async (userId: string): Promise<{ success: boolean; error?: s
   }
 };
 
+/** Fetch current user permissions and accessible features (GET /api/v1/auth/permissions) */
+const fetchPermissions = async (): Promise<PermissionsResponse> => {
+  const response = await authFetch(`${API_BASE_URL}/auth/permissions`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Failed to fetch permissions');
+  const result = await response.json();
+  return result.data as PermissionsResponse;
+};
+
 const createRole = async (roleData: {
   name: string;
   description?: string;
@@ -403,6 +482,24 @@ const UserManagementPage: React.FC = () => {
   const [roles, setRoles] = useState<{ label: string; value: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Permissions from GET /api/v1/auth/permissions (lib/permissions.ts, docs/API_PERMISSIONS.md)
+  const [userPermissions, setUserPermissions] = useState<string[]>([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+
+  // Role creation form: matrix of form rows × View/Add/Edit/Delete (stored as permission strings → boolean)
+  const [roleFormName, setRoleFormName] = useState('');
+  const [roleFormDescription, setRoleFormDescription] = useState('');
+  const [permissionMatrix, setPermissionMatrix] = useState<Record<string, boolean>>({});
+  const [formSearchQuery, setFormSearchQuery] = useState('');
+
+  // Derived capability flags (gate UI by permission)
+  const canViewUsers = hasPermission(userPermissions, USERS_VIEW);
+  const canCreateUser = hasPermission(userPermissions, USERS_CREATE);
+  const canUpdateUser = hasPermission(userPermissions, USERS_UPDATE);
+  const canDeleteUser = hasPermission(userPermissions, USERS_DELETE);
+  const canCreateRole = hasPermission(userPermissions, ROLES_CREATE);
+  const canShowCreateButton = canCreateUser || canCreateRole;
+
   // ============================================================================
   // EFFECTS
   // ============================================================================
@@ -412,13 +509,21 @@ const UserManagementPage: React.FC = () => {
   }, []);
 
   const loadInitialData = async () => {
-    setIsLoading(true);
     setError(null);
+    setIsLoading(true);
+    setPermissionsLoading(true);
     try {
-      await Promise.all([loadUsers(), loadRoles()]);
+      const perms = await fetchPermissions();
+      const permissions = perms.permissions || [];
+      setUserPermissions(permissions);
+
+      await loadRoles();
+      if (hasPermission(permissions, USERS_VIEW)) await loadUsers();
     } catch (err: any) {
       setError(err.message || 'Failed to load data');
+      setUserPermissions([]);
     } finally {
+      setPermissionsLoading(false);
       setIsLoading(false);
     }
   };
@@ -477,27 +582,77 @@ const UserManagementPage: React.FC = () => {
   // Create User / Role Handlers
   const handleCreateUser = () => {
     setIsCreateModalOpen(true);
-    setActiveCreateTab('user');
+    setActiveCreateTab(canCreateUser ? 'user' : 'roles');
+  };
+
+  const resetRoleForm = () => {
+    setRoleFormName('');
+    setRoleFormDescription('');
+    setPermissionMatrix({});
+    setFormSearchQuery('');
+    setError(null);
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setActiveCreateTab('user');
     setError(null);
+    resetRoleForm();
   };
 
-  const handleRoleSubmit = async (data: Record<string, any>) => {
-    const name = (data.roleName || '').trim();
+  /** Get permission strings for a row + action (e.g. row "customers" + "view" → ["customers:view"]) */
+  const getPermsForAction = (row: FormPermissionRow, action: PermissionAction): string[] => {
+    const p = row.permissions[action];
+    if (!p) return [];
+    return Array.isArray(p) ? p : [p];
+  };
+
+  const getFormPermission = (row: FormPermissionRow, action: PermissionAction): boolean => {
+    const perms = getPermsForAction(row, action);
+    if (perms.length === 0) return false;
+    return perms.every((perm) => Boolean(permissionMatrix[perm]));
+  };
+
+  const setFormPermission = (row: FormPermissionRow, action: PermissionAction, value: boolean) => {
+    const perms = getPermsForAction(row, action);
+    setPermissionMatrix((prev) => {
+      const next = { ...prev };
+      perms.forEach((perm) => { next[perm] = value; });
+      return next;
+    });
+  };
+
+  const isFormFullySelected = (row: FormPermissionRow): boolean =>
+    PERMISSION_ACTIONS.every((action) => {
+      const perms = getPermsForAction(row, action);
+      if (perms.length === 0) return true;
+      return perms.every((perm) => Boolean(permissionMatrix[perm]));
+    });
+
+  const setFormAllPermissions = (row: FormPermissionRow, value: boolean) => {
+    setPermissionMatrix((prev) => {
+      const next = { ...prev };
+      PERMISSION_ACTIONS.forEach((action) => {
+        getPermsForAction(row, action).forEach((perm) => { next[perm] = value; });
+      });
+      return next;
+    });
+  };
+
+  const buildPermissionsFromMatrix = (): string[] =>
+    Object.entries(permissionMatrix)
+      .filter(([, selected]) => selected)
+      .map(([perm]) => perm);
+
+  const handleRoleMatrixSubmit = async () => {
+    const name = roleFormName.trim();
     if (!name) {
       setError('Role name is required.');
       return;
     }
-    const permissions = (data.permissionsText || '')
-      .split('\n')
-      .map((p: string) => p.trim())
-      .filter(Boolean);
+    const permissions = buildPermissionsFromMatrix();
     if (permissions.length === 0) {
-      setError('At least one permission is required (e.g. * or users:read).');
+      setError('At least one permission is required. Select View, Add, Edit, or Delete for one or more forms.');
       return;
     }
 
@@ -507,7 +662,7 @@ const UserManagementPage: React.FC = () => {
     try {
       const result = await createRole({
         name,
-        description: (data.roleDescription || '').trim() || undefined,
+        description: roleFormDescription.trim() || undefined,
         permissions,
       });
 
@@ -822,32 +977,6 @@ const UserManagementPage: React.FC = () => {
     },
   ];
 
-  const roleFields: FormField[] = [
-    {
-      name: 'roleName',
-      label: 'Role Name',
-      type: 'text',
-      placeholder: 'e.g. MANAGER, OPERATOR',
-      required: true,
-    },
-    {
-      name: 'roleDescription',
-      label: 'Description',
-      type: 'textarea',
-      placeholder: 'Enter role description (optional)',
-      required: false,
-      rows: 2,
-    },
-    {
-      name: 'permissionsText',
-      label: 'Permissions',
-      type: 'textarea',
-      placeholder: 'One permission per line (e.g. users:read, users:write, *)',
-      required: true,
-      rows: 5,
-    },
-  ];
-
   // ============================================================================
   // HELPER METHODS
   // ============================================================================
@@ -883,32 +1012,38 @@ const UserManagementPage: React.FC = () => {
     return '';
   };
 
-  const actions: ActionButton[] = [
-    {
-      label: '',
-      icon: <Eye className="w-4 h-4" />,
-      variant: 'secondary',
-      onClick: handleViewUser,
-      tooltip: 'View User',
-      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
-    },
-    {
-      label: '',
-      icon: <Pencil className="w-4 h-4" />,
-      variant: 'primary',
-      onClick: handleUpdateUser,
-      tooltip: 'Update User',
-      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
-    },
-    {
-      label: '',
-      icon: <Trash2 className="w-4 h-4" />,
-      variant: 'danger',
-      onClick: handleDeleteUser,
-      tooltip: 'Delete User',
-      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
-    },
-  ];
+  const actions: ActionButton[] = useMemo(
+    () => [
+      {
+        label: '',
+        icon: <Eye className="w-4 h-4" />,
+        variant: 'secondary',
+        onClick: handleViewUser,
+        tooltip: 'View User',
+        shouldShow: () => canViewUsers,
+        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+      },
+      {
+        label: '',
+        icon: <Pencil className="w-4 h-4" />,
+        variant: 'primary',
+        onClick: handleUpdateUser,
+        tooltip: 'Update User',
+        shouldShow: () => canUpdateUser,
+        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+      },
+      {
+        label: '',
+        icon: <Trash2 className="w-4 h-4" />,
+        variant: 'danger',
+        onClick: handleDeleteUser,
+        tooltip: 'Delete User',
+        shouldShow: () => canDeleteUser,
+        className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
+      },
+    ],
+    [canViewUsers, canUpdateUser, canDeleteUser]
+  );
 
   const renderProfileContent = () => {
     if (!selectedUser || !selectedUserDetails) {
@@ -1033,9 +1168,19 @@ const UserManagementPage: React.FC = () => {
             </div>
           )}
 
-          {isLoading ? (
+          {permissionsLoading || isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500 dark:text-gray-400">Loading users...</div>
+              <div className="text-gray-500 dark:text-gray-400">
+                {permissionsLoading ? 'Checking permissions...' : 'Loading users...'}
+              </div>
+            </div>
+          ) : !canViewUsers ? (
+            <div className="flex flex-col items-center justify-center py-16 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800/50">
+              <Lock className="w-12 h-12 text-gray-400 dark:text-slate-500 mb-4" />
+              <p className="text-lg font-medium text-gray-900 dark:text-white">Access denied</p>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                You need <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700">users:view</code> (or administration access) to view users.
+              </p>
             </div>
           ) : (
             <Table
@@ -1045,7 +1190,7 @@ const UserManagementPage: React.FC = () => {
               itemsPerPage={10}
               searchable
               filterable
-              onCreateClick={handleCreateUser}
+              onCreateClick={canShowCreateButton ? handleCreateUser : undefined}
               createButtonLabel="Create"
               getRowClassName={getRowClassName}
               emptyMessage="No users found."
@@ -1072,35 +1217,37 @@ const UserManagementPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Tabs */}
-            <div className="border-b border-gray-200 dark:border-slate-700 px-6">
-              <div className="flex space-x-4">
-                <Tooltip content="Create a new user account">
-                  <button
-                    onClick={() => setActiveCreateTab('user')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                      activeCreateTab === 'user'
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    User
-                  </button>
-                </Tooltip>
-                <Tooltip content="Create a new role with permissions">
-                  <button
-                    onClick={() => setActiveCreateTab('roles')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                      activeCreateTab === 'roles'
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    Roles
-                  </button>
-                </Tooltip>
+            {/* Tabs: only when user can create both users and roles */}
+            {canCreateUser && canCreateRole && (
+              <div className="border-b border-gray-200 dark:border-slate-700 px-6">
+                <div className="flex space-x-4">
+                  <Tooltip content="Create a new user account">
+                    <button
+                      onClick={() => setActiveCreateTab('user')}
+                      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeCreateTab === 'user'
+                          ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      User
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Create a new role with permissions">
+                    <button
+                      onClick={() => setActiveCreateTab('roles')}
+                      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeCreateTab === 'roles'
+                          ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      Roles
+                    </button>
+                  </Tooltip>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
@@ -1109,7 +1256,7 @@ const UserManagementPage: React.FC = () => {
                   <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
                 </div>
               )}
-              {activeCreateTab === 'user' ? (
+              {(activeCreateTab === 'user' && canCreateUser) ? (
                 <CreateForm
                   title="User Details"
                   fields={userFields}
@@ -1121,19 +1268,148 @@ const UserManagementPage: React.FC = () => {
                   enableDynamicSpecs={false}
                   className="shadow-none border-0 p-0"
                 />
-              ) : (
-                <CreateForm
-                  title="Role Details"
-                  fields={roleFields}
-                  onSubmit={handleRoleSubmit}
-                  onClear={handleClear}
-                  submitButtonLabel="Create Role"
-                  clearButtonLabel="Clear"
-                  loading={isSubmitting}
-                  enableDynamicSpecs={false}
-                  className="shadow-none border-0 p-0"
-                />
-              )}
+              ) : (activeCreateTab === 'roles' && canCreateRole) ? (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Role Details
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Role Name
+                      </label>
+                      <input
+                        type="text"
+                        value={roleFormName}
+                        onChange={(e) => setRoleFormName(e.target.value)}
+                        placeholder="e.g. ADMIN, SECURITY_OFFICER, STOCKKEEPER"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-gray-400"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Description (optional)
+                      </label>
+                      <textarea
+                        value={roleFormDescription}
+                        onChange={(e) => setRoleFormDescription(e.target.value)}
+                        placeholder="Enter role description"
+                        rows={2}
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-gray-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden">
+                    <div className="flex flex-col gap-3 p-3 bg-gray-50 dark:bg-slate-700/50 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={formSearchQuery}
+                          onChange={(e) => setFormSearchQuery(e.target.value)}
+                          placeholder="Search by Form"
+                          className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-gray-400"
+                        />
+                      </div>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        Count: {PERMISSION_MATRIX_ROWS.filter((r) => !formSearchQuery.trim() || r.label.toLowerCase().includes(formSearchQuery.trim().toLowerCase()) || r.key.toLowerCase().includes(formSearchQuery.trim().toLowerCase())).length}
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto max-h-[min(50vh,400px)] overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-600">
+                        <thead className="bg-gray-100 dark:bg-slate-700 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                              #
+                            </th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                              Form Name
+                            </th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300" title="Select/deselect View, Add, Edit, Delete for this row">
+                              All
+                            </th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                              View
+                            </th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                              Add
+                            </th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                              Edit
+                            </th>
+                            <th className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                              Delete
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white dark:divide-slate-600 dark:bg-slate-800">
+                          {PERMISSION_MATRIX_ROWS.filter(
+                            (r) =>
+                              !formSearchQuery.trim() ||
+                              r.label.toLowerCase().includes(formSearchQuery.trim().toLowerCase()) ||
+                              r.key.toLowerCase().includes(formSearchQuery.trim().toLowerCase())
+                          ).map((row, idx) => (
+                            <tr key={row.key} className="hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                              <td className="whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                {idx + 1}
+                              </td>
+                              <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">
+                                {row.label}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isFormFullySelected(row)}
+                                  onChange={() => setFormAllPermissions(row, !isFormFullySelected(row))}
+                                  title={isFormFullySelected(row) ? 'Deselect all' : 'Select all (View, Add, Edit, Delete)'}
+                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-700 dark:checked:bg-blue-600"
+                                />
+                              </td>
+                              {PERMISSION_ACTIONS.map((action) => {
+                                const perms = getPermsForAction(row, action);
+                                const hasAction = perms.length > 0;
+                                return (
+                                  <td key={action} className="px-4 py-2 text-center">
+                                    {hasAction ? (
+                                      <input
+                                        type="checkbox"
+                                        checked={getFormPermission(row, action)}
+                                        onChange={() => setFormPermission(row, action, !getFormPermission(row, action))}
+                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-700 dark:checked:bg-blue-600"
+                                      />
+                                    ) : (
+                                      <span className="text-gray-300 dark:text-slate-600">—</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleRoleMatrixSubmit}
+                      disabled={isSubmitting}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-indigo-600 dark:hover:bg-indigo-700"
+                    >
+                      {isSubmitting ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetRoleForm}
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-slate-600 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

@@ -75,7 +75,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     const end = new Date(rentalEndDate);
     const monthsInPeriod = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
 
-    // Calculate totals: use PO line monthly fee as single source of truth (full period = monthly × months)
+    // Monthly rent = monthly rental price × number of machines (per line, then sum)
     let subtotalMonthly = 0;
     for (const machine of machines) {
       const line = poMachinesList.find((m: any) => String(m.id || m.machineId) === String(machine.machineId));
@@ -86,7 +86,10 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       subtotalMonthly += quantity * monthlyFee;
     }
     const periodSubtotal = subtotalMonthly * monthsInPeriod;
-    const vatAmount = periodSubtotal * 0.15; // 15% VAT
+
+    // Business customer (GARMENT_FACTORY): add 15% VAT. Individual: no VAT.
+    const isBusinessCustomer = (purchaseOrder.customer?.type ?? '') === 'GARMENT_FACTORY';
+    const vatAmount = isBusinessCustomer ? periodSubtotal * 0.15 : 0;
     const total = periodSubtotal + vatAmount;
     
     // Generate agreement number
