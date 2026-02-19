@@ -77,6 +77,14 @@ export const GET = withAuthAndPermission(['customers:view', 'management:*', '*']
       skip,
       take: limit,
       orderBy: { [sortBy]: sortOrder_ },
+      include: {
+        locations: {
+          orderBy: [
+            { isDefault: 'desc' },
+            { createdAt: 'asc' },
+          ],
+        },
+      },
     });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
@@ -144,7 +152,7 @@ export const GET = withAuthAndPermission(['customers:view', 'management:*', '*']
 export const POST = withAuthAndPermission(['customers:create', 'management:*', '*'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { code, type, name, contactPerson, phones = [], emails = [] } = body;
+    const { code, type, name, contactPerson, phones = [], emails = [], locations = [] } = body;
     
     if (!code || !type || !name) {
       return validationErrorResponse('Missing required fields', {
@@ -165,6 +173,16 @@ export const POST = withAuthAndPermission(['customers:create', 'management:*', '
       });
     }
     
+    // Validate locations: at most one isDefault = true
+    if (Array.isArray(locations) && locations.length > 0) {
+      const defaultCount = locations.filter((loc: any) => loc.isDefault === true).length;
+      if (defaultCount > 1) {
+        return validationErrorResponse('Only one location can be set as default', {
+          locations: ['Multiple locations cannot be marked as default'],
+        });
+      }
+    }
+    
     const newCustomer = await prisma.customer.create({
       data: {
         code,
@@ -174,6 +192,21 @@ export const POST = withAuthAndPermission(['customers:create', 'management:*', '
         phones: phones || [],
         emails: emails || [],
         status: 'ACTIVE',
+        locations: {
+          create: Array.isArray(locations) ? locations.map((loc: any) => ({
+            name: loc.name || '',
+            addressLine1: loc.addressLine1 || null,
+            addressLine2: loc.addressLine2 || null,
+            city: loc.city || null,
+            region: loc.region || null,
+            postalCode: loc.postalCode || null,
+            country: loc.country || null,
+            isDefault: loc.isDefault === true,
+          })) : [],
+        },
+      },
+      include: {
+        locations: true,
       },
     });
     

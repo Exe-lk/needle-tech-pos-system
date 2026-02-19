@@ -21,7 +21,15 @@ export const GET = withAuthAndPermission(['customers:view', 'management:*', '*']
     const { id } = await params;
     
     const customer = await prisma.customer.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        locations: {
+          orderBy: [
+            { isDefault: 'desc' },
+            { createdAt: 'asc' },
+          ],
+        },
+      },
     });
     
     if (!customer) {
@@ -58,18 +66,57 @@ export const PUT = withAuthAndPermission(['customers:update', 'management:*', '*
       return notFoundResponse('Customer not found');
     }
     
+    // Validate locations if provided
+    if (body.locations !== undefined && Array.isArray(body.locations)) {
+      const defaultCount = body.locations.filter((loc: any) => loc.isDefault === true).length;
+      if (defaultCount > 1) {
+        return validationErrorResponse('Only one location can be set as default', {
+          locations: ['Multiple locations cannot be marked as default'],
+        });
+      }
+    }
+    
+    // Handle locations update: upsert by id, create new if no id
+    const locationsData = body.locations !== undefined ? {
+      deleteMany: {}, // Delete all existing locations first (we'll recreate them)
+      create: body.locations.map((loc: any) => ({
+        name: loc.name || '',
+        addressLine1: loc.addressLine1 || null,
+        addressLine2: loc.addressLine2 || null,
+        city: loc.city || null,
+        region: loc.region || null,
+        postalCode: loc.postalCode || null,
+        country: loc.country || null,
+        isDefault: loc.isDefault === true,
+      })),
+    } : undefined;
+    
+    const updateData: any = {
+      ...(body.name && { name: body.name }),
+      ...(body.type && { type: body.type }),
+      ...(body.contactPerson && { contactPerson: body.contactPerson }),
+      ...(body.phones && { phones: body.phones }),
+      ...(body.emails && { emails: body.emails }),
+      ...(body.billingAddress && { billingAddress: body.billingAddress }),
+      ...(body.shippingAddress && { shippingAddress: body.shippingAddress }),
+      ...(body.status && { status: body.status }),
+    };
+    
+    if (locationsData) {
+      updateData.locations = locationsData;
+    }
+    
     const updatedCustomer = await prisma.customer.update({
       where: { id },
-      data: {
-        ...(body.name && { name: body.name }),
-        ...(body.type && { type: body.type }),
-        ...(body.contactPerson && { contactPerson: body.contactPerson }),
-        ...(body.phones && { phones: body.phones }),
-        ...(body.emails && { emails: body.emails }),
-        ...(body.billingAddress && { billingAddress: body.billingAddress }),
-        ...(body.shippingAddress && { shippingAddress: body.shippingAddress }),
-        ...(body.status && { status: body.status }),
-      }
+      data: updateData,
+      include: {
+        locations: {
+          orderBy: [
+            { isDefault: 'desc' },
+            { createdAt: 'asc' },
+          ],
+        },
+      },
     });
     
     return successResponse(updatedCustomer, 'Customer updated successfully');

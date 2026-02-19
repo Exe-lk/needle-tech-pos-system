@@ -108,13 +108,33 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
 export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest, auth: { id: string }) => {
   try {
     const body = await request.json();
-    const { customerId, startDate, endDate, machines: machinesInput = [] } = body;
+    const { 
+      customerId, 
+      startDate, 
+      endDate, 
+      machines: machinesInput = [],
+      paymentBasis = 'MONTHLY',
+      firstMonthProrated = false,
+    } = body;
     
-    if (!customerId || !startDate || !endDate) {
+    if (!customerId || !startDate) {
       return validationErrorResponse('Missing required fields', {
         customerId: !customerId ? ['Customer ID is required'] : [],
         startDate: !startDate ? ['Start date is required'] : [],
-        endDate: !endDate ? ['End date is required'] : [],
+      });
+    }
+    
+    // Validate endDate if provided
+    if (endDate && new Date(endDate) < new Date(startDate)) {
+      return validationErrorResponse('End date must be after start date', {
+        endDate: ['End date must be after start date'],
+      });
+    }
+    
+    // Validate paymentBasis
+    if (paymentBasis && !['MONTHLY', 'DAILY'].includes(paymentBasis)) {
+      return validationErrorResponse('Invalid payment basis', {
+        paymentBasis: ['Payment basis must be MONTHLY or DAILY'],
       });
     }
     
@@ -129,7 +149,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
     const count = await prisma.rental.count();
     const agreementNumber = `RA${new Date().getFullYear().toString().slice(-2)}${String(count + 1).padStart(6, '0')}`;
     const start = new Date(startDate);
-    const end = new Date(endDate);
+    const end = endDate ? new Date(endDate) : null;
 
     // Compute totals from machines (daily rates); if no machines, use zero
     let subtotalNum = 0;
@@ -204,6 +224,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
         customerId,
         startDate: start,
         expectedEndDate: end,
+        paymentBasis: paymentBasis === 'DAILY' ? 'DAILY' : 'MONTHLY',
+        firstMonthProrated: firstMonthProrated === true,
         status: 'ACTIVE',
         subtotal,
         vatAmount,

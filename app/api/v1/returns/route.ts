@@ -4,6 +4,7 @@ import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import type { AuthUser } from '@/lib/auth-supabase';
+import { Decimal } from '@prisma/client/runtime/client';
 
 /**
  * @swagger
@@ -87,7 +88,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       totalMachines, 
       createdBy, 
       machines = [],
-      notes = '' 
+      notes = '',
+      generateInvoice = false,
     } = body;
     
     // Support both agreementId (agreement number) and rentalId (UUID)
@@ -104,7 +106,13 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           customer: true,
           machines: {
             include: {
-              machine: true,
+              machine: {
+                include: {
+                  brand: true,
+                  model: true,
+                  type: true,
+                },
+              },
             },
           },
         },
@@ -116,7 +124,13 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           customer: true,
           machines: {
             include: {
-              machine: true,
+              machine: {
+                include: {
+                  brand: true,
+                  model: true,
+                  type: true,
+                },
+              },
             },
           },
         },
@@ -213,6 +227,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     const count = await prisma.return.count();
     const returnNumber = `RET-${new Date().getFullYear().toString().substr(2)}${String(count + 1).padStart(6, '0')}`;
     
+    const returnDate = new Date();
+    
     // Create return with machines in a transaction
     const newReturn = await prisma.$transaction(async (tx) => {
       // Create the return record
@@ -222,7 +238,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           rentalId: rental.id,
           customerId: rental.customerId,
           machineId: returnMachines[0]?.machineId || null, // Keep for backward compatibility
-          returnDate: new Date(),
+          returnDate: returnDate,
           triageCategory: returnMachines.some(rm => rm.triageCategory !== 'STANDARD') 
             ? 'DAMAGE' 
             : 'STANDARD',
@@ -230,6 +246,149 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           inspectedByUserId: auth.id,
         },
       });
+      
+      let invoiceId: string | null = null;
+      
+      // Generate invoice if requested
+      if (generateInvoice) {
+        // Get rental machines for the returned machines to calculate billing
+        const rentalMachinesForReturn = await tx.rentalMachine.findMany({
+          where: {
+            rentalId: rental.id,
+            machineId: {
+              in: returnMachines.map((rm: any) => rm.machineId),
+            },
+          },
+        });
+        
+        // Calculate line items for invoice
+        const lineItems: any[] = [];
+        let invoiceSubtotal = 0;
+        
+        for (const returnMachine of returnMachines) {
+          const rentalMachine = rentalMachinesForReturn.find(
+            (rm: any) => rm.machineId === returnMachine.machineId
+          );
+          
+          if (!rentalMachine) continue;
+          
+          // Determine billing period: from lastBilledToDate (or rental startDate) to return date
+          const periodStart = rentalMachine.lastBilledToDate 
+            ? new Date(rentalMachine.lastBilledToDate)
+            : new Date(rental.startDate);
+          
+          const periodEnd = returnDate;
+          
+          // Calculate days in period
+          const daysDiff = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysDiff <= 0) continue; // Skip if no days to bill
+          
+          // Calculate amount based on paymentBasis
+          let lineAmount = 0;
+          const dailyRate = parseFloat(rentalMachine.dailyRate.toString());
+          const quantity = rentalMachine.quantity || 1;
+          
+          if (rental.paymentBasis === 'DAILY') {
+            lineAmount = dailyRate * quantity * daysDiff;
+          } else {
+            // MONTHLY: use monthly rate (dailyRate * 30) or prorated
+            const monthlyRate = dailyRate * 30;
+            if (rental.firstMonthProrated && periodStart.getTime() === new Date(rental.startDate).getTime()) {
+              // First period prorated
+              const daysInMonth = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate();
+              lineAmount = (monthlyRate * quantity * daysDiff) / daysInMonth;
+            } else {
+              // Full month or prorated based on days
+              const daysInPeriod = daysDiff;
+              const daysInMonth = 30; // Standard month
+              lineAmount = (monthlyRate * quantity * daysInPeriod) / daysInMonth;
+            }
+          }
+          
+          invoiceSubtotal += lineAmount;
+          
+          // Find machine details for line item
+          const machine = await tx.machine.findUnique({
+            where: { id: returnMachine.machineId },
+            include: {
+              brand: true,
+              model: true,
+              type: true,
+            },
+          });
+          
+          lineItems.push({
+            description: `${machine?.brand?.name || ''} ${machine?.model?.name || ''} - ${machine?.type?.name || ''}`.trim() || 'Machine Rental',
+            quantity: quantity,
+            unitPrice: rental.paymentBasis === 'DAILY' ? dailyRate : dailyRate * 30,
+            machineId: returnMachine.machineId,
+            brand: machine?.brand?.name || '',
+            model: machine?.model?.name || '',
+            type: machine?.type?.name || '',
+            serialNumber: machine?.serialNumber || '',
+            periodFrom: periodStart.toISOString().split('T')[0],
+            periodTo: periodEnd.toISOString().split('T')[0],
+            days: daysDiff,
+            vatRate: 0.15, // 15% VAT
+          });
+        }
+        
+        if (lineItems.length > 0) {
+          const vatAmount = invoiceSubtotal * 0.15;
+          const grandTotal = invoiceSubtotal + vatAmount;
+          
+          // Generate invoice number
+          const invoiceCount = await tx.invoice.count();
+          const invoiceNumber = `INV${new Date().getFullYear().toString().substr(2)}${String(invoiceCount + 1).padStart(6, '0')}`;
+          
+          // Calculate due date (30 days from issue date)
+          const dueDate = new Date(returnDate);
+          dueDate.setDate(dueDate.getDate() + 30);
+          
+          // Create invoice
+          const invoice = await tx.invoice.create({
+            data: {
+              invoiceNumber,
+              customerId: rental.customerId,
+              rentalId: rental.id,
+              type: 'RENTAL',
+              taxCategory: rental.customer.vatApplicable ? 'VAT' : 'NON_VAT',
+              status: 'ISSUED',
+              issueDate: returnDate,
+              dueDate: dueDate,
+              lineItems: lineItems,
+              subtotal: new Decimal(invoiceSubtotal),
+              vatAmount: new Decimal(vatAmount),
+              grandTotal: new Decimal(grandTotal),
+              balance: new Decimal(grandTotal),
+              paidAmount: new Decimal(0),
+              createdByUserId: auth.id,
+            },
+          });
+          
+          invoiceId = invoice.id;
+          
+          // Update lastBilledToDate for returned rental machines
+          for (const returnMachine of returnMachines) {
+            await tx.rentalMachine.updateMany({
+              where: {
+                rentalId: rental.id,
+                machineId: returnMachine.machineId,
+              },
+              data: {
+                lastBilledToDate: returnDate,
+              },
+            });
+          }
+          
+          // Update return with invoice ID
+          await tx.return.update({
+            where: { id: returnRecord.id },
+            data: { invoiceId },
+          });
+        }
+      }
       
       // Create return machines
       for (const rm of returnMachines) {
@@ -278,12 +437,13 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
             },
           },
           damageReport: true,
+          invoice: true,
         },
       });
     });
     
     // Transform response to match frontend expectations
-    const transformed = {
+    const transformed: any = {
       id: newReturn!.id,
       returnNumber: newReturn!.returnNumber,
       agreementId: rental.agreementNumber,
@@ -301,6 +461,17 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         photosCount: rm.photos.length,
       })),
     };
+    
+    // Include invoice info if generated
+    if (generateInvoice && newReturn!.invoiceId && newReturn!.invoice) {
+      transformed.invoice = {
+        id: newReturn!.invoice.id,
+        invoiceNumber: newReturn!.invoice.invoiceNumber,
+        subtotal: parseFloat(newReturn!.invoice.subtotal.toString()),
+        vatAmount: parseFloat(newReturn!.invoice.vatAmount.toString()),
+        grandTotal: parseFloat(newReturn!.invoice.grandTotal.toString()),
+      };
+    }
     
     return successResponse(transformed, 'Return created successfully', 201);
   } catch (error: any) {

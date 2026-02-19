@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
-import { Decimal } from '@prisma/client/runtime/client';
+import { Decimal } from '@prisma/client/runtime/library';
 
 export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
@@ -33,23 +33,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
     if (!rental) {
       return notFoundResponse('Rental not found');
     }
-
-    let expectedPayload: { expectedMachineCount?: number; expectedMachineCategories?: { id: string; brand: string; model: string; type: string; quantity: number }[] } = {};
-    try {
-      if (rental.lockedReason) {
-        const p = JSON.parse(rental.lockedReason);
-        if (p && typeof p.expectedMachineCount === 'number') {
-          expectedPayload = {
-            expectedMachineCount: p.expectedMachineCount,
-            expectedMachineCategories: Array.isArray(p.expectedMachineCategories) ? p.expectedMachineCategories : undefined,
-          };
-        }
-      }
-    } catch {
-      // ignore
-    }
     
-    return successResponse({ ...rental, ...expectedPayload }, 'Rental retrieved successfully');
+    return successResponse(rental, 'Rental retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching rental:', error);
     return errorResponse('Failed to retrieve rental', 500);
@@ -65,27 +50,25 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
     const { id } = await params;
     const body = await request.json();
     
-    const existingRental = await prisma.rental.findUnique({
+    const existingRental = await prisma.rental.findUnique({ 
       where: { id },
       include: {
         purchaseOrder: true,
         machines: true,
       },
-    } as any);
+    });
     if (!existingRental) {
       return notFoundResponse('Rental not found');
     }
-    const existing = existingRental as any;
-
-    const statusMap: Record<string, 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'> = {
+    
+    const statusMap: Record<string, 'ACTIVE' | 'COMPLETED' | 'CANCELLED'> = {
       Active: 'ACTIVE',
       Completed: 'COMPLETED',
       Cancelled: 'CANCELLED',
-      Pending: 'PENDING',
+      Pending: 'ACTIVE', // Pending rentals become Active when machines are assigned
     };
     const mappedStatus = body.status && statusMap[body.status];
-    let machinesAddedThisRequest = 0;
-
+    
     // Handle machine assignment from QR scans
     if (body.machines && Array.isArray(body.machines)) {
       const machinesToAdd: any[] = [];
@@ -108,7 +91,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
         }
         
         // Check if machine is already assigned to this rental
-        const existingAssignment = existing.machines.find(
+        const existingAssignment = existingRental.machines.find(
           (rm: any) => rm.machineId === machine.id
         );
         
@@ -117,8 +100,8 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
         }
         
         // Get machine pricing from the machine or use defaults
-        const dailyRate = (machine as any).monthlyRentalFee
-          ? parseFloat((machine as any).monthlyRentalFee.toString()) / 30
+        const dailyRate = machine.monthlyRentalFee 
+          ? parseFloat(machine.monthlyRentalFee.toString()) / 30 
           : parseFloat(existingRental.subtotal.toString()) / 30;
         
         machinesToAdd.push({
@@ -136,42 +119,68 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
             rentalId: id,
           })),
         });
-        machinesAddedThisRequest = machinesToAdd.length;
       }
     }
     
-    // Determine if all expected machines are added (use lockedReason expected count when from PO with no machines at creation)
+    // Determine if all expected machines are added
     let finalStatus = mappedStatus || existingRental.status;
-    let expectedCount: number | null = null;
-    try {
-      const parsed = existingRental.lockedReason && JSON.parse(existingRental.lockedReason);
-      if (parsed && typeof parsed.expectedMachineCount === 'number') {
-        expectedCount = parsed.expectedMachineCount;
-      }
-    } catch {
-      // ignore
-    }
-    if (expectedCount == null && existing.purchaseOrder && Array.isArray(existing.purchaseOrder.machines)) {
-      expectedCount = existing.purchaseOrder.machines.reduce(
-        (sum: number, m: any) => sum + (m.quantity || 0),
+    if (existingRental.purchaseOrder && Array.isArray(existingRental.purchaseOrder.machines)) {
+      const expectedCount = existingRental.purchaseOrder.machines.reduce(
+        (sum: number, m: any) => sum + (m.quantity || 0), 
         0
       );
-    }
-    if (expectedCount != null) {
-      const currentCount = existing.machines.length + machinesAddedThisRequest;
-      if (currentCount >= expectedCount && String(existingRental.status) === 'PENDING' && !mappedStatus) {
+      const currentCount = existingRental.machines.length + (body.machines?.length || 0);
+      
+      // If all expected machines are added and status is Pending, set to Active
+      if (currentCount >= expectedCount && existingRental.status === 'ACTIVE' && !mappedStatus) {
         finalStatus = 'ACTIVE';
+      }
+    }
+    
+    const updateData: any = {};
+    
+    if (finalStatus) updateData.status = finalStatus;
+    
+    // Handle expectedEndDate: can be set to null (open-ended) or a date
+    if (body.endDate !== undefined) {
+      if (body.endDate === null || body.endDate === '') {
+        updateData.expectedEndDate = null;
+      } else {
+        updateData.expectedEndDate = new Date(body.endDate);
+      }
+    }
+    
+    if (body.startDate != null && body.startDate !== '') {
+      updateData.startDate = new Date(body.startDate);
+    }
+    
+    if (body.monthlyRent != null) {
+      updateData.subtotal = new Decimal(body.monthlyRent);
+    }
+    
+    // Handle paymentBasis and firstMonthProrated
+    if (body.paymentBasis !== undefined) {
+      if (['MONTHLY', 'DAILY'].includes(body.paymentBasis)) {
+        updateData.paymentBasis = body.paymentBasis;
+      }
+    }
+    
+    if (body.firstMonthProrated !== undefined) {
+      updateData.firstMonthProrated = body.firstMonthProrated === true;
+    }
+    
+    // Handle actualEndDate when agreement is closed
+    if (body.actualEndDate !== undefined) {
+      if (body.actualEndDate === null || body.actualEndDate === '') {
+        updateData.actualEndDate = null;
+      } else {
+        updateData.actualEndDate = new Date(body.actualEndDate);
       }
     }
     
     const updatedRental = await prisma.rental.update({
       where: { id },
-      data: {
-        ...(finalStatus && { status: finalStatus }),
-        ...(body.endDate != null && body.endDate !== '' && { expectedEndDate: new Date(body.endDate) }),
-        ...(body.startDate != null && body.startDate !== '' && { startDate: new Date(body.startDate) }),
-        ...(body.monthlyRent != null && { subtotal: new Decimal(body.monthlyRent) }),
-      },
+      data: updateData,
       include: {
         customer: true,
         machines: {

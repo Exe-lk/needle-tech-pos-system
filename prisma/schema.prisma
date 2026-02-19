@@ -155,6 +155,7 @@ model Customer {
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
   // Relations
+  locations       CustomerLocation[]
   purchaseOrders  PurchaseOrder[]
   rentals         Rental[]
   invoices        Invoice[]
@@ -170,6 +171,27 @@ model Customer {
   @@index([isCreditLocked])
   @@index([currentBalance])
   @@map("customers")
+}
+
+model CustomerLocation {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId  String   @db.Uuid
+  name        String   // e.g. "Main Factory", "Warehouse A"
+  addressLine1 String?
+  addressLine2 String?
+  city        String?
+  region      String?
+  postalCode  String?
+  country     String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+
+  @@index([customerId])
+  @@map("customer_locations")
 }
 
 enum CustomerType {
@@ -385,6 +407,9 @@ model PurchaseOrder {
   startDate       DateTime? @db.Timestamptz(6)
   endDate         DateTime? @db.Timestamptz(6)
   
+  // Customer location for this purchase order
+  customerLocationId String? @db.Uuid
+  
   // Purchase request machines (stored as JSON for flexibility)
   machines        Json[] // Array of machine requests with quantities
   
@@ -394,12 +419,14 @@ model PurchaseOrder {
 
   // Relations
   customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerLocation CustomerLocation? @relation(fields: [customerLocationId], references: [id], onDelete: SetNull)
   rentals         Rental[] @relation("PurchaseOrderRentals")
 
   @@index([requestNumber])
   @@index([customerId])
   @@index([status])
   @@index([requestDate])
+  @@index([customerLocationId])
   @@map("purchase_orders")
 }
 
@@ -468,8 +495,12 @@ model Rental {
   agreementType   String   @default("RENTAL")
   
   startDate       DateTime @db.Timestamptz(6)
-  expectedEndDate DateTime @db.Timestamptz(6)
+  expectedEndDate DateTime? @db.Timestamptz(6) // Optional for open-ended agreements
   actualEndDate   DateTime? @db.Timestamptz(6)
+  
+  // Billing / payment basis
+  paymentBasis         RentalPaymentBasis  @default(MONTHLY)   // MONTHLY | DAILY
+  firstMonthProrated  Boolean             @default(false)     // If true, first period charged by days; if false, full month
   
   // Financials
   subtotal        Decimal  @db.Decimal(15, 2)
@@ -509,6 +540,11 @@ model Rental {
   @@map("rentals")
 }
 
+enum RentalPaymentBasis {
+  MONTHLY
+  DAILY
+}
+
 model RentalMachine {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   rentalId        String   @db.Uuid
@@ -517,6 +553,9 @@ model RentalMachine {
   dailyRate       Decimal  @db.Decimal(10, 2)
   securityDeposit Decimal  @db.Decimal(10, 2)
   quantity        Int      @default(1)
+  
+  // Track billing period for open-ended agreements
+  lastBilledToDate  DateTime?  @db.Timestamptz(6)   // Last date included in an invoice for this line
   
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
 
@@ -569,6 +608,7 @@ model Invoice {
   
   payments        PaymentInvoice[]
   damageReports   DamageReport[]
+  returns         Return[] @relation("ReturnInvoice")
 
   @@index([invoiceNumber])
   @@index([customerId])
@@ -709,7 +749,6 @@ enum GatePassStatus {
   PENDING
   DEPARTED
   RETURNED
-  REJECTED
 }
 
 
@@ -727,6 +766,7 @@ model Return {
   photos              String[]
   
   damageReportId      String?  @db.Uuid
+  invoiceId           String?  @db.Uuid // Link to invoice generated for this return
   inspectedByUserId   String   @db.Uuid
   returnReceiptNumber String?
   
@@ -739,6 +779,7 @@ model Return {
   machine             Machine? @relation("ReturnMachine", fields: [machineId], references: [id], onDelete: Restrict)
   inspectedBy         User     @relation("ReturnInspector", fields: [inspectedByUserId], references: [id], onDelete: Restrict)
   damageReport        DamageReport? @relation(fields: [damageReportId], references: [id], onDelete: SetNull)
+  invoice             Invoice? @relation("ReturnInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
   machines            ReturnMachine[]
 
   @@index([returnNumber])
@@ -746,6 +787,7 @@ model Return {
   @@index([machineId])
   @@index([returnDate])
   @@index([triageCategory])
+  @@index([invoiceId])
   @@map("returns")
 }
 

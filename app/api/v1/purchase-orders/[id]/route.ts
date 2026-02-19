@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
-import { Decimal } from '@prisma/client/runtime/client';
 
 /**
  * @swagger
@@ -24,7 +23,17 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     const purchaseOrder = await prisma.purchaseOrder.findUnique({
       where: { id },
       include: {
-        customer: true,
+        customer: {
+          include: {
+            locations: {
+              orderBy: [
+                { isDefault: 'desc' },
+                { createdAt: 'asc' },
+              ],
+            },
+          },
+        },
+        customerLocation: true,
         rentals: {
           select: {
             id: true,
@@ -51,6 +60,18 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       requestDate: purchaseOrder.requestDate,
       startDate: (purchaseOrder as any).startDate ?? null,
       endDate: (purchaseOrder as any).endDate ?? null,
+      customerLocationId: (purchaseOrder as any).customerLocationId ?? null,
+      customerLocation: (purchaseOrder as any).customerLocation ? {
+        id: (purchaseOrder as any).customerLocation.id,
+        name: (purchaseOrder as any).customerLocation.name,
+        addressLine1: (purchaseOrder as any).customerLocation.addressLine1,
+        addressLine2: (purchaseOrder as any).customerLocation.addressLine2,
+        city: (purchaseOrder as any).customerLocation.city,
+        region: (purchaseOrder as any).customerLocation.region,
+        postalCode: (purchaseOrder as any).customerLocation.postalCode,
+        country: (purchaseOrder as any).customerLocation.country,
+      } : null,
+      customerLocations: (purchaseOrder as any).customer?.locations || [],
       totalAmount: parseFloat(purchaseOrder.totalAmount.toString()),
       status: purchaseOrder.status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
       requestedMachines,
@@ -63,7 +84,6 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
         availableStock: m.availableStock || 0,
         unitPrice: m.unitPrice,
         totalPrice: m.totalPrice,
-        monthlyRentalFee: m.monthlyRentalFee ?? m.unitPrice ?? 0,
         rentedQuantity: m.rentedQuantity || 0,
         pendingQuantity: m.quantity - (m.rentedQuantity || 0),
         expectedAvailabilityDate: m.expectedAvailabilityDate || null,
@@ -107,28 +127,10 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       updateData.status = body.status.toUpperCase().replace(/ /g, '_');
     }
     if (body.machines !== undefined) {
-      // Normalize machines and compute total on API (single source of truth)
-      const machines = Array.isArray(body.machines) ? body.machines : [];
-      const machineData = machines.map((m: any) => {
-        const monthlyRentalFee = typeof m.monthlyRentalFee === 'number' ? m.monthlyRentalFee : (m.unitPrice ?? 0);
-        const qty = Number(m.quantity) || 0;
-        return {
-          id: m.id || m.machineId,
-          brand: m.brand,
-          model: m.model,
-          type: m.type,
-          quantity: m.quantity,
-          availableStock: m.availableStock ?? 0,
-          unitPrice: m.unitPrice ?? monthlyRentalFee,
-          totalPrice: m.totalPrice ?? monthlyRentalFee * qty,
-          monthlyRentalFee,
-          rentedQuantity: m.rentedQuantity ?? 0,
-          pendingQuantity: m.pendingQuantity ?? 0,
-        };
-      });
-      const computedTotal = machineData.reduce((sum: number, m: any) => sum + (Number(m.totalPrice) || 0), 0);
-      updateData.machines = machineData;
-      updateData.totalAmount = new Decimal(computedTotal);
+      updateData.machines = body.machines;
+    }
+    if (body.totalAmount !== undefined) {
+      updateData.totalAmount = body.totalAmount;
     }
     if (body.notes !== undefined) {
       updateData.notes = body.notes;
@@ -139,12 +141,38 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     if (body.endDate !== undefined) {
       updateData.endDate = body.endDate ? new Date(body.endDate) : null;
     }
+    if (body.customerLocationId !== undefined) {
+      // Validate customerLocationId if provided
+      if (body.customerLocationId) {
+        const location = await prisma.customerLocation.findFirst({
+          where: {
+            id: body.customerLocationId,
+            customerId: existingPO.customerId,
+          },
+        });
+        
+        if (!location) {
+          return errorResponse('Invalid customer location', 400);
+        }
+      }
+      updateData.customerLocationId = body.customerLocationId || null;
+    }
     
     const updatedPO = await prisma.purchaseOrder.update({
       where: { id },
       data: updateData,
       include: {
-        customer: true,
+        customer: {
+          include: {
+            locations: {
+              orderBy: [
+                { isDefault: 'desc' },
+                { createdAt: 'asc' },
+              ],
+            },
+          },
+        },
+        customerLocation: true,
         rentals: true,
       },
     });

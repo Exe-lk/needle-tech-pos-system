@@ -52,12 +52,21 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       return notFoundResponse('Rental agreement not found');
     }
     
-    // Calculate rental period
+    // Calculate rental period (handle open-ended rentals)
     const startDate = new Date(rental.startDate);
-    const endDate = new Date(rental.expectedEndDate);
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
-    const rentalPeriod = `${diffMonths} month${diffMonths !== 1 ? 's' : ''}`;
+    const endDate = rental.expectedEndDate ? new Date(rental.expectedEndDate) : null;
+    let rentalPeriod: string;
+    let diffMonths: number;
+    
+    if (endDate) {
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
+      rentalPeriod = `${diffMonths} month${diffMonths !== 1 ? 's' : ''}`;
+    } else {
+      rentalPeriod = 'Open-ended';
+      // For monthly rate calculation, use 1 month as default for open-ended
+      diffMonths = 1;
+    }
     
     // Transform machines
     const machines = rental.machines.map((rm: any) => ({
@@ -92,10 +101,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     
     const transformed = {
       id: rental.agreementNumber,
-      rentalId: rental.id,
       agreementNo: rental.agreementNumber,
       status: rental.status,
-      customerId: rental.customerId,
       customerName: rental.customer.name,
       customerAddress: [
         rental.customer.billingAddressLine1,
@@ -110,13 +117,17 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       rentalStartDate: rental.startDate,
       rentalEndDate: rental.expectedEndDate,
       rentalPeriod,
-      monthlyRate: parseFloat(rental.subtotal.toString()) / diffMonths,
+      monthlyRate: rental.expectedEndDate 
+        ? parseFloat(rental.subtotal.toString()) / diffMonths 
+        : parseFloat(rental.subtotal.toString()), // For open-ended, subtotal is monthly rate
       totalAmount: parseFloat(rental.total.toString()),
       paidAmount: parseFloat(rental.paidAmount.toString()),
       outstandingAmount: parseFloat(rental.balance.toString()),
       securityDeposit: parseFloat(rental.depositTotal.toString()),
       dispatchedDate: rental.startDate,
       expectedReturnDate: rental.expectedEndDate,
+      paymentBasis: rental.paymentBasis,
+      firstMonthProrated: rental.firstMonthProrated,
       machines,
       expectedMachines: expectedMachineCategories.reduce((sum, cat) => sum + cat.quantity, 0),
       addedMachines: rental.machines.length,

@@ -22,19 +22,34 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       rentalStartDate,
       rentalEndDate,
       machines = [],
+      paymentBasis = 'MONTHLY',
+      firstMonthProrated = false,
     } = body;
     
-    if (!purchaseRequestId || !rentalStartDate || !rentalEndDate || !machines.length) {
+    if (!purchaseRequestId || !rentalStartDate || !machines.length) {
       return validationErrorResponse('Missing required fields', {
         purchaseRequestId: !purchaseRequestId ? ['Purchase request ID is required'] : [],
         rentalStartDate: !rentalStartDate ? ['Rental start date is required'] : [],
-        rentalEndDate: !rentalEndDate ? ['Rental end date is required'] : [],
         machines: !machines.length ? ['At least one machine is required'] : [],
       });
     }
     
-    // Get purchase order (PurchaseOrder model on PrismaClient)
-    const purchaseOrder = await (prisma as any).purchaseOrder.findUnique({
+    // Validate rentalEndDate if provided
+    if (rentalEndDate && new Date(rentalEndDate) < new Date(rentalStartDate)) {
+      return validationErrorResponse('Rental end date must be after start date', {
+        rentalEndDate: ['Rental end date must be after start date'],
+      });
+    }
+    
+    // Validate paymentBasis
+    if (paymentBasis && !['MONTHLY', 'DAILY'].includes(paymentBasis)) {
+      return validationErrorResponse('Invalid payment basis', {
+        paymentBasis: ['Payment basis must be MONTHLY or DAILY'],
+      });
+    }
+    
+    // Get purchase order
+    const purchaseOrder = await prisma.purchaseOrder.findUnique({
       where: { id: purchaseRequestId },
       include: { customer: true },
     });
@@ -43,17 +58,17 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       return notFoundResponse('Purchase request not found');
     }
     
-    const allowedStatuses = ['APPROVED', 'PARTIALLY_FULFILLED', 'PENDING', 'ACTIVE'];
+    const allowedStatuses = ['APPROVED', 'PARTIALLY_FULFILLED','PENDING'];
     if (!allowedStatuses.includes(purchaseOrder.status)) {
       return validationErrorResponse('Invalid purchase request status', {
-        purchaseRequestId: ['Purchase request must be approved, active, or partially fulfilled to create another hiring agreement'],
+        purchaseRequestId: ['Purchase request must be approved or partially fulfilled to create another hiring agreement'],
       });
     }
     
     // Validate requested quantities do not exceed available per line (stock-aware)
-    const poMachinesList = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
+    const poMachines = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
     for (const req of machines) {
-      const line = poMachinesList.find((m: any) => String(m.id || m.machineId) === String(req.machineId));
+      const line = poMachines.find((m: any) => String(m.id || m.machineId) === String(req.machineId));
       if (!line) {
         return validationErrorResponse('Invalid machine for this purchase order', {
           machines: [`Machine ${req.machineId} is not part of this purchase order`],
@@ -69,38 +84,64 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         });
       }
     }
-
-    // Number of months in rental period (same formula as rental-agreement page for consistent display)
-    const start = new Date(rentalStartDate);
-    const end = new Date(rentalEndDate);
-    const monthsInPeriod = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
-
-    // Monthly rent = monthly rental price × number of machines (per line, then sum)
-    let subtotalMonthly = 0;
-    for (const machine of machines) {
-      const line = poMachinesList.find((m: any) => String(m.id || m.machineId) === String(machine.machineId));
-      const monthlyFee = line != null
-        ? (typeof (line as any).monthlyRentalFee === 'number' ? (line as any).monthlyRentalFee : parseFloat(String((line as any).unitPrice ?? 0)) || 0)
-        : (parseFloat(String(machine.unitPrice ?? 0)) || 0);
-      const quantity = Math.max(0, Number(machine.quantity) || 0);
-      subtotalMonthly += quantity * monthlyFee;
+    
+    // Calculate totals
+    // For open-ended rentals (rentalEndDate is null), we can set initial totals to 0
+    // or calculate based on first period logic. For now, we'll use the monthly rate approach.
+    let subtotal = 0;
+    if (rentalEndDate) {
+      // Fixed period: calculate based on period
+      for (const machine of machines) {
+        const quantity = machine.quantity || 0;
+        const unitPrice = machine.unitPrice || 0;
+        subtotal += quantity * unitPrice;
+      }
+    } else {
+      // Open-ended: calculate monthly rate (daily rate * 30 * quantity) for initial display
+      for (const machine of machines) {
+        const quantity = machine.quantity || 0;
+        const dailyRate = machine.unitPrice || 0;
+        const monthlyRate = dailyRate * 30;
+        subtotal += quantity * monthlyRate;
+      }
     }
-    const periodSubtotal = subtotalMonthly * monthsInPeriod;
-
-    // Business customer (GARMENT_FACTORY): add 15% VAT. Individual: no VAT.
-    const isBusinessCustomer = (purchaseOrder.customer?.type ?? '') === 'GARMENT_FACTORY';
-    const vatAmount = isBusinessCustomer ? periodSubtotal * 0.15 : 0;
-    const total = periodSubtotal + vatAmount;
+    
+    const vatAmount = subtotal * 0.15; // 15% VAT
+    const total = subtotal + vatAmount;
     
     // Generate agreement number
     const count = await prisma.rental.count();
     const agreementNumber = `RA${new Date().getFullYear().toString().substr(2)}${String(count + 1).padStart(6, '0')}`;
     
     const userId = context.id;
-
-    // Build expected machine categories for this rental (for UI and for PUT expected count). No machines assigned yet.
-    const expectedMachineCategories: { id: string; brand: string; model: string; type: string; quantity: number }[] = [];
-    let expectedMachineCount = 0;
+    
+    // Create rental agreement
+    const newRental = await prisma.rental.create({
+      data: {
+        agreementNumber,
+        customerId: purchaseOrder.customerId,
+        purchaseOrderId: purchaseRequestId,
+        status: 'ACTIVE',
+        startDate: new Date(rentalStartDate),
+        expectedEndDate: rentalEndDate ? new Date(rentalEndDate) : null,
+        paymentBasis: paymentBasis === 'DAILY' ? 'DAILY' : 'MONTHLY',
+        firstMonthProrated: firstMonthProrated === true,
+        subtotal: new Decimal(subtotal),
+        vatAmount: new Decimal(vatAmount),
+        total: new Decimal(total),
+        balance: new Decimal(total),
+        paidAmount: new Decimal(0),
+        depositTotal: new Decimal(0),
+        createdByUserId: userId,
+      },
+      include: {
+        customer: true,
+        machines: true,
+      },
+    });
+    
+    // Resolve PO line (brand, model, type) to a Machine.id (UUID) for each request line
+    const poMachinesList = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
     for (const machine of machines) {
       const line = poMachinesList.find((m: any) => String(m.id || m.machineId) === String(machine.machineId));
       if (!line || !line.brand || !line.model) {
@@ -108,45 +149,58 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           machines: [`Could not find PO line or missing brand/model for line ${machine.machineId}`],
         });
       }
-      const qty = machine.quantity || 1;
-      expectedMachineCount += qty;
-      expectedMachineCategories.push({
-        id: String(machine.machineId),
-        brand: String(line.brand || '').trim(),
-        model: String(line.model || '').trim(),
-        type: line.type ? String(line.type).trim() : '',
-        quantity: qty,
+      const brandName = String(line.brand).trim();
+      const modelName = String(line.model).trim();
+      const typeName = line.type ? String(line.type).trim() : null;
+
+      const brand = await prisma.brand.findFirst({
+        where: { name: { equals: brandName, mode: 'insensitive' }, isActive: true },
+      });
+      if (!brand) {
+        return validationErrorResponse('Brand not found', {
+          machines: [`No brand "${brandName}" found in database for line ${line.brand} / ${line.model}`],
+        });
+      }
+      const model = await prisma.model.findFirst({
+        where: { name: { equals: modelName, mode: 'insensitive' }, brandId: brand.id, isActive: true },
+      });
+      if (!model) {
+        return validationErrorResponse('Model not found', {
+          machines: [`No model "${modelName}" for brand "${brandName}" found in database`],
+        });
+      }
+      let typeId: string | null = null;
+      if (typeName) {
+        const machineType = await prisma.machineType.findFirst({
+          where: { name: { equals: typeName, mode: 'insensitive' }, isActive: true },
+        });
+        if (machineType) typeId = machineType.id;
+      }
+      const machineWhere: { brandId: string; modelId?: string; typeId?: string | null } = {
+        brandId: brand.id,
+        modelId: model.id,
+      };
+      if (typeId != null) machineWhere.typeId = typeId;
+      const resolvedMachine = await prisma.machine.findFirst({
+        where: machineWhere,
+      });
+      if (!resolvedMachine) {
+        return validationErrorResponse('No machine found for this line', {
+          machines: [`No machine in inventory for ${brandName} / ${modelName}${typeName ? ` / ${typeName}` : ''}. Ensure at least one machine exists with this brand and model.`],
+        });
+      }
+
+      await prisma.rentalMachine.create({
+        data: {
+          rentalId: newRental.id,
+          machineId: resolvedMachine.id,
+          dailyRate: new Decimal(machine.unitPrice || 0),
+          securityDeposit: new Decimal(0),
+          quantity: machine.quantity || 1,
+        },
       });
     }
-    const expectedPayload = JSON.stringify({
-      expectedMachineCount,
-      expectedMachineCategories,
-    });
-
-    // Create rental agreement (PENDING, no machines assigned; assign via machine-assign / Update Agreement)
-    const newRental = await prisma.rental.create({
-      data: {
-        agreementNumber,
-        customerId: purchaseOrder.customerId,
-        purchaseOrderId: purchaseRequestId,
-        status: 'PENDING',
-        startDate: new Date(rentalStartDate),
-        expectedEndDate: new Date(rentalEndDate),
-        subtotal: new Decimal(periodSubtotal),
-        vatAmount: new Decimal(vatAmount),
-        total: new Decimal(total),
-        balance: new Decimal(total),
-        paidAmount: new Decimal(0),
-        depositTotal: new Decimal(0),
-        createdByUserId: userId,
-        lockedReason: expectedPayload,
-      } as any,
-      include: {
-        customer: true,
-        machines: true,
-      },
-    });
-
+    
     // Update purchase order: add rented quantities to each line and set status
     const currentMachines = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
     const machineIdToRented = new Map<string, number>();
@@ -161,15 +215,14 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       return { ...m, rentedQuantity: prevRented + added };
     });
     const allFulfilled = updatedMachines.every((m: any) => (m.rentedQuantity || 0) >= (m.quantity || 0));
-    // When at least one hiring agreement is created from this PO, mark PO as ACTIVE; COMPLETED when all lines fulfilled
-    const newStatus = allFulfilled ? 'COMPLETED' : 'ACTIVE';
+    const newStatus = allFulfilled ? 'COMPLETED' : 'PARTIALLY_FULFILLED';
     
-    await (prisma as any).purchaseOrder.update({
+    await prisma.purchaseOrder.update({
       where: { id: purchaseRequestId },
       data: { machines: updatedMachines, status: newStatus },
     });
     
-    // Transform response (status PENDING until machines assigned in machine-assign-page)
+    // Transform response
     const rentalWithCustomer = newRental as typeof newRental & { customer?: { name: string } };
     const transformed = {
       id: newRental.id,
@@ -178,7 +231,9 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       customerName: rentalWithCustomer.customer?.name ?? '',
       startDate: newRental.startDate,
       endDate: newRental.expectedEndDate,
-      status: newRental.status,
+      paymentBasis: newRental.paymentBasis,
+      firstMonthProrated: newRental.firstMonthProrated,
+      status: 'Pending',
     };
     
     return successResponse(transformed, 'Rental agreement created successfully', 201);

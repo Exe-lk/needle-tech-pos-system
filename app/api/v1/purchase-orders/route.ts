@@ -45,7 +45,17 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       take: limit,
       orderBy: { [sortBy]: sortOrderDir },
       include: {
-        customer: true,
+        customer: {
+          include: {
+            locations: {
+              orderBy: [
+                { isDefault: 'desc' },
+                { createdAt: 'asc' },
+              ],
+            },
+          },
+        },
+        customerLocation: true,
         rentals: {
           select: {
             id: true,
@@ -70,6 +80,18 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
         requestDate: po.requestDate,
         startDate: (po as any).startDate ?? null,
         endDate: (po as any).endDate ?? null,
+        customerLocationId: po.customerLocationId ?? null,
+        customerLocation: po.customerLocation ? {
+          id: po.customerLocation.id,
+          name: po.customerLocation.name,
+          addressLine1: po.customerLocation.addressLine1,
+          addressLine2: po.customerLocation.addressLine2,
+          city: po.customerLocation.city,
+          region: po.customerLocation.region,
+          postalCode: po.customerLocation.postalCode,
+          country: po.customerLocation.country,
+        } : null,
+        customerLocations: po.customer?.locations || [],
         totalAmount: parseFloat(po.totalAmount.toString()),
         status: po.status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
         requestedMachines,
@@ -82,7 +104,6 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
           availableStock: m.availableStock || 0,
           unitPrice: m.unitPrice,
           totalPrice: m.totalPrice,
-          monthlyRentalFee: m.monthlyRentalFee ?? m.unitPrice ?? 0,
           rentedQuantity: m.rentedQuantity || 0,
           pendingQuantity: m.quantity - (m.rentedQuantity || 0),
           expectedAvailabilityDate: m.expectedAvailabilityDate || null,
@@ -130,6 +151,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       requestDate,
       machines = [],
       totalAmount,
+      customerLocationId,
     } = body;
     
     if (!customerId || !requestDate || !machines.length) {
@@ -139,14 +161,18 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         machines: !machines.length ? ['At least one machine is required'] : [],
       });
     }
-    if (!startDate || !endDate) {
-      return validationErrorResponse('Rental period is required', {
-        startDate: !startDate ? ['Rental start date is required'] : [],
-        endDate: !endDate ? ['Rental end date is required'] : [],
+    
+    // startDate is required, endDate is optional (open-ended)
+    if (!startDate) {
+      return validationErrorResponse('Rental start date is required', {
+        startDate: ['Rental start date is required'],
       });
     }
     
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    const customer = await prisma.customer.findUnique({ 
+      where: { id: customerId },
+      include: { locations: true },
+    });
     
     if (!customer) {
       return validationErrorResponse('Invalid customer', {
@@ -154,30 +180,39 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       });
     }
     
+    // Validate customerLocationId if provided
+    if (customerLocationId) {
+      const location = await prisma.customerLocation.findFirst({
+        where: {
+          id: customerLocationId,
+          customerId: customerId,
+        },
+      });
+      
+      if (!location) {
+        return validationErrorResponse('Invalid customer location', {
+          customerLocationId: ['Customer location not found or does not belong to this customer'],
+        });
+      }
+    }
+    
     // Generate request number
     const count = await prisma.purchaseOrder.count();
     const requestNumber = `PO${new Date().getFullYear().toString().substr(2)}${String(count + 1).padStart(6, '0')}`;
     
-    // Store machines as JSON with all details (monthlyRentalFee optional; used for total when provided)
-    const machineData = machines.map((m: any) => {
-      const monthlyRentalFee = typeof m.monthlyRentalFee === 'number' ? m.monthlyRentalFee : (m.unitPrice ?? 0);
-      const qty = Number(m.quantity) || 0;
-      return {
-        id: m.id || m.machineId,
-        brand: m.brand,
-        model: m.model,
-        type: m.type,
-        quantity: m.quantity,
-        availableStock: m.availableStock || 0,
-        unitPrice: m.unitPrice ?? monthlyRentalFee,
-        totalPrice: m.totalPrice ?? monthlyRentalFee * qty,
-        monthlyRentalFee,
-        rentedQuantity: m.rentedQuantity || 0,
-        pendingQuantity: m.pendingQuantity ?? 0,
-      };
-    });
-    // Always compute total on API from line items (single source of truth)
-    const computedTotal = machineData.reduce((sum: number, m: any) => sum + (Number(m.totalPrice) || 0), 0);
+    // Store machines as JSON with all details
+    const machineData = machines.map((m: any) => ({
+      id: m.id || m.machineId,
+      brand: m.brand,
+      model: m.model,
+      type: m.type,
+      quantity: m.quantity,
+      availableStock: m.availableStock || 0,
+      unitPrice: m.unitPrice,
+      totalPrice: m.totalPrice,
+      rentedQuantity: m.rentedQuantity || 0,
+      pendingQuantity: m.pendingQuantity || 0,
+    }));
     
     const newPurchaseOrder = await prisma.purchaseOrder.create({
       data: {
@@ -186,12 +221,23 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         requestDate: new Date(requestDate),
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
-        totalAmount: new Decimal(computedTotal),
+        customerLocationId: customerLocationId || null,
+        totalAmount: new Decimal(totalAmount || 0),
         status: 'PENDING',
         machines: machineData,
       },
       include: {
-        customer: true,
+        customer: {
+          include: {
+            locations: {
+              orderBy: [
+                { isDefault: 'desc' },
+                { createdAt: 'asc' },
+              ],
+            },
+          },
+        },
+        customerLocation: true,
         rentals: true,
       },
     });
@@ -205,6 +251,18 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       requestDate: newPurchaseOrder.requestDate,
       startDate: (newPurchaseOrder as any).startDate ?? null,
       endDate: (newPurchaseOrder as any).endDate ?? null,
+      customerLocationId: (newPurchaseOrder as any).customerLocationId ?? null,
+      customerLocation: (newPurchaseOrder as any).customerLocation ? {
+        id: (newPurchaseOrder as any).customerLocation.id,
+        name: (newPurchaseOrder as any).customerLocation.name,
+        addressLine1: (newPurchaseOrder as any).customerLocation.addressLine1,
+        addressLine2: (newPurchaseOrder as any).customerLocation.addressLine2,
+        city: (newPurchaseOrder as any).customerLocation.city,
+        region: (newPurchaseOrder as any).customerLocation.region,
+        postalCode: (newPurchaseOrder as any).customerLocation.postalCode,
+        country: (newPurchaseOrder as any).customerLocation.country,
+      } : null,
+      customerLocations: (newPurchaseOrder as any).customer?.locations || [],
       totalAmount: parseFloat(newPurchaseOrder.totalAmount.toString()),
       status: newPurchaseOrder.status,
       machines: machineData,
