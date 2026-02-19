@@ -516,6 +516,9 @@ model Rental {
   isLockedForNewTransactions Boolean @default(false)
   lockedReason              String?
   
+  // For agreements created from PO without assigned machines: requested lines (brand, model, type, quantity, dailyRate)
+  requestedMachineLines     Json?    // [{ brand, model, type?, quantity, dailyRate }]
+  
   createdByUserId String   @db.Uuid
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
@@ -749,6 +752,7 @@ enum GatePassStatus {
   PENDING
   DEPARTED
   RETURNED
+  REJECTED
 }
 
 
