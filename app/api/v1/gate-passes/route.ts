@@ -130,9 +130,21 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
       });
     }
 
-    if (rental.status !== 'ACTIVE') {
-      return validationErrorResponse('Rental must be active to create a gate pass', {
-        rentalId: ['Assign all machines and activate the agreement first. Print and gate pass are only available when the agreement is Active.'],
+    // Allow gate pass when rental is ACTIVE or when PENDING with all machines assigned (activation happens on gate pass security approval).
+    const requestedLines = (rental as any).requestedMachineLines as { quantity?: number }[] | null;
+    const expectedCount = Array.isArray(requestedLines) && requestedLines.length > 0
+      ? requestedLines.reduce((sum: number, m: any) => sum + (typeof m.quantity === 'number' ? m.quantity : 1), 0)
+      : (rental.machines?.length ?? 0);
+    const hasAllMachinesAssigned = expectedCount > 0 && (rental.machines?.length ?? 0) >= expectedCount;
+    const rentalStatus = (rental as { status: string }).status;
+    const canCreateGatePass = rentalStatus === 'ACTIVE' || (rentalStatus === 'PENDING' && hasAllMachinesAssigned);
+
+    if (!canCreateGatePass) {
+      const rentalStatus = (rental as { status: string }).status;
+      return validationErrorResponse('Rental must have all machines assigned to create a gate pass', {
+        rentalId: [rentalStatus !== 'ACTIVE'
+          ? 'Assign all machines to this agreement first. Gate pass is available once all machines are assigned (security approval will then activate the agreement).'
+          : 'Assign all machines and activate the agreement first.'],
       });
     }
 

@@ -45,17 +45,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       take: limit,
       orderBy: { [sortBy]: sortOrderDir },
       include: {
-        customer: {
-          include: {
-            locations: {
-              orderBy: [
-                { isDefault: 'desc' },
-                { createdAt: 'asc' },
-              ],
-            },
-          },
-        },
-        customerLocation: true,
+        customer: true,
         rentals: {
           select: {
             id: true,
@@ -80,18 +70,6 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
         requestDate: po.requestDate,
         startDate: (po as any).startDate ?? null,
         endDate: (po as any).endDate ?? null,
-        customerLocationId: po.customerLocationId ?? null,
-        customerLocation: po.customerLocation ? {
-          id: po.customerLocation.id,
-          name: po.customerLocation.name,
-          addressLine1: po.customerLocation.addressLine1,
-          addressLine2: po.customerLocation.addressLine2,
-          city: po.customerLocation.city,
-          region: po.customerLocation.region,
-          postalCode: po.customerLocation.postalCode,
-          country: po.customerLocation.country,
-        } : null,
-        customerLocations: po.customer?.locations || [],
         totalAmount: parseFloat(po.totalAmount.toString()),
         status: po.status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
         requestedMachines,
@@ -151,7 +129,6 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       requestDate,
       machines = [],
       totalAmount,
-      customerLocationId,
     } = body;
     
     if (!customerId || !requestDate || !machines.length) {
@@ -162,38 +139,21 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       });
     }
     
-    // startDate is required, endDate is optional (open-ended)
-    if (!startDate) {
-      return validationErrorResponse('Rental start date is required', {
-        startDate: ['Rental start date is required'],
+    if (!startDate || !endDate) {
+      return validationErrorResponse('Start date and end date are required', {
+        startDate: !startDate ? ['Rental start date is required'] : [],
+        endDate: !endDate ? ['Rental end date is required'] : [],
       });
     }
     
     const customer = await prisma.customer.findUnique({ 
       where: { id: customerId },
-      include: { locations: true },
     });
     
     if (!customer) {
       return validationErrorResponse('Invalid customer', {
         customerId: ['Customer not found'],
       });
-    }
-    
-    // Validate customerLocationId if provided
-    if (customerLocationId) {
-      const location = await prisma.customerLocation.findFirst({
-        where: {
-          id: customerLocationId,
-          customerId: customerId,
-        },
-      });
-      
-      if (!location) {
-        return validationErrorResponse('Invalid customer location', {
-          customerLocationId: ['Customer location not found or does not belong to this customer'],
-        });
-      }
     }
     
     // Generate request number
@@ -219,25 +179,14 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         requestNumber,
         customerId,
         requestDate: new Date(requestDate),
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        customerLocationId: customerLocationId || null,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
         totalAmount: new Decimal(totalAmount || 0),
         status: 'PENDING',
         machines: machineData,
       },
       include: {
-        customer: {
-          include: {
-            locations: {
-              orderBy: [
-                { isDefault: 'desc' },
-                { createdAt: 'asc' },
-              ],
-            },
-          },
-        },
-        customerLocation: true,
+        customer: true,
         rentals: true,
       },
     });
@@ -251,18 +200,6 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       requestDate: newPurchaseOrder.requestDate,
       startDate: (newPurchaseOrder as any).startDate ?? null,
       endDate: (newPurchaseOrder as any).endDate ?? null,
-      customerLocationId: (newPurchaseOrder as any).customerLocationId ?? null,
-      customerLocation: (newPurchaseOrder as any).customerLocation ? {
-        id: (newPurchaseOrder as any).customerLocation.id,
-        name: (newPurchaseOrder as any).customerLocation.name,
-        addressLine1: (newPurchaseOrder as any).customerLocation.addressLine1,
-        addressLine2: (newPurchaseOrder as any).customerLocation.addressLine2,
-        city: (newPurchaseOrder as any).customerLocation.city,
-        region: (newPurchaseOrder as any).customerLocation.region,
-        postalCode: (newPurchaseOrder as any).customerLocation.postalCode,
-        country: (newPurchaseOrder as any).customerLocation.country,
-      } : null,
-      customerLocations: (newPurchaseOrder as any).customer?.locations || [],
       totalAmount: parseFloat(newPurchaseOrder.totalAmount.toString()),
       status: newPurchaseOrder.status,
       machines: machineData,

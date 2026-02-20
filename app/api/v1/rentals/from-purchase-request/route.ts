@@ -22,29 +22,20 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       rentalStartDate,
       rentalEndDate,
       machines = [],
-      paymentBasis = 'MONTHLY',
-      firstMonthProrated = false,
     } = body;
     
-    if (!purchaseRequestId || !rentalStartDate || !machines.length) {
+    if (!purchaseRequestId || !rentalStartDate || !rentalEndDate || !machines.length) {
       return validationErrorResponse('Missing required fields', {
         purchaseRequestId: !purchaseRequestId ? ['Purchase request ID is required'] : [],
         rentalStartDate: !rentalStartDate ? ['Rental start date is required'] : [],
+        rentalEndDate: !rentalEndDate ? ['Rental end date is required'] : [],
         machines: !machines.length ? ['At least one machine is required'] : [],
       });
     }
     
-    // Validate rentalEndDate if provided
-    if (rentalEndDate && new Date(rentalEndDate) < new Date(rentalStartDate)) {
+    if (new Date(rentalEndDate) < new Date(rentalStartDate)) {
       return validationErrorResponse('Rental end date must be after start date', {
         rentalEndDate: ['Rental end date must be after start date'],
-      });
-    }
-    
-    // Validate paymentBasis
-    if (paymentBasis && !['MONTHLY', 'DAILY'].includes(paymentBasis)) {
-      return validationErrorResponse('Invalid payment basis', {
-        paymentBasis: ['Payment basis must be MONTHLY or DAILY'],
       });
     }
     
@@ -101,18 +92,11 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         sum + (m.quantity || 0) * (typeof m.unitPrice === 'number' ? m.unitPrice : parseFloat(String(m.unitPrice || 0)) || 0),
       0
     );
-    let subtotal: number;
-    if (rentalEndDate) {
-      // Fixed period: total contract = monthly subtotal × number of months
-      const start = new Date(rentalStartDate);
-      const end = new Date(rentalEndDate);
-      const daysDiff = Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-      const months = Math.max(1, Math.ceil(daysDiff / 30));
-      subtotal = monthlySubtotal * months;
-    } else {
-      // Open-ended: store one month's total (for display; actual billing is recurring monthly)
-      subtotal = monthlySubtotal;
-    }
+    const start = new Date(rentalStartDate);
+    const end = new Date(rentalEndDate);
+    const daysDiff = Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const months = Math.max(1, Math.ceil(daysDiff / 30));
+    const subtotal = monthlySubtotal * months;
 
     const vatAmount = subtotal * 0.15; // 15% VAT
     const total = subtotal + vatAmount;
@@ -133,9 +117,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         status: 'PENDING',
         requestedMachineLines: requestedMachineLines as any,
         startDate: new Date(rentalStartDate),
-        ...(rentalEndDate ? { expectedEndDate: new Date(rentalEndDate) } : {}),
-        paymentBasis: paymentBasis === 'DAILY' ? 'DAILY' : 'MONTHLY',
-        firstMonthProrated: firstMonthProrated === true,
+        expectedEndDate: new Date(rentalEndDate),
         subtotal: new Decimal(subtotal),
         vatAmount: new Decimal(vatAmount),
         total: new Decimal(total),
@@ -179,8 +161,6 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       customerName: r.customer?.name ?? '',
       startDate: r.startDate,
       endDate: r.expectedEndDate ?? undefined,
-      paymentBasis: r.paymentBasis,
-      firstMonthProrated: r.firstMonthProrated,
       status: 'Pending',
     };
     

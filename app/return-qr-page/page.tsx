@@ -413,9 +413,12 @@ const ReturnQRPage: React.FC = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        const message =
+        let message =
           json?.message ??
           (res.status === 404 ? 'Agreement not found. Please check the number.' : 'Failed to load agreement.');
+        if (message.toLowerCase().includes('open-ended')) {
+          message = 'This agreement has no end date. Open-ended agreements are not supported on this page. Please use the full returns flow in the system.';
+        }
         setAgreementError(message);
         setSelectedAgreement(null);
         setMachines([]);

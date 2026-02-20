@@ -25,6 +25,7 @@ interface InventoryItem {
   type: MachineType;
   totalStock: number;
   availableStock: number;
+  reservedStock?: number; // AVAILABLE but assigned to a PENDING rental (not yet dispatched)
   rentedStock: number;
   maintenanceStock: number;
   retiredStock: number;
@@ -394,6 +395,15 @@ const InventoryManagementPage: React.FC = () => {
             : 'text-red-600 dark:text-red-400';
         return <span className={`font-medium ${colorClass}`}>{value}</span>;
       },
+    },
+    {
+      key: 'reservedStock',
+      label: 'Reserved',
+      sortable: true,
+      filterable: false,
+      render: (value: number) => (
+        <span className="text-amber-600 dark:text-amber-400 font-medium">{value ?? 0}</span>
+      ),
     },
     {
       key: 'rentedStock',

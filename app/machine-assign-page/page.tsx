@@ -454,7 +454,7 @@ const MachineAssignPage: React.FC = () => {
 
     if (wasPending && totalExpected > 0 && !isAllCategoriesComplete()) {
       alert(
-        'Please complete machine assignment for all categories before submitting. Scan QR for each category until the required count is reached.'
+        'Please complete machine assignment for all categories before submitting. Scan QR for each category until the required count is reached. After submitting, create a gate pass and get it approved by security to activate the agreement.'
       );
       return;
     }
@@ -462,7 +462,8 @@ const MachineAssignPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const addedCount = machinesForAgreement.length;
-      const newStatus =
+      // When all machines are assigned on machine-assign-page, set agreement to Active.
+      const newStatus: RentalStatus =
         wasPending && totalExpected > 0 && addedCount >= totalExpected
           ? 'Active'
           : (data.status as RentalStatus) ?? selectedAgreement.status;
@@ -490,7 +491,7 @@ const MachineAssignPage: React.FC = () => {
         return;
       }
 
-      if (newStatus === 'Active' && wasPending && addedCount > 0) {
+      if (wasPending && totalExpected > 0 && addedCount >= totalExpected) {
         const customerId = selectedAgreement.customerId;
         if (!customerId) {
           alert('Cannot create invoice: customer ID is missing. Please reload the agreement and try again.');
@@ -603,10 +604,10 @@ const MachineAssignPage: React.FC = () => {
           // ignore
         }
         alert(
-          `Rental Agreement "${selectedAgreement.agreementNo}" is now Active. Invoice has been created. You can view it from the Invoice page.`
+          `Rental Agreement "${selectedAgreement.agreementNo}" is now Active. All machines assigned. Invoice has been created. You can create a gate pass and get it approved by security to dispatch and update inventory.`
         );
       } else {
-        alert(`Rental Agreement "${data.agreementNo}" updated successfully.`);
+        alert(`Rental Agreement "${selectedAgreement?.agreementNo ?? data?.agreementNo}" updated successfully.`);
       }
 
       handleCloseUpdate();

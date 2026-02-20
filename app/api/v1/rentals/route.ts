@@ -130,28 +130,19 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
       startDate, 
       endDate, 
       machines: machinesInput = [],
-      paymentBasis = 'MONTHLY',
-      firstMonthProrated = false,
     } = body;
     
-    if (!customerId || !startDate) {
+    if (!customerId || !startDate || !endDate) {
       return validationErrorResponse('Missing required fields', {
         customerId: !customerId ? ['Customer ID is required'] : [],
         startDate: !startDate ? ['Start date is required'] : [],
+        endDate: !endDate ? ['End date is required'] : [],
       });
     }
     
-    // Validate endDate if provided
-    if (endDate && new Date(endDate) < new Date(startDate)) {
+    if (new Date(endDate) < new Date(startDate)) {
       return validationErrorResponse('End date must be after start date', {
         endDate: ['End date must be after start date'],
-      });
-    }
-    
-    // Validate paymentBasis
-    if (paymentBasis && !['MONTHLY', 'DAILY'].includes(paymentBasis)) {
-      return validationErrorResponse('Invalid payment basis', {
-        paymentBasis: ['Payment basis must be MONTHLY or DAILY'],
       });
     }
     
@@ -166,7 +157,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
     const count = await prisma.rental.count();
     const agreementNumber = `RA${new Date().getFullYear().toString().slice(-2)}${String(count + 1).padStart(6, '0')}`;
     const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : null;
+    const end = new Date(endDate);
 
     // Compute totals from machines (daily rates); if no machines, use zero
     let subtotalNum = 0;
@@ -240,9 +231,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
         agreementNumber,
         customerId,
         startDate: start,
-        ...(end ? { expectedEndDate: end } : {}),
-        paymentBasis: paymentBasis === 'DAILY' ? 'DAILY' : 'MONTHLY',
-        firstMonthProrated: firstMonthProrated === true,
+        expectedEndDate: end,
         status: 'ACTIVE',
         subtotal,
         vatAmount,

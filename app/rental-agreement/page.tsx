@@ -873,7 +873,7 @@ const columns: TableColumn[] = [
     sortable: true,
     filterable: false,
     render: (value: string | null) =>
-      value ? new Date(value).toLocaleDateString('en-LK') : 'Open-ended',
+      value ? new Date(value).toLocaleDateString('en-LK') : '—',
   },
   {
     key: 'monthlyRent',
@@ -1513,10 +1513,13 @@ const RentalAgreementPage: React.FC = () => {
     }
   };
 
-  // Handle Generate Gatepass (only allowed when agreement is Active and all machines assigned)
+  // Handle Generate Gatepass (allowed when all machines assigned – agreement can be Pending until security approves gate pass)
   const handleGenerateGatePass = (agreement: RentalAgreement) => {
-    if (agreement.status !== 'Active') {
-      alert('Assign all machines and activate the agreement before creating a gate pass.');
+    const expected = agreement.expectedMachines ?? 0;
+    const added = agreement.addedMachines ?? 0;
+    const allAssigned = expected > 0 && added >= expected;
+    if (agreement.status !== 'Active' && !allAssigned) {
+      alert('Assign all machines before creating a gate pass. After creating the gate pass, security approval will activate the agreement.');
       return;
     }
     setSelectedAgreement(agreement);
@@ -1718,10 +1721,16 @@ const RentalAgreementPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const addedCount = machinesForAgreement.length;
-      const newStatus = wasPending && totalExpected > 0 && addedCount >= totalExpected ? 'Active' : (data.status ?? selectedAgreement.status);
+      // Keep Pending until gate pass is security-approved; do not set to Active when all machines assigned.
+      const statusToSet: RentalStatus = wasPending && totalExpected > 0 && addedCount >= totalExpected ? 'Pending' : (data.status ?? selectedAgreement.status) as RentalStatus;
       const body: Record<string, unknown> = {
-        status: newStatus,
+        status: statusToSet,
         ...(data.endDate != null && data.endDate !== '' && { endDate: data.endDate }),
+        // Persist machine assignment (serial/box from scan)
+        machines: machinesForAgreement.map((m) => ({
+          serialNo: m.serialNumber,
+          motorBoxNo: m.boxNumber || undefined,
+        })),
       };
 
       const res = await authFetch(`${API_BASE}/rentals/${selectedAgreement.id}`, {
@@ -1740,14 +1749,15 @@ const RentalAgreementPage: React.FC = () => {
             ? {
               ...a,
               ...data,
-              status: newStatus as RentalStatus,
+              status: statusToSet,
               addedMachines: addedCount,
             }
             : a
         )
       );
 
-      if (newStatus === 'Active' && wasPending && addedCount > 0) {
+      // When all machines assigned, agreement stays Pending until gate pass is security-approved. Optionally generate invoice for customer.
+      if (wasPending && totalExpected > 0 && addedCount >= totalExpected) {
         const customer = customers.find((c) => c.id === selectedAgreement.customerNo) ?? mockCustomers.find((c) => c.id === selectedAgreement.customerNo);
         const monthlyRent = selectedAgreement.monthlyRent;
         const rentPerMachine = addedCount > 0 ? monthlyRent / addedCount : 0;
@@ -1803,7 +1813,7 @@ const RentalAgreementPage: React.FC = () => {
         } catch (e) {
           console.warn('Could not store generated invoice in localStorage', e);
         }
-        alert(`Rental Agreement "${data.agreementNo}" is now Active. Invoice has been generated. You can view it from the Invoice page.`);
+        alert(`Rental Agreement "${data.agreementNo}" saved. All machines assigned (reserved). Create a gate pass and get it approved by security to activate the agreement and update inventory. Invoice has been generated for your records.`);
       } else {
         alert(`Rental Agreement "${data.agreementNo}" updated successfully.`);
       }
@@ -1998,9 +2008,13 @@ const RentalAgreementPage: React.FC = () => {
       icon: <Truck className="w-4 h-4" />,
       variant: 'secondary',
       onClick: handleGenerateGatePass,
-      tooltip: 'Generate Gatepass (available when agreement is Active)',
+      tooltip: 'Generate Gatepass (available when all machines are assigned)',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-green-600 dark:bg-green-700 text-white hover:bg-green-700 dark:hover:bg-green-800 focus:ring-green-500 dark:focus:ring-green-500',
-      shouldShow: (row: RentalAgreement) => row.status === 'Active',
+      shouldShow: (row: RentalAgreement) => {
+        const expected = row.expectedMachines ?? 0;
+        const added = row.addedMachines ?? 0;
+        return row.status === 'Active' || (expected > 0 && added >= expected);
+      },
     },
   ];
 
@@ -2236,7 +2250,7 @@ const RentalAgreementPage: React.FC = () => {
               {allComplete && (
                 <p className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  All machines assigned. Submit to activate agreement and generate invoice.
+                  All machines assigned. Submit to save. Create a gate pass and get it approved by security to activate the agreement and update inventory.
                 </p>
               )}
             </div>

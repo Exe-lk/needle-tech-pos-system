@@ -3,6 +3,7 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-res
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import { RentalStatus } from '@prisma/client';
 
 /**
  * @swagger
@@ -78,6 +79,14 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
         type: true,
       },
     });
+
+    // Machine IDs that are "reserved" (assigned to a PENDING rental – not yet dispatched)
+    const reservedMachineIds = new Set<string>();
+    const pendingRentalMachineIds = await prisma.rentalMachine.findMany({
+      where: { rental: { status: 'PENDING' as any } },
+      select: { machineId: true },
+    });
+    pendingRentalMachineIds.forEach((rm) => reservedMachineIds.add(rm.machineId));
     
     // Group machines by brand/model/type combination
     const inventoryMap = new Map<string, {
@@ -86,6 +95,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       type: string;
       totalStock: number;
       availableStock: number;
+      reservedStock: number;
       rentedStock: number;
       maintenanceStock: number;
       retiredStock: number;
@@ -105,6 +115,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
           type: typeName,
           totalStock: 0,
           availableStock: 0,
+          reservedStock: 0,
           rentedStock: 0,
           maintenanceStock: 0,
           retiredStock: 0,
@@ -117,7 +128,11 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       
       switch (machine.status) {
         case 'AVAILABLE':
-          item.availableStock++;
+          if (reservedMachineIds.has(machine.id)) {
+            item.reservedStock++;
+          } else {
+            item.availableStock++;
+          }
           break;
         case 'RENTED':
           item.rentedStock++;
@@ -172,6 +187,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       type: item.type,
       totalStock: item.totalStock,
       availableStock: item.availableStock,
+      reservedStock: item.reservedStock,
       rentedStock: item.rentedStock,
       maintenanceStock: item.maintenanceStock,
       retiredStock: item.retiredStock,
@@ -181,7 +197,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      { inventory: formattedInventory },
+      { inventory: formattedInventory } as any,
       pagination,
       'Inventory retrieved successfully',
       { sortBy: sortField, sortOrder },

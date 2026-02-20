@@ -127,6 +127,22 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
         if (existingAssignment) {
           continue; // Skip duplicate
         }
+
+        // Reserved: machine cannot be assigned to another agreement if it is already in a PENDING or ACTIVE rental
+        const otherRentalWithMachine = await prisma.rentalMachine.findFirst({
+          where: {
+            machineId: machine.id,
+            rentalId: { not: id },
+            rental: { status: { in: ['PENDING', 'ACTIVE'] as any } },
+          },
+          include: { rental: { select: { agreementNumber: true } } },
+        });
+        if (otherRentalWithMachine) {
+          const otherAgreementNo = (otherRentalWithMachine as { rental?: { agreementNumber: string } }).rental?.agreementNumber;
+          return validationErrorResponse('Machine is reserved for another agreement', {
+            machines: [`Machine with serial ${serialNo} is already assigned to agreement ${otherAgreementNo ?? 'another'}. It cannot be assigned to a different agreement.`],
+          });
+        }
         
         // Use per-machine daily rate so agreement total = subtotal (e.g. 5 machines × 3000 = 15000)
         const dailyRate = perMachineDailyRate;
@@ -152,7 +168,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
     const currentCount = existingRental.machines.length + (body.machines?.length || 0);
     const allMachinesAssigned = expectedCount > 0 && currentCount >= expectedCount;
 
-    // When all expected machines are assigned and agreement is PENDING, set to ACTIVE (so print/gatepass become available)
+    // When all expected machines are assigned and agreement is PENDING, set to ACTIVE (e.g. from machine-assign-page).
     let finalStatus = mappedStatus || existingRental.status;
     if (String(existingRental.status) === 'PENDING' && allMachinesAssigned && !mappedStatus) {
       finalStatus = 'ACTIVE';
@@ -162,32 +178,12 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
     
     if (finalStatus) updateData.status = finalStatus;
     
-    // Handle expectedEndDate: can be set to null (open-ended) or a date
-    if (body.endDate !== undefined) {
-      if (body.endDate === null || body.endDate === '') {
-        updateData.expectedEndDate = null;
-      } else {
-        updateData.expectedEndDate = new Date(body.endDate);
-      }
-    }
-    
     if (body.startDate != null && body.startDate !== '') {
       updateData.startDate = new Date(body.startDate);
     }
     
     if (body.monthlyRent != null) {
       updateData.subtotal = new Decimal(body.monthlyRent);
-    }
-    
-    // Handle paymentBasis and firstMonthProrated
-    if (body.paymentBasis !== undefined) {
-      if (['MONTHLY', 'DAILY'].includes(body.paymentBasis)) {
-        updateData.paymentBasis = body.paymentBasis;
-      }
-    }
-    
-    if (body.firstMonthProrated !== undefined) {
-      updateData.firstMonthProrated = body.firstMonthProrated === true;
     }
     
     // Handle actualEndDate when agreement is closed

@@ -23,17 +23,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     const purchaseOrder = await prisma.purchaseOrder.findUnique({
       where: { id },
       include: {
-        customer: {
-          include: {
-            locations: {
-              orderBy: [
-                { isDefault: 'desc' },
-                { createdAt: 'asc' },
-              ],
-            },
-          },
-        },
-        customerLocation: true,
+        customer: true,
         rentals: {
           select: {
             id: true,
@@ -60,18 +50,6 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       requestDate: purchaseOrder.requestDate,
       startDate: (purchaseOrder as any).startDate ?? null,
       endDate: (purchaseOrder as any).endDate ?? null,
-      customerLocationId: (purchaseOrder as any).customerLocationId ?? null,
-      customerLocation: (purchaseOrder as any).customerLocation ? {
-        id: (purchaseOrder as any).customerLocation.id,
-        name: (purchaseOrder as any).customerLocation.name,
-        addressLine1: (purchaseOrder as any).customerLocation.addressLine1,
-        addressLine2: (purchaseOrder as any).customerLocation.addressLine2,
-        city: (purchaseOrder as any).customerLocation.city,
-        region: (purchaseOrder as any).customerLocation.region,
-        postalCode: (purchaseOrder as any).customerLocation.postalCode,
-        country: (purchaseOrder as any).customerLocation.country,
-      } : null,
-      customerLocations: (purchaseOrder as any).customer?.locations || [],
       totalAmount: parseFloat(purchaseOrder.totalAmount.toString()),
       status: purchaseOrder.status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
       requestedMachines,
@@ -141,38 +119,12 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     if (body.endDate !== undefined) {
       updateData.endDate = body.endDate ? new Date(body.endDate) : null;
     }
-    if (body.customerLocationId !== undefined) {
-      // Validate customerLocationId if provided
-      if (body.customerLocationId) {
-        const location = await prisma.customerLocation.findFirst({
-          where: {
-            id: body.customerLocationId,
-            customerId: existingPO.customerId,
-          },
-        });
-        
-        if (!location) {
-          return errorResponse('Invalid customer location', 400);
-        }
-      }
-      updateData.customerLocationId = body.customerLocationId || null;
-    }
     
     const updatedPO = await prisma.purchaseOrder.update({
       where: { id },
       data: updateData,
       include: {
-        customer: {
-          include: {
-            locations: {
-              orderBy: [
-                { isDefault: 'desc' },
-                { createdAt: 'asc' },
-              ],
-            },
-          },
-        },
-        customerLocation: true,
+        customer: true,
         rentals: true,
       },
     });
