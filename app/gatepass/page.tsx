@@ -1172,65 +1172,65 @@ const GatePassPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
         <div className="space-y-3 sm:space-y-4">
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">FROM:</div>
-            <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.from}</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">FROM:</div>
+            <div className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 font-medium break-words">{gatePass.from}</div>
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">TO:</div>
-            <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.to}</div>
-            <div className="text-[11px] sm:text-xs text-gray-700 mt-1 break-words">{gatePass.toAddress}</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">TO:</div>
+            <div className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 font-medium break-words">{gatePass.to}</div>
+            <div className="text-[11px] sm:text-xs text-gray-700 dark:text-slate-300 print:text-gray-700 mt-1 break-words">{gatePass.toAddress}</div>
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Vehicle:</div>
-            <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.vehicleNumber}</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Vehicle:</div>
+            <div className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 font-medium break-words">{gatePass.vehicleNumber}</div>
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Driver:</div>
-            <div className="text-xs sm:text-sm text-gray-900 font-medium break-words">{gatePass.driverName}</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Driver:</div>
+            <div className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 font-medium break-words">{gatePass.driverName}</div>
           </div>
         </div>
         <div className="space-y-3 sm:space-y-4 md:text-right">
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Gatepass:</div>
-            <div className="text-base sm:text-lg text-gray-900 font-bold break-words">{gatePass.gatepassNo}</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Gatepass:</div>
+            <div className="text-base sm:text-lg text-gray-900 dark:text-slate-100 print:text-gray-900 font-bold break-words">{gatePass.gatepassNo}</div>
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Date of Issue:</div>
-            <div className="text-xs sm:text-sm text-gray-900 font-medium">
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Date of Issue:</div>
+            <div className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 font-medium">
               {gatePass.dateOfIssue}
             </div>
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Returnable:</div>
-            <div className="text-xs sm:text-sm text-gray-900 font-medium">{gatePass.returnable ? 'YES' : 'NO'}</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Returnable:</div>
+            <div className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 font-medium">{gatePass.returnable ? 'YES' : 'NO'}</div>
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-semibold text-gray-700 mb-1">Entry:</div>
-            <div className="text-xs sm:text-sm text-gray-900 font-medium">{gatePass.entry}</div>
+            <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Entry:</div>
+            <div className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 font-medium">{gatePass.entry}</div>
           </div>
         </div>
       </div>
 
       {/* Items Table - clean layout matching letterhead style */}
       <div className="mb-4 sm:mb-6 overflow-x-auto">
-        <table className="w-full border-collapse text-xs sm:text-sm">
+        <table className="w-full border-collapse text-xs sm:text-sm min-w-[24rem]">
           <thead>
-            <tr className="border-b border-gray-800">
-              <th className="text-left py-2 pr-2 font-semibold text-gray-900">Description</th>
-              <th className="text-center py-2 px-2 font-semibold text-gray-900 w-20">Status</th>
-              <th className="text-center py-2 px-2 font-semibold text-gray-900">Serial No</th>
-              <th className="text-center py-2 px-2 font-semibold text-gray-900">Motor / Box No</th>
+            <tr className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800">
+              <th className="text-left py-2 pr-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
+              <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 w-20">Status</th>
+              <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
+              <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Motor / Box No</th>
             </tr>
           </thead>
           <tbody>
             {gatePass.items.map((item, idx) => (
-              <tr key={item.id} className="border-b border-gray-200">
-                <td className="py-2 pr-2 text-gray-900 break-words align-top">
+              <tr key={item.id} className="border-b border-gray-200 dark:border-slate-600 print:border-gray-200">
+                <td className="py-2 pr-2 text-gray-900 dark:text-slate-100 print:text-gray-900 break-words align-top">
                   {idx + 1}. {item.description}
                 </td>
-                <td className="py-2 px-2 text-center text-gray-900 align-top">{item.status}</td>
-                <td className="py-2 px-2 text-center text-gray-900 break-all align-top">{item.serialNo}</td>
-                <td className="py-2 px-2 text-center text-gray-900 break-all align-top">{item.motorBoxNo}</td>
+                <td className="py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900 align-top">{item.status}</td>
+                <td className="py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900 break-all align-top">{item.serialNo}</td>
+                <td className="py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900 break-all align-top">{item.motorBoxNo}</td>
               </tr>
             ))}
           </tbody>
@@ -1243,28 +1243,28 @@ const GatePassPage: React.FC = () => {
   const renderGatePassSignatures = (gatePass: GatePass) => (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
       <div>
-        <div className="border-b border-gray-800 pb-1 min-h-[36px] mb-1 flex items-end">
+        <div className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800 pb-1 min-h-[36px] mb-1 flex items-end">
           {gatePass.issuedBy && (
-            <span className="text-xs sm:text-sm text-gray-900 break-words">{gatePass.issuedBy}</span>
+            <span className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 break-words">{gatePass.issuedBy}</span>
           )}
         </div>
-        <div className="text-[11px] sm:text-xs text-gray-600">Issued By</div>
+        <div className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 print:text-gray-600">Issued By</div>
       </div>
       <div className="hidden md:block" />
       <div>
-        <div className="border-b border-gray-800 pb-1 min-h-[36px] mb-1 flex items-end">
+        <div className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800 pb-1 min-h-[36px] mb-1 flex items-end">
           {gatePass.receivedBy && (
-            <span className="text-xs sm:text-sm text-gray-900 break-words">{gatePass.receivedBy}</span>
+            <span className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 break-words">{gatePass.receivedBy}</span>
           )}
         </div>
-        <div className="text-[11px] sm:text-xs text-gray-600">Received By</div>
+        <div className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 print:text-gray-600">Received By</div>
       </div>
     </div>
   );
 
   /** Full gatepass on letterhead - for both screen preview and print. Footer: address, telephone, fax, email only. */
   const renderGatePassOnLetterhead = (gatePass: GatePass) => (
-    <div className="bg-white p-6 sm:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 rounded-lg print:shadow-none print:border-0 print:rounded-none print:p-8 print:max-w-none">
+    <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 dark:border-slate-600 rounded-lg print:shadow-none print:border-0 print:rounded-none print:bg-white print:p-8 print:max-w-none">
       <LetterheadDocument
         documentTitle="GATEPASS"
         footerStyle="simple"

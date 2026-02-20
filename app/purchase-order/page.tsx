@@ -527,53 +527,53 @@ const PurchaseOrderPage: React.FC = () => {
 
     /** Printable purchase order in letterhead (used when user clicks Print in view modal). */
     const renderPurchaseOrderDocument = (request: PurchaseRequest) => (
-        <div className="bg-white p-8 max-w-[210mm] mx-auto min-h-[297mm] flex flex-col print:p-8">
+        <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto min-h-[297mm] flex flex-col print:bg-white print:p-8">
             <LetterheadDocument documentTitle="QUOTATION" footerStyle="simple" className="print:p-0 flex flex-col flex-1">
                 <div className="text-center mb-4">
-                    <p className="text-lg font-bold text-gray-900">{request.requestNumber}</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-slate-100 print:text-gray-900">{request.requestNumber}</p>
                 </div>
                 <div className="mb-4 space-y-2 text-sm">
-                    <div><span className="font-semibold text-gray-700">Customer:</span> <span className="text-gray-900">{request.customerName}</span></div>
-                    <div><span className="font-semibold text-gray-700">Customer Type:</span> <span className="text-gray-900">{request.customerType}</span></div>
-                    <div><span className="font-semibold text-gray-700">Request Date:</span> <span className="text-gray-900">{new Date(request.requestDate).toLocaleDateString('en-LK')}</span></div>
-                    <div><span className="font-semibold text-gray-700">Start Date:</span> <span className="text-gray-900">{request.startDate ? new Date(request.startDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
-                    <div><span className="font-semibold text-gray-700">End Date:</span> <span className="text-gray-900">{request.endDate ? new Date(request.endDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
-                    <div><span className="font-semibold text-gray-700">Status:</span> <span className="text-gray-900">{request.status}</span></div>
+                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Customer:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.customerName}</span></div>
+                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Customer Type:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.customerType}</span></div>
+                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Request Date:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{new Date(request.requestDate).toLocaleDateString('en-LK')}</span></div>
+                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Start Date:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.startDate ? new Date(request.startDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
+                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">End Date:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.endDate ? new Date(request.endDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
+                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Status:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.status}</span></div>
                 </div>
-                <div className="mb-4 flex-1">
-                    <table className="w-full border-collapse border border-gray-800">
+                <div className="mb-4 flex-1 overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 min-w-[28rem]">
                         <thead>
-                            <tr className="bg-gray-100">
-                                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Brand</th>
-                                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Model</th>
-                                <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold">Type</th>
-                                <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold">Quantity</th>
-                                <th className="border border-gray-800 px-4 py-2 text-right text-sm font-semibold">Unit Price (Rs.)</th>
-                                <th className="border border-gray-800 px-4 py-2 text-right text-sm font-semibold">Total (Rs.)</th>
+                            <tr className="bg-gray-100 dark:bg-slate-700/50 print:bg-gray-100">
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Brand</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Model</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Type</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Quantity</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-right text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Unit Price (Rs.)</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-right text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total (Rs.)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {request.machines?.map((m, i) => (
                                 <tr key={i}>
-                                    <td className="border border-gray-800 px-4 py-2 text-sm">{m.brand}</td>
-                                    <td className="border border-gray-800 px-4 py-2 text-sm">{m.model}</td>
-                                    <td className="border border-gray-800 px-4 py-2 text-sm">{m.type}</td>
-                                    <td className="border border-gray-800 px-4 py-2 text-sm text-center">{m.quantity}</td>
-                                    <td className="border border-gray-800 px-4 py-2 text-sm text-right">{m.unitPrice.toLocaleString('en-LK')}</td>
-                                    <td className="border border-gray-800 px-4 py-2 text-sm text-right">{m.totalPrice.toLocaleString('en-LK')}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">{m.brand}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">{m.model}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">{m.type}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{m.quantity}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.unitPrice.toLocaleString('en-LK')}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.totalPrice.toLocaleString('en-LK')}</td>
                                 </tr>
                             ))}
-                            <tr className="bg-gray-50 font-semibold">
-                                <td colSpan={5} className="border border-gray-800 px-4 py-2 text-right text-sm">Total Amount:</td>
-                                <td className="border border-gray-800 px-4 py-2 text-right text-sm">Rs. {request.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <tr className="bg-gray-50 dark:bg-slate-700/30 print:bg-gray-50 font-semibold">
+                                <td colSpan={5} className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-right text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">Total Amount:</td>
+                                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-right text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">Rs. {request.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
                 {request.rentalAgreementIds && request.rentalAgreementIds.length > 0 && (
-                    <div className="border-t border-gray-300 pt-4 mt-4">
-                        <div className="text-sm font-semibold text-gray-700 mb-1">Associated Rental Agreements</div>
-                        <div className="text-sm text-gray-900">{request.rentalAgreementIds.map(id => `RA-2024-${String(id).padStart(3, '0')}`).join(', ')}</div>
+                    <div className="border-t border-gray-300 dark:border-slate-600 print:border-gray-300 pt-4 mt-4">
+                        <div className="text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Associated Rental Agreements</div>
+                        <div className="text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">{request.rentalAgreementIds.map(id => `RA-2024-${String(id).padStart(3, '0')}`).join(', ')}</div>
                     </div>
                 )}
             </LetterheadDocument>

@@ -1067,100 +1067,102 @@ const InvoicePage: React.FC = () => {
       return (
         <div className="text-sm print:text-xs">
           {/* Row 1: Date of Invoice (left) | Tax Invoice No (right) */}
-          <div className="grid grid-cols-2 gap-4 mb-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
             <div>
-              <span className="font-semibold text-gray-900">Date of Invoice : </span>
-              <span>{dateStr(invoice.invoiceDate)}</span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Date of Invoice : </span>
+              <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(invoice.invoiceDate)}</span>
             </div>
             <div>
-              <span className="font-semibold text-gray-900">Tax Invoice No : </span>
-              <span>{invoice.invoiceNumber}</span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Tax Invoice No : </span>
+              <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.invoiceNumber}</span>
             </div>
           </div>
           {/* Row 2: Supplier's TIN (left) | Purchaser's TIN (right) - bordered boxes */}
-          <div className="grid grid-cols-2 gap-4 mb-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
             <div>
-              <span className="font-semibold text-gray-900">Supplier&apos;s TIN</span>
-              <div className="border border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem]">{company.tinNo}</div>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN</span>
+              <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] text-gray-900 dark:text-slate-100 print:text-gray-900">{company.tinNo}</div>
             </div>
             <div>
-              <span className="font-semibold text-gray-900">Purchaser&apos;s TIN</span>
-              <div className="border border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem]">{invoice.vatTinNic || '—'}</div>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN</span>
+              <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.vatTinNic || '—'}</div>
             </div>
           </div>
           {/* Row 3: Two bordered boxes - Supplier's Name & Address | Purchaser's Name & Address */}
-          <div className="grid grid-cols-2 gap-4 mb-2">
-            <div className="border border-gray-800 p-2">
-              <div className="font-semibold text-gray-900 mb-1">Supplier&apos;s Name &amp; Address</div>
-              <div className="text-gray-900 leading-tight">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
+            <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 p-2">
+              <div className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 mb-1">Supplier&apos;s Name &amp; Address</div>
+              <div className="text-gray-900 dark:text-slate-100 print:text-gray-900 leading-tight">
                 {company.fullName}<br />
                 {company.address}<br />
                 Tel : {company.telephone.join(' / ')}<br />
                 Email : {company.email}
               </div>
             </div>
-            <div className="border border-gray-800 p-2">
-              <div className="font-semibold text-gray-900 mb-1">Purchaser&apos;s Name &amp; Address</div>
-              <div className="text-gray-900 leading-tight">
+            <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 p-2">
+              <div className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 mb-1">Purchaser&apos;s Name &amp; Address</div>
+              <div className="text-gray-900 dark:text-slate-100 print:text-gray-900 leading-tight">
                 {invoice.customerName}<br />
                 {invoice.customerAddress}
               </div>
             </div>
           </div>
           {/* Row 4: Period From / To (left) | Purchase Order No (right) */}
-          <div className="grid grid-cols-2 gap-4 mb-3 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3 items-start">
             <div>
-              <span className="font-semibold text-gray-900">Period From : </span>
-              <span>{dateStr(invoice.periodFrom)}</span>
-              <span className="font-semibold text-gray-900 ml-1">To</span>
-              <span className="ml-1">{dateStr(invoice.periodTo)}</span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Period From : </span>
+              <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(invoice.periodFrom)}</span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 ml-1">To</span>
+              <span className="ml-1 text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(invoice.periodTo)}</span>
             </div>
             <div>
-              <span className="font-semibold text-gray-900">Purchase Order No</span>
-              <div className="border border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] min-h-[1.5rem]"> </div>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchase Order No</span>
+              <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] min-h-[1.5rem]"> </div>
             </div>
           </div>
 
           {/* Line items table - all cells with thin borders */}
-          <table className="w-full border-collapse border border-gray-800 mb-4 print:mb-3 print:text-xs">
-            <thead>
-              <tr className="border border-gray-800">
-                <th className="border border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900">Serial No</th>
-                <th className="border border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900">Description</th>
-                <th className="border border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900">Rate</th>
-                <th className="border border-gray-800 text-center py-2 px-2 text-xs font-semibold text-gray-900">Qty</th>
-                <th className="border border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900">Amount Excluding VAT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.items.map((item, index) => (
-                <tr key={index}>
-                  <td className="border border-gray-800 py-2 px-2 text-gray-900">{String(index + 1).padStart(6, '0')}</td>
-                  <td className="border border-gray-800 py-2 px-2 text-gray-900">{item.description}</td>
-                  <td className="border border-gray-800 py-2 px-2 text-right text-gray-900">{item.monthlyRentPerMachine.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
-                  <td className="border border-gray-800 py-2 px-2 text-center text-gray-900">{item.numberOfMachines}</td>
-                  <td className="border border-gray-800 py-2 px-2 text-right text-gray-900">{item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 mb-4 print:mb-3 print:text-xs min-w-[32rem]">
+              <thead>
+                <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                  <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
+                  <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
+                  <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Rate</th>
+                  <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-center py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Qty</th>
+                  <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Amount Excluding VAT</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {invoice.items.map((item, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{String(index + 1).padStart(6, '0')}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{item.description}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{item.monthlyRentPerMachine.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{item.numberOfMachines}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           {/* Summary - three rows with thin borders (table-like) */}
           <table className="w-full border-collapse max-w-md ml-auto mb-4 print:mb-3">
             <tbody>
-              <tr className="border border-gray-800">
-                <td className="border border-gray-800 py-1.5 px-2 font-semibold text-gray-900">Total Value of Supply</td>
-                <td className="border border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900">{fmt(subtotal)}</td>
+              <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Value of Supply</td>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(subtotal)}</td>
               </tr>
               {vatAmount > 0 && (
-                <tr className="border border-gray-800">
-                  <td className="border border-gray-800 py-1.5 px-2 font-semibold text-gray-900">VAT Amount (18.0%)</td>
-                  <td className="border border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900">{fmt(vatAmount)}</td>
+                <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">VAT Amount (18.0%)</td>
+                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(vatAmount)}</td>
                 </tr>
               )}
-              <tr className="border border-gray-800">
-                <td className="border border-gray-800 py-2 px-2 font-bold text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
-                <td className="border border-gray-800 py-2 px-2 text-right font-bold text-gray-900 text-base print:text-sm">{fmt(totalAmount)}</td>
+              <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">{fmt(totalAmount)}</td>
               </tr>
             </tbody>
           </table>
@@ -1173,48 +1175,48 @@ const InvoicePage: React.FC = () => {
       <div>
         <div className="mb-4 text-sm print:text-xs">
           <div className="mb-1">
-            <span className="text-gray-600 font-medium">Customer: </span>
-            <span>{invoice.customerName}</span>
+            <span className="text-gray-600 dark:text-slate-300 print:text-gray-600 font-medium">Customer: </span>
+            <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.customerName}</span>
           </div>
           <div className="mb-1">
-            <span className="text-gray-600 font-medium">Address: </span>
-            <span>{invoice.customerAddress}</span>
+            <span className="text-gray-600 dark:text-slate-300 print:text-gray-600 font-medium">Address: </span>
+            <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.customerAddress}</span>
           </div>
           <div>
-            <span className="text-gray-600 font-medium">Period: </span>
-            <span>
+            <span className="text-gray-600 dark:text-slate-300 print:text-gray-600 font-medium">Period: </span>
+            <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">
               {dateStr(invoice.periodFrom)} to {dateStr(invoice.periodTo)}
             </span>
           </div>
           {invoice.vatTinNic && (
             <div className="mt-1">
-              <span className="text-gray-600 font-medium">NIC: </span>
-              <span>{invoice.vatTinNic}</span>
+              <span className="text-gray-600 dark:text-slate-300 print:text-gray-600 font-medium">NIC: </span>
+              <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.vatTinNic}</span>
             </div>
           )}
         </div>
 
-        <div className="border-b border-gray-800" />
+        <div className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800" />
 
-        <div className="mb-4 print:mb-3">
-          <table className="w-full border-collapse print:text-xs">
+        <div className="mb-4 print:mb-3 overflow-x-auto">
+          <table className="w-full border-collapse print:text-xs min-w-[20rem]">
             <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-700">Description</th>
-                <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700">Serial No</th>
-                <th className="text-right py-2 pl-4 text-xs font-semibold text-gray-700">Monthly Rental</th>
+              <tr className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800">
+                <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-700 dark:text-slate-200 print:text-gray-700">Description</th>
+                <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700 dark:text-slate-200 print:text-gray-700">Serial No</th>
+                <th className="text-right py-2 pl-4 text-xs font-semibold text-gray-700 dark:text-slate-200 print:text-gray-700">Monthly Rental</th>
               </tr>
             </thead>
             <tbody>
               {invoice.items.map((item, index) => (
-                <tr key={index} className="border-b border-gray-200">
-                  <td className="py-2 pr-4 text-sm text-gray-900 print:text-xs">
+                <tr key={index} className="border-b border-gray-200 dark:border-slate-600 print:border-gray-200">
+                  <td className="py-2 pr-4 text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 print:text-xs">
                     {item.numberOfMachines} {item.description}
                   </td>
-                  <td className="py-2 px-2 text-sm text-center text-gray-900 print:text-xs">
+                  <td className="py-2 px-2 text-sm text-center text-gray-900 dark:text-slate-100 print:text-gray-900 print:text-xs">
                     {item.serialNumber || '—'}
                   </td>
-                  <td className="py-2 pl-4 text-sm text-right text-gray-900 print:text-xs">
+                  <td className="py-2 pl-4 text-sm text-right text-gray-900 dark:text-slate-100 print:text-gray-900 print:text-xs">
                     {item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
@@ -1223,12 +1225,12 @@ const InvoicePage: React.FC = () => {
           </table>
         </div>
 
-        <div className="border-b border-gray-800" />
+        <div className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800" />
 
         <div className="mt-3 space-y-1 text-sm print:text-xs">
           <div className="flex justify-between items-baseline">
-            <span className="font-bold text-gray-900">Total Amount</span>
-            <span className="font-bold text-gray-900 text-base print:text-sm">
+            <span className="font-bold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Amount</span>
+            <span className="font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">
               {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
             </span>
           </div>
@@ -1243,20 +1245,20 @@ const InvoicePage: React.FC = () => {
     return (
       <>
         {invoice && (
-          <div className="text-xs text-gray-700 print:text-xs space-y-1 mb-4 print:mb-3">
+          <div className="text-xs text-gray-700 dark:text-slate-200 print:text-gray-700 print:text-xs space-y-1 mb-4 print:mb-3">
             <p>All cheques to be drawn in favour of &quot;{company.fullName}&quot;</p>
-            <p><span className="font-semibold text-gray-900">Bank Details :</span> A/C 1420027865, Commercial Bank, Kaduwela.</p>
+            <p><span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Bank Details :</span> A/C 1420027865, Commercial Bank, Kaduwela.</p>
             <p>Kindly mention your invoice number for the reference.</p>
           </div>
         )}
-        <div className="mt-8 print:mt-6 flex justify-between gap-8">
-          <div className="w-48 print:w-40">
-            <p className="text-xs text-gray-900 font-semibold print:text-xs">Authorized By :</p>
-            <div className="border-b border-dotted border-gray-800 mt-1 min-h-[1.5rem]" />
+        <div className="mt-8 print:mt-6 flex flex-col sm:flex-row justify-between gap-6 sm:gap-8">
+          <div className="w-full sm:w-48 print:w-40">
+            <p className="text-xs text-gray-900 dark:text-slate-100 print:text-gray-900 font-semibold print:text-xs">Authorized By :</p>
+            <div className="border-b border-dotted border-gray-800 dark:border-slate-500 print:border-gray-800 mt-1 min-h-[1.5rem]" />
           </div>
-          <div className="w-48 print:w-40 text-right">
-            <p className="text-xs text-gray-900 font-semibold print:text-xs">Received By :</p>
-            <div className="border-b border-dotted border-gray-800 mt-1 min-h-[1.5rem]" />
+          <div className="w-full sm:w-48 print:w-40 text-left sm:text-right">
+            <p className="text-xs text-gray-900 dark:text-slate-100 print:text-gray-900 font-semibold print:text-xs">Received By :</p>
+            <div className="border-b border-dotted border-gray-800 dark:border-slate-500 print:border-gray-800 mt-1 min-h-[1.5rem]" />
           </div>
         </div>
       </>
@@ -1267,7 +1269,7 @@ const InvoicePage: React.FC = () => {
   const renderInvoiceWithLetterhead = (invoice: Invoice) => {
     const isVAT = invoice.invoiceType === 'VAT';
     return (
-      <div className="bg-white text-black max-w-[210mm] mx-auto p-6 sm:p-8 print:p-8 print:max-w-none" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:p-8 print:bg-white print:text-black print:max-w-none" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
         <LetterheadDocument
           documentTitle={isVAT ? 'TAX INVOICE' : 'INVOICE'}
           footerStyle="full"
@@ -1297,7 +1299,7 @@ const InvoicePage: React.FC = () => {
     const fmt = (n: number) => `Rs.${n.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
 
     return (
-      <div className="bg-white text-black max-w-[210mm] mx-auto p-6 sm:p-8 print:p-8 print:max-w-none" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:p-8 print:bg-white print:text-black print:max-w-none" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
         <LetterheadDocument
           documentTitle={isVAT ? 'TAX INVOICE' : 'INVOICE'}
           footerStyle="full"
@@ -1309,126 +1311,128 @@ const InvoicePage: React.FC = () => {
           {isVAT ? (
             /* VAT: same layout as view form — Date | Tax Invoice No, TIN row, Supplier/Purchaser boxes, Period | PO, then per-month bordered table + summary table, then grand total */
             <div className="text-sm print:text-xs">
-              <div className="grid grid-cols-2 gap-4 mb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
                 <div>
-                  <span className="font-semibold text-gray-900">Date of Invoice : </span>
-                  <span>{dateStr(periodFrom)}</span>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Date of Invoice : </span>
+                  <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(periodFrom)}</span>
                 </div>
                 <div>
-                  <span className="font-semibold text-gray-900">Tax Invoice No : </span>
-                  <span>{invoice.invoiceNumber}</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-2">
-                <div>
-                  <span className="font-semibold text-gray-900">Supplier&apos;s TIN</span>
-                  <div className="border border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem]">{company.tinNo}</div>
-                </div>
-                <div>
-                  <span className="font-semibold text-gray-900">Purchaser&apos;s TIN</span>
-                  <div className="border border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem]">{invoice.vatTinNic || '—'}</div>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Tax Invoice No : </span>
+                  <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.invoiceNumber}</span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-2">
-                <div className="border border-gray-800 p-2">
-                  <div className="font-semibold text-gray-900 mb-1">Supplier&apos;s Name &amp; Address</div>
-                  <div className="text-gray-900 leading-tight">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
+                <div>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN</span>
+                  <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] text-gray-900 dark:text-slate-100 print:text-gray-900">{company.tinNo}</div>
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN</span>
+                  <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.vatTinNic || '—'}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
+                <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 p-2">
+                  <div className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 mb-1">Supplier&apos;s Name &amp; Address</div>
+                  <div className="text-gray-900 dark:text-slate-100 print:text-gray-900 leading-tight">
                     {company.fullName}<br />
                     {company.address}<br />
                     Tel : {company.telephone.join(' / ')}<br />
                     Email : {company.email}
                   </div>
                 </div>
-                <div className="border border-gray-800 p-2">
-                  <div className="font-semibold text-gray-900 mb-1">Purchaser&apos;s Name &amp; Address</div>
-                  <div className="text-gray-900 leading-tight">
+                <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 p-2">
+                  <div className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 mb-1">Purchaser&apos;s Name &amp; Address</div>
+                  <div className="text-gray-900 dark:text-slate-100 print:text-gray-900 leading-tight">
                     {invoice.customerName}<br />
                     {invoice.customerAddress}
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-3 items-start">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3 items-start">
                 <div>
-                  <span className="font-semibold text-gray-900">Period From : </span>
-                  <span>{dateStr(periodFrom)}</span>
-                  <span className="font-semibold text-gray-900 ml-1">To</span>
-                  <span className="ml-1">{dateStr(periodTo)}</span>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Period From : </span>
+                  <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(periodFrom)}</span>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 ml-1">To</span>
+                  <span className="ml-1 text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(periodTo)}</span>
                 </div>
                 <div>
-                  <span className="font-semibold text-gray-900">Purchase Order No</span>
-                  <div className="border border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] min-h-[1.5rem]"> </div>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchase Order No</span>
+                  <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] min-h-[1.5rem]"> </div>
                 </div>
               </div>
 
               {previews.map((preview, sectionIndex) => (
                 <div key={sectionIndex} className="mt-6 print:mt-4 print:break-inside-avoid">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2 print:text-xs">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 mb-2 print:text-xs">
                     {preview.month} {preview.year} — Period: {dateStr(preview.periodFrom)} to {dateStr(preview.periodTo)}
                     {preview.isPartialMonth && (
-                      <span className="ml-1 font-normal text-gray-600">(Prorated: {preview.daysInPeriod}/{preview.daysInMonth} days)</span>
+                      <span className="ml-1 font-normal text-gray-600 dark:text-slate-400 print:text-gray-600">(Prorated: {preview.daysInPeriod}/{preview.daysInMonth} days)</span>
                     )}
                   </h3>
-                  <table className="w-full border-collapse border border-gray-800 mb-4 print:mb-3 print:text-xs">
-                    <thead>
-                      <tr className="border border-gray-800">
-                        <th className="border border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900">Serial No</th>
-                        <th className="border border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900">Description</th>
-                        <th className="border border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900">Rate</th>
-                        <th className="border border-gray-800 text-center py-2 px-2 text-xs font-semibold text-gray-900">Qty</th>
-                        <th className="border border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900">Amount Excluding VAT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.proratedItems.map((pi, idx) => (
-                        <tr key={idx}>
-                          <td className="border border-gray-800 py-2 px-2 text-gray-900">{String(idx + 1).padStart(6, '0')}</td>
-                          <td className="border border-gray-800 py-2 px-2 text-gray-900">{pi.item.description}</td>
-                          <td className="border border-gray-800 py-2 px-2 text-right text-gray-900">{pi.proratedRate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
-                          <td className="border border-gray-800 py-2 px-2 text-center text-gray-900">{pi.item.numberOfMachines}</td>
-                          <td className="border border-gray-800 py-2 px-2 text-right text-gray-900">{pi.proratedSubtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                  <div className="overflow-x-auto -mx-1">
+                    <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 mb-4 print:mb-3 print:text-xs min-w-[32rem]">
+                      <thead>
+                        <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                          <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
+                          <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
+                          <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Rate</th>
+                          <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-center py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Qty</th>
+                          <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Amount Excluding VAT</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {preview.proratedItems.map((pi, idx) => (
+                          <tr key={idx}>
+                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{String(idx + 1).padStart(6, '0')}</td>
+                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.item.description}</td>
+                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.proratedRate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.item.numberOfMachines}</td>
+                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.proratedSubtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                   <table className="w-full border-collapse max-w-md ml-auto mb-4 print:mb-3">
                     <tbody>
-                      <tr className="border border-gray-800">
-                        <td className="border border-gray-800 py-1.5 px-2 font-semibold text-gray-900">Total Value of Supply</td>
-                        <td className="border border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900">{fmt(preview.subtotal)}</td>
+                      <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                        <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Value of Supply</td>
+                        <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(preview.subtotal)}</td>
                       </tr>
                       {preview.vatAmount > 0 && (
-                        <tr className="border border-gray-800">
-                          <td className="border border-gray-800 py-1.5 px-2 font-semibold text-gray-900">VAT Amount (18.0%)</td>
-                          <td className="border border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900">{fmt(preview.vatAmount)}</td>
+                        <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                          <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">VAT Amount (18.0%)</td>
+                          <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(preview.vatAmount)}</td>
                         </tr>
                       )}
-                      <tr className="border border-gray-800">
-                        <td className="border border-gray-800 py-2 px-2 font-bold text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
-                        <td className="border border-gray-800 py-2 px-2 text-right font-bold text-gray-900 text-base print:text-sm">{fmt(preview.totalAmount)}</td>
+                      <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                        <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
+                        <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">{fmt(preview.totalAmount)}</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
               ))}
 
-              <div className="mt-4 pt-3 border-t-2 border-gray-800 print:break-inside-avoid">
+              <div className="mt-4 pt-3 border-t-2 border-gray-800 dark:border-slate-500 print:border-gray-800 print:break-inside-avoid">
                 <table className="w-full border-collapse max-w-md ml-auto mb-4 print:mb-3">
                   <tbody>
                     {grandVat > 0 && (
                       <>
-                        <tr className="border border-gray-800">
-                          <td className="border border-gray-800 py-1.5 px-2 font-semibold text-gray-900">Total Value of Supply</td>
-                          <td className="border border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900">{fmt(grandSubtotal)}</td>
+                        <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                          <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Value of Supply</td>
+                          <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(grandSubtotal)}</td>
                         </tr>
-                        <tr className="border border-gray-800">
-                          <td className="border border-gray-800 py-1.5 px-2 font-semibold text-gray-900">VAT Amount (18.0%)</td>
-                          <td className="border border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900">{fmt(grandVat)}</td>
+                        <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                          <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">VAT Amount (18.0%)</td>
+                          <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(grandVat)}</td>
                         </tr>
                       </>
                     )}
-                    <tr className="border border-gray-800">
-                      <td className="border border-gray-800 py-2 px-2 font-bold text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
-                      <td className="border border-gray-800 py-2 px-2 text-right font-bold text-gray-900 text-base print:text-sm">{fmt(grandTotal)}</td>
+                    <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                      <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
+                      <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">{fmt(grandTotal)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1439,53 +1443,53 @@ const InvoicePage: React.FC = () => {
             <div>
               <div className="mb-4 text-sm print:text-xs">
                 <div className="mb-1">
-                  <span className="text-gray-600 font-medium">Customer: </span>
-                  <span>{invoice.customerName}</span>
+                  <span className="text-gray-600 dark:text-slate-300 print:text-gray-600 font-medium">Customer: </span>
+                  <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.customerName}</span>
                 </div>
                 <div className="mb-1">
-                  <span className="text-gray-600 font-medium">Address: </span>
-                  <span>{invoice.customerAddress}</span>
+                  <span className="text-gray-600 dark:text-slate-300 print:text-gray-600 font-medium">Address: </span>
+                  <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.customerAddress}</span>
                 </div>
                 <div>
-                  <span className="text-gray-600 font-medium">Period: </span>
-                  <span>{dateStr(periodFrom)} to {dateStr(periodTo)}</span>
+                  <span className="text-gray-600 dark:text-slate-300 print:text-gray-600 font-medium">Period: </span>
+                  <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(periodFrom)} to {dateStr(periodTo)}</span>
                 </div>
                 {invoice.vatTinNic && (
                   <div className="mt-1">
-                    <span className="text-gray-600 font-medium">NIC: </span>
-                    <span>{invoice.vatTinNic}</span>
+                    <span className="text-gray-600 dark:text-slate-300 print:text-gray-600 font-medium">NIC: </span>
+                    <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.vatTinNic}</span>
                   </div>
                 )}
               </div>
-              <div className="border-b border-gray-800" />
+              <div className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800" />
 
               {previews.map((preview, sectionIndex) => (
                 <div key={sectionIndex} className="mt-6 print:mt-4 print:break-inside-avoid">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2 print:text-xs">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 mb-2 print:text-xs">
                     {preview.month} {preview.year} — Period: {dateStr(preview.periodFrom)} to {dateStr(preview.periodTo)}
                     {preview.isPartialMonth && (
-                      <span className="ml-1 font-normal text-gray-600">(Prorated: {preview.daysInPeriod}/{preview.daysInMonth} days)</span>
+                      <span className="ml-1 font-normal text-gray-600 dark:text-slate-400 print:text-gray-600">(Prorated: {preview.daysInPeriod}/{preview.daysInMonth} days)</span>
                     )}
                   </h3>
-                  <div className="mb-4 print:mb-3">
-                    <table className="w-full border-collapse print:text-xs">
+                  <div className="mb-4 print:mb-3 overflow-x-auto">
+                    <table className="w-full border-collapse print:text-xs min-w-[20rem]">
                       <thead>
-                        <tr className="border-b border-gray-800">
-                          <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-700">Description</th>
-                          <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700">Serial No</th>
-                          <th className="text-right py-2 pl-4 text-xs font-semibold text-gray-700">Monthly Rental</th>
+                        <tr className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800">
+                          <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-700 dark:text-slate-200 print:text-gray-700">Description</th>
+                          <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700 dark:text-slate-200 print:text-gray-700">Serial No</th>
+                          <th className="text-right py-2 pl-4 text-xs font-semibold text-gray-700 dark:text-slate-200 print:text-gray-700">Monthly Rental</th>
                         </tr>
                       </thead>
                       <tbody>
                         {preview.proratedItems.map((pi, idx) => (
-                          <tr key={idx} className="border-b border-gray-200">
-                            <td className="py-2 pr-4 text-sm text-gray-900 print:text-xs">
+                          <tr key={idx} className="border-b border-gray-200 dark:border-slate-600 print:border-gray-200">
+                            <td className="py-2 pr-4 text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 print:text-xs">
                               {pi.item.numberOfMachines} {pi.item.description}
                             </td>
-                            <td className="py-2 px-2 text-sm text-center text-gray-900 print:text-xs">
+                            <td className="py-2 px-2 text-sm text-center text-gray-900 dark:text-slate-100 print:text-gray-900 print:text-xs">
                               {pi.item.serialNumber || '—'}
                             </td>
-                            <td className="py-2 pl-4 text-sm text-right text-gray-900 print:text-xs">
+                            <td className="py-2 pl-4 text-sm text-right text-gray-900 dark:text-slate-100 print:text-gray-900 print:text-xs">
                               {pi.proratedSubtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
@@ -1495,20 +1499,20 @@ const InvoicePage: React.FC = () => {
                   </div>
                   <div className="mt-3 space-y-1 text-sm print:text-xs">
                     <div className="flex justify-between items-baseline">
-                      <span className="font-bold text-gray-900">Total Amount</span>
-                      <span className="font-bold text-gray-900 text-base print:text-sm">
+                      <span className="font-bold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Amount</span>
+                      <span className="font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">
                         {preview.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
-                  <div className="border-b border-gray-800 mt-3" />
+                  <div className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800 mt-3" />
                 </div>
               ))}
 
-              <div className="mt-4 pt-3 border-t-2 border-gray-800 print:break-inside-avoid">
+              <div className="mt-4 pt-3 border-t-2 border-gray-800 dark:border-slate-500 print:border-gray-800 print:break-inside-avoid">
                 <div className="flex justify-between items-baseline">
-                  <span className="font-bold text-gray-900">Grand Total</span>
-                  <span className="font-bold text-gray-900 text-base print:text-sm">
+                  <span className="font-bold text-gray-900 dark:text-slate-100 print:text-gray-900">Grand Total</span>
+                  <span className="font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">
                     {grandTotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -1528,7 +1532,7 @@ const InvoicePage: React.FC = () => {
       <div>
         {/* Screen View - invoice document only; "Invoice Details" and Print are in modal header */}
         <div className="print:hidden">
-          <div className="bg-white dark:bg-slate-800 rounded-lg p-8 border border-gray-200 dark:border-slate-700 overflow-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-4 sm:p-6 md:p-8 border border-gray-200 dark:border-slate-700 overflow-auto max-h-[85vh]">
             {renderInvoiceWithLetterhead(selectedInvoice)}
           </div>
         </div>
@@ -2204,12 +2208,12 @@ const InvoicePage: React.FC = () => {
 
         {/* View Invoice Modal - Header fixed (sticky); Print button stays visible when scrolling */}
         {isViewModalOpen && selectedInvoice && (
-          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-3 sm:p-4 print:hidden">
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
               {/* Modal Header - Fixed; "Invoice Details" + Print + Close (stays visible when content scrolls) */}
-              <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Invoice Details</h2>
-                <div className="flex items-center gap-2">
+              <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 dark:text-white truncate pr-2">Invoice Details</h2>
+                <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   <button
                     onClick={handlePrint}
                     className="px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-indigo-400 border border-blue-600 dark:border-indigo-400 rounded hover:bg-blue-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-1.5"
@@ -2228,7 +2232,7 @@ const InvoicePage: React.FC = () => {
               </div>
 
               {/* Modal Body - Scrollable invoice content */}
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto overflow-x-auto p-4 sm:p-6">
                 {renderInvoiceDetails()}
               </div>
             </div>
