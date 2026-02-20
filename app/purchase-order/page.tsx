@@ -132,6 +132,9 @@ const PurchaseOrderPage: React.FC = () => {
     const [modifiedUnitPrices, setModifiedUnitPrices] = useState<Record<string, number>>({});
     const [rentalStartDate, setRentalStartDate] = useState('');
     const [rentalEndDate, setRentalEndDate] = useState('');
+    const [isRentalOpenEnded, setIsRentalOpenEnded] = useState(false);
+    const [rentalPaymentBasis, setRentalPaymentBasis] = useState<'MONTHLY' | 'DAILY'>('MONTHLY');
+    const [rentalFirstMonthProrated, setRentalFirstMonthProrated] = useState(false);
     const [rentalFormErrors, setRentalFormErrors] = useState<Record<string, string>>({});
     const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
     const [loading, setLoading] = useState(true);
@@ -209,16 +212,17 @@ const PurchaseOrderPage: React.FC = () => {
             return;
         }
         const poStart = request.startDate ? (typeof request.startDate === 'string' ? request.startDate : new Date(request.startDate).toISOString().split('T')[0]) : '';
-        const poEnd = request.endDate ? (typeof request.endDate === 'string' ? request.endDate : new Date(request.endDate).toISOString().split('T')[0]) : '';
-        if (!poStart || !poEnd) {
-            alert('This purchase order has no rental period (start/end date). Please edit the purchase order to set the rental period before creating a hiring agreement.');
+        const poEnd = request.endDate ? (typeof request.endDate === 'string' ? request.endDate : new Date(request.endDate).toISOString().split('T')[0]) : null;
+        if (!poStart) {
+            alert('This purchase order has no start date. Please edit the purchase order to set the start date before creating a hiring agreement.');
             return;
         }
         setSelectedRequest(request);
         setSelectedMachinesForRental({});
         setModifiedUnitPrices({});
         setRentalStartDate(poStart);
-        setRentalEndDate(poEnd);
+        setRentalEndDate(poEnd ?? '');
+        setIsRentalOpenEnded(!poEnd);
         setRentalFormErrors({});
         const availableMachines = request.machines?.map((machine) => {
             const available = Math.min(machine.availableStock, machine.quantity - (machine.rentedQuantity || 0));
@@ -244,6 +248,9 @@ const PurchaseOrderPage: React.FC = () => {
         setModifiedUnitPrices({});
         setRentalStartDate('');
         setRentalEndDate('');
+        setIsRentalOpenEnded(false);
+        setRentalPaymentBasis('MONTHLY');
+        setRentalFirstMonthProrated(false);
         setRentalFormErrors({});
     };
 
@@ -358,8 +365,8 @@ const PurchaseOrderPage: React.FC = () => {
     const validateRentalForm = (): boolean => {
         const errors: Record<string, string> = {};
         if (!rentalStartDate) errors.rentalStartDate = 'Start date is required';
-        if (!rentalEndDate) errors.rentalEndDate = 'End date is required';
-        if (rentalStartDate && rentalEndDate && new Date(rentalEndDate) <= new Date(rentalStartDate)) errors.rentalEndDate = 'End date must be after start date';
+        if (!isRentalOpenEnded && !rentalEndDate) errors.rentalEndDate = 'End date is required (or check Open-ended)';
+        if (rentalStartDate && rentalEndDate && !isRentalOpenEnded && new Date(rentalEndDate) <= new Date(rentalStartDate)) errors.rentalEndDate = 'End date must be after start date';
         const hasSelection = availableMachinesForRental.some(
             m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0
         );
@@ -393,7 +400,9 @@ const PurchaseOrderPage: React.FC = () => {
             const payload = {
                 purchaseRequestId: selectedRequest.id,
                 rentalStartDate: rentalStartDate,
-                rentalEndDate: rentalEndDate,
+                rentalEndDate: isRentalOpenEnded ? undefined : rentalEndDate || undefined,
+                paymentBasis: rentalPaymentBasis,
+                firstMonthProrated: rentalFirstMonthProrated,
                 machines: machinesToRent,
             };
             const response = await authFetch(`${API_BASE_URL}/rentals/from-purchase-request`, {
@@ -666,7 +675,7 @@ const PurchaseOrderPage: React.FC = () => {
                                     </div>
                                     <div className="space-y-4">
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Rental Period</h3>
-                                        <p className="text-sm text-gray-600 dark:text-gray-400">Fetched from the purchase order; cannot be changed.</p>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Start date from purchase order. End date can be left open for open-ended agreements.</p>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
@@ -677,10 +686,67 @@ const PurchaseOrderPage: React.FC = () => {
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date</label>
                                                 <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-100 dark:bg-slate-700/80 text-gray-700 dark:text-gray-300 cursor-not-allowed">
-                                                    {rentalEndDate ? new Date(rentalEndDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                                                    {isRentalOpenEnded ? 'Open-ended' : (rentalEndDate ? new Date(rentalEndDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—')}
                                                 </div>
                                             </div>
                                         </div>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={isRentalOpenEnded}
+                                                onChange={(e) => {
+                                                    const checked = e.target.checked;
+                                                    setIsRentalOpenEnded(checked);
+                                                    if (checked) setRentalEndDate('');
+                                                    else if (selectedRequest?.endDate) {
+                                                        const poEnd = typeof selectedRequest.endDate === 'string' ? selectedRequest.endDate : new Date(selectedRequest.endDate).toISOString().split('T')[0];
+                                                        setRentalEndDate(poEnd);
+                                                    }
+                                                }}
+                                                className="w-4 h-4 rounded border-gray-300 dark:border-slate-500 text-blue-600 dark:text-indigo-500 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                            />
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">Open-ended agreement (no end date; billing until machines are returned)</span>
+                                        </label>
+                                        {!isRentalOpenEnded && selectedRequest?.endDate && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">End date is taken from the purchase order. To change it, edit the purchase order first.</p>
+                                        )}
+                                    </div>
+                                    <div className="space-y-4">
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Payment & Billing</h3>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">How the customer is billed: monthly (calendar month) or daily. For monthly, choose whether the first partial month is charged in full or prorated.</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Payment type</label>
+                                                <select
+                                                    value={rentalPaymentBasis}
+                                                    onChange={(e) => setRentalPaymentBasis(e.target.value as 'MONTHLY' | 'DAILY')}
+                                                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                                >
+                                                    <option value="MONTHLY">Monthly</option>
+                                                    <option value="DAILY">Daily</option>
+                                                </select>
+                                            </div>
+                                            {rentalPaymentBasis === 'MONTHLY' && (
+                                                <div className="flex items-center pt-8">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={rentalFirstMonthProrated}
+                                                            onChange={(e) => setRentalFirstMonthProrated(e.target.checked)}
+                                                            className="w-4 h-4 rounded border-gray-300 dark:border-slate-500 text-blue-600 dark:text-indigo-500 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                                        />
+                                                        <span className="text-sm text-gray-700 dark:text-gray-300">First month prorated (charge only remaining days in first month)</span>
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {rentalPaymentBasis === 'MONTHLY' && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                {rentalFirstMonthProrated
+                                                    ? 'Invoice will charge only the remaining days in the first month (e.g. if start is 19th, 9 days for February).'
+                                                    : 'Invoice will charge the full month for the first period regardless of start day.'}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="space-y-4">
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Select Machines to Rent</h3>

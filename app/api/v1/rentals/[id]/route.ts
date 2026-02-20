@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Decimal } from '@prisma/client/runtime/client';
 
 export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
@@ -33,8 +33,21 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
     if (!rental) {
       return notFoundResponse('Rental not found');
     }
-    
-    return successResponse(rental, 'Rental retrieved successfully');
+
+    const requestedLines = (rental as any).requestedMachineLines as { id?: string; brand?: string; model?: string; type?: string; quantity?: number }[] | null;
+    let payload: any = rental;
+    if (Array.isArray(requestedLines) && requestedLines.length > 0) {
+      const expectedMachineCategories = requestedLines.map((m, i) => ({
+        id: String(m.id ?? i),
+        brand: String(m.brand ?? ''),
+        model: String(m.model ?? ''),
+        type: String(m.type ?? ''),
+        quantity: typeof m.quantity === 'number' ? m.quantity : 1,
+      }));
+      const expectedMachineCount = expectedMachineCategories.reduce((s, c) => s + c.quantity, 0);
+      payload = { ...rental, expectedMachineCount, expectedMachineCategories };
+    }
+    return successResponse(payload, 'Rental retrieved successfully');
   } catch (error: any) {
     console.error('Error fetching rental:', error);
     return errorResponse('Failed to retrieve rental', 500);
@@ -55,24 +68,40 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
       include: {
         purchaseOrder: true,
         machines: true,
-      },
-    });
+      } as any,
+    }) as any;
     if (!existingRental) {
       return notFoundResponse('Rental not found');
     }
     
-    const statusMap: Record<string, 'ACTIVE' | 'COMPLETED' | 'CANCELLED'> = {
+    const statusMap: Record<string, 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'PENDING'> = {
       Active: 'ACTIVE',
       Completed: 'COMPLETED',
       Cancelled: 'CANCELLED',
-      Pending: 'ACTIVE', // Pending rentals become Active when machines are assigned
+      Pending: 'PENDING',
     };
     const mappedStatus = body.status && statusMap[body.status];
     
+    // Expected machine count: from requestedMachineLines (PO-created) or from purchase order (for per-machine rate)
+    let expectedCount = 0;
+    const requestedLines = existingRental.requestedMachineLines as { quantity?: number }[] | null;
+    if (Array.isArray(requestedLines) && requestedLines.length > 0) {
+      expectedCount = requestedLines.reduce((sum, m) => sum + (typeof m.quantity === 'number' ? m.quantity : 1), 0);
+    } else if (existingRental.purchaseOrder && Array.isArray(existingRental.purchaseOrder.machines)) {
+      expectedCount = (existingRental.purchaseOrder.machines as any[]).reduce(
+        (sum: number, m: any) => sum + (m.quantity || 0),
+        0
+      );
+    }
+
     // Handle machine assignment from QR scans
     if (body.machines && Array.isArray(body.machines)) {
       const machinesToAdd: any[] = [];
-      
+      const subtotalNum = parseFloat(existingRental.subtotal.toString());
+      // Per-machine monthly = subtotal / expected count (e.g. 15000/5 = 3000); dailyRate = that / 30
+      const perMachineDailyRate =
+        expectedCount > 0 ? subtotalNum / expectedCount / 30 : subtotalNum / 30;
+
       for (const machineData of body.machines) {
         const serialNo = machineData.serialNo || machineData.serialNumber;
         const motorBoxNo = machineData.motorBoxNo || machineData.boxNumber || machineData.boxNo;
@@ -99,10 +128,8 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
           continue; // Skip duplicate
         }
         
-        // Get machine pricing from the machine or use defaults
-        const dailyRate = machine.monthlyRentalFee 
-          ? parseFloat(machine.monthlyRentalFee.toString()) / 30 
-          : parseFloat(existingRental.subtotal.toString()) / 30;
+        // Use per-machine daily rate so agreement total = subtotal (e.g. 5 machines × 3000 = 15000)
+        const dailyRate = perMachineDailyRate;
         
         machinesToAdd.push({
           machineId: machine.id,
@@ -122,19 +149,13 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
       }
     }
     
-    // Determine if all expected machines are added
+    const currentCount = existingRental.machines.length + (body.machines?.length || 0);
+    const allMachinesAssigned = expectedCount > 0 && currentCount >= expectedCount;
+
+    // When all expected machines are assigned and agreement is PENDING, set to ACTIVE (so print/gatepass become available)
     let finalStatus = mappedStatus || existingRental.status;
-    if (existingRental.purchaseOrder && Array.isArray(existingRental.purchaseOrder.machines)) {
-      const expectedCount = existingRental.purchaseOrder.machines.reduce(
-        (sum: number, m: any) => sum + (m.quantity || 0), 
-        0
-      );
-      const currentCount = existingRental.machines.length + (body.machines?.length || 0);
-      
-      // If all expected machines are added and status is Pending, set to Active
-      if (currentCount >= expectedCount && existingRental.status === 'ACTIVE' && !mappedStatus) {
-        finalStatus = 'ACTIVE';
-      }
+    if (String(existingRental.status) === 'PENDING' && allMachinesAssigned && !mappedStatus) {
+      finalStatus = 'ACTIVE';
     }
     
     const updateData: any = {};

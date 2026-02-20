@@ -75,7 +75,7 @@ interface RentalByNumberApiData {
   customerPhone?: string;
   customerEmail?: string;
   rentalStartDate: string;
-  rentalEndDate: string;
+  rentalEndDate: string | null; // null = open-ended
   monthlyRate: number;
   totalAmount: number;
   outstandingAmount: number;
@@ -103,9 +103,11 @@ function transformByNumberToAgreement(data: RentalByNumberApiData): RentalAgreem
       ? data.rentalStartDate.split('T')[0]
       : new Date(data.rentalStartDate).toISOString().split('T')[0];
   const endDate =
-    typeof data.rentalEndDate === 'string'
-      ? data.rentalEndDate.split('T')[0]
-      : new Date(data.rentalEndDate).toISOString().split('T')[0];
+    data.rentalEndDate == null || data.rentalEndDate === ''
+      ? null
+      : typeof data.rentalEndDate === 'string'
+        ? data.rentalEndDate.split('T')[0]
+        : new Date(data.rentalEndDate).toISOString().split('T')[0];
   return {
     id: 0,
     agreementNo: data.agreementNo,
@@ -115,7 +117,7 @@ function transformByNumberToAgreement(data: RentalByNumberApiData): RentalAgreem
     customerAddress: data.customerAddress,
     serialNo: '',
     startDate,
-    endDate,
+    endDate: endDate ?? null,
     monthlyRent: data.monthlyRate ?? 0,
     outstanding: data.outstandingAmount ?? 0,
     status: mapBackendStatus(data.status),

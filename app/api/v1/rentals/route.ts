@@ -21,6 +21,19 @@ function parseExpectedFromLockedReason(lockedReason: string | null): { expectedM
   return {};
 }
 
+function parseExpectedFromRequestedLines(requestedMachineLines: unknown): { expectedMachineCount?: number; expectedMachineCategories?: { id: string; brand: string; model: string; type: string; quantity: number }[] } {
+  if (!Array.isArray(requestedMachineLines) || requestedMachineLines.length === 0) return {};
+  const categories = requestedMachineLines.map((m: any, i: number) => ({
+    id: String(m.id ?? i),
+    brand: String(m.brand ?? ''),
+    model: String(m.model ?? ''),
+    type: String(m.type ?? ''),
+    quantity: typeof m.quantity === 'number' ? m.quantity : 1,
+  }));
+  const count = categories.reduce((sum, c) => sum + c.quantity, 0);
+  return { expectedMachineCount: count, expectedMachineCategories: categories };
+}
+
 /**
  * @swagger
  * /api/v1/rentals:
@@ -75,7 +88,11 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
       },
     });
 
-    const withExpected = rentals.map((r: any) => ({ ...r, ...parseExpectedFromLockedReason(r.lockedReason) }));
+    const withExpected = rentals.map((r: any) => {
+      const fromRequested = parseExpectedFromRequestedLines(r.requestedMachineLines);
+      const fromLocked = parseExpectedFromLockedReason(r.lockedReason);
+      return { ...r, ...(fromRequested.expectedMachineCount != null ? fromRequested : fromLocked) };
+    });
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
@@ -223,7 +240,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (r
         agreementNumber,
         customerId,
         startDate: start,
-        expectedEndDate: end,
+        ...(end ? { expectedEndDate: end } : {}),
         paymentBasis: paymentBasis === 'DAILY' ? 'DAILY' : 'MONTHLY',
         firstMonthProrated: firstMonthProrated === true,
         status: 'ACTIVE',

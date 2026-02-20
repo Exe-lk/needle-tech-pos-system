@@ -35,6 +35,10 @@ export interface LetterheadDocumentProps {
   footerContent?: React.ReactNode;
   /** Custom class name for the container */
   className?: string;
+  /** Override logo image path (e.g. /vat_logo.jpeg for tax invoice, /non_vat_logo.jpeg for normal invoice). When set, logo is shown in color. */
+  logoPath?: string;
+  /** When true, hide the tagline next to the logo (used for tax invoice to match official format). */
+  hideTagline?: boolean;
 }
 
 /**
@@ -49,31 +53,36 @@ export function LetterheadDocument({
   showChequeInstructions,
   footerContent,
   className = '',
+  logoPath: logoPathOverride,
+  hideTagline = false,
 }: LetterheadDocumentProps) {
   const info = LETTERHEAD_COMPANY_INFO;
   const useFullFooter = footerStyle === 'full' || showChequeInstructions;
+  const logoPath = logoPathOverride ?? info.logoPath;
+  const useColorLogo = Boolean(logoPathOverride);
 
   return (
     <div
       className={`bg-white dark:bg-slate-800 text-black dark:text-white font-sans print:bg-white print:text-black ${className}`}
       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
-      {/* Header - Logo top-left, Tagline to the right (matches Gatepass, Invoice, Hiring Agreement) */}
+      {/* Header - Logo top-left; tagline optional (hidden for tax invoice to match official format) */}
       <div className="mb-6 print:mb-4">
         <div className="flex flex-row items-center justify-between gap-4">
           {/* Logo - top-left corner (img for reliable print) */}
           <div className="flex-shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={info.logoPath}
+              src={logoPath}
               alt="Needle Technologies"
-              className="h-12 w-auto sm:h-14 print:h-12 object-contain object-left grayscale dark:opacity-90 print:opacity-100"
+              className={`h-12 w-auto sm:h-14 print:h-12 object-contain object-left ${useColorLogo ? '' : 'grayscale dark:opacity-90'} print:opacity-100`}
             />
           </div>
-          {/* Tagline - to the right of logo, horizontally aligned */}
-          <p className="text-sm text-gray-700 dark:text-slate-300 print:text-gray-700 text-right flex-1 leading-tight">
-            {info.tagline}
-          </p>
+          {!hideTagline && (
+            <p className="text-sm text-gray-700 dark:text-slate-300 print:text-gray-700 text-right flex-1 leading-tight">
+              {info.tagline}
+            </p>
+          )}
         </div>
 
         {/* Separator line - below logo and tagline */}

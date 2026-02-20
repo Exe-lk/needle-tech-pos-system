@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, forwardRef, useImperativeHandle } from 'react';
 import { Eye, EyeOff, Plus, Trash2, Upload, X, Image as ImageIcon, FileText } from 'lucide-react';
 import SearchableSelect from '@/src/components/common/searchable-select';
 
@@ -49,6 +49,14 @@ export interface FormProps {
   loading?: boolean;
   initialData?: Record<string, any>;
   enableDynamicSpecs?: boolean; // optional: for product specs / extra fields
+  /** When true, footer Clear/Submit buttons are not rendered (e.g. for custom placement below extra sections) */
+  hideFooterActions?: boolean;
+  /** Optional form id for external submit buttons via form="id" */
+  formId?: string;
+}
+
+export interface CreateFormRef {
+  clear: () => void;
 }
 
 interface DynamicSpec {
@@ -66,7 +74,7 @@ interface FilePreview {
   id: string;
 }
 
-const Form: React.FC<FormProps> = ({
+const Form = forwardRef<CreateFormRef, FormProps>(({
   fields,
   onSubmit,
   onClear,
@@ -77,7 +85,9 @@ const Form: React.FC<FormProps> = ({
   loading = false,
   initialData = {},
   enableDynamicSpecs = false,
-}) => {
+  hideFooterActions = false,
+  formId,
+}, ref) => {
   const [formData, setFormData] = useState<Record<string, any>>(
     fields.reduce(
       (acc, field) => ({
@@ -344,6 +354,10 @@ const Form: React.FC<FormProps> = ({
       onClear();
     }
   };
+
+  useImperativeHandle(ref, () => ({
+    clear: handleClear,
+  }), [onClear, enableDynamicSpecs, fields]);
 
   const togglePasswordVisibility = (fieldName: string) => {
     setShowPasswords((prev) => ({
@@ -630,7 +644,7 @@ const Form: React.FC<FormProps> = ({
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
+      <form id={formId} onSubmit={handleSubmit}>
         {/* Base fields */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {regularFields.map((field) => (
@@ -769,30 +783,34 @@ const Form: React.FC<FormProps> = ({
         )}
 
         {/* Form Actions */}
-        <div className="flex justify-end space-x-4">
-          <button
-            type="button"
-            onClick={handleClear}
-            className="px-6 py-3 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-slate-600 transition-colors duration-200 font-medium"
-            disabled={loading}
-          >
-            {clearButtonLabel}
-          </button>
+        {!hideFooterActions && (
+          <div className="flex justify-end space-x-4">
+            <button
+              type="button"
+              onClick={handleClear}
+              className="px-6 py-3 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-slate-600 transition-colors duration-200 font-medium"
+              disabled={loading}
+            >
+              {clearButtonLabel}
+            </button>
 
-          <button
-            type="submit"
-            className="px-6 py-3 bg-[#4154F1] dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-            disabled={loading}
-          >
-            {loading && (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-            )}
-            {submitButtonLabel}
-          </button>
-        </div>
+            <button
+              type="submit"
+              className="px-6 py-3 bg-[#4154F1] dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              disabled={loading}
+            >
+              {loading && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+              )}
+              {submitButtonLabel}
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );
-};
+});
+
+Form.displayName = 'CreateForm';
 
 export default Form;

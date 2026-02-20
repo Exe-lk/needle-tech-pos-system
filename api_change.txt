@@ -1,0 +1,362 @@
+================================================================================
+API & SCHEMA CHANGE SPECIFICATION — Backend Engineer
+Needle Tech POS — Customer Locations, Open-Ended Agreements, Payment Type, Returns
+================================================================================
+Document purpose: Implement backend changes so the frontend can support (1) customer
+locations, (2) open-ended purchase orders and hiring agreements, (3) customer payment
+type (monthly vs daily) for invoice generation, and (4) return-driven invoice
+generation for open-ended agreements. Each section lists schema changes, API contract
+changes, and behaviour expectations.
+
+--------------------------------------------------------------------------------
+1. CUSTOMER LOCATIONS
+--------------------------------------------------------------------------------
+Business rule: A customer can have one or more "locations". When creating a purchase
+order, the user selects the customer and then selects one of that customer's
+locations (e.g. delivery/usage location).
+
+1.1 Schema (prisma/schema.prisma)
+---------------------------------
+Option A — Separate model (recommended for future address per location):
+  model CustomerLocation {
+    id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    customerId  String   @db.Uuid
+    name        String   // e.g. "Main Factory", "Warehouse A"
+    addressLine1 String?
+    addressLine2 String?
+    city        String?
+    region      String?
+    postalCode  String?
+    country     String?
+    isDefault   Boolean  @default(false)
+    createdAt   DateTime @default(now()) @db.Timestamptz(6)
+    updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+    customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+    @@index([customerId])
+    @@map("customer_locations")
+  }
+
+  In model Customer, add:
+    locations  CustomerLocation[]
+
+Option B — Simpler (array of strings):
+  In model Customer, add:
+    locations   String[]  // Array of location names, e.g. ["Main Factory", "Branch 2"]
+
+Recommendation: Option A for full address per location; Option B if only a label is needed.
+
+1.2 Customers API
+-----------------
+GET /api/v1/customers
+  Response: Each customer object must include locations.
+  - If Option A: include relation "locations": [ { id, name, addressLine1, ... } ]
+  - If Option B: include "locations": ["Main Factory", "Branch 2"]
+
+GET /api/v1/customers/:id
+  Response: Same as above; customer object must include locations.
+
+POST /api/v1/customers
+  Request body: Accept new field "locations".
+  - Option A: "locations": [ { "name": "Main Factory", "addressLine1": "...", ... } ]
+    (id optional for create; isDefault optional, default false)
+  - Option B: "locations": ["Main Factory", "Branch 2"]
+  Behaviour: Persist locations with the customer. If Option A and multiple locations,
+  allow at most one isDefault true; if none, backend may set first as default.
+
+PUT /api/v1/customers/:id
+  Request body: Accept "locations" (same shape as POST).
+  Behaviour: Replace or upsert locations (Option A: match by id for update, create new
+  if no id; Option B: replace array).
+
+1.3 Purchase Order API — Location selection
+------------------------------------------
+When creating a purchase order, the user selects the customer's location for that order.
+
+Schema (prisma/schema.prisma):
+  In model PurchaseOrder, add:
+    customerLocationId  String?  @db.Uuid   // Optional; references CustomerLocation.id (if Option A)
+    // If Option B (locations as string[]), add:
+    // locationName      String?  // One of customer's location names
+
+  If Option A: add relation
+    customerLocation  CustomerLocation? @relation(fields: [customerLocationId], references: [id], onDelete: SetNull)
+
+  And in CustomerLocation add:
+    purchaseOrders  PurchaseOrder[]
+
+POST /api/v1/purchase-orders
+  Request body: Add optional field "customerLocationId" (UUID) or "locationName" (string).
+  Validation: If provided, customerLocationId must belong to the same customer as customerId
+  (or locationName must be in that customer's locations).
+  Response: Include customerLocationId / locationName and, if useful, resolved location
+  object (e.g. name, address) in the created PO.
+
+GET /api/v1/purchase-orders, GET /api/v1/purchase-orders/:id
+  Response: Include customerLocationId and, when available, the location details (name,
+  address) so the frontend can display "Customer + Location" without an extra lookup.
+
+--------------------------------------------------------------------------------
+2. OPEN-ENDED PURCHASE ORDERS
+--------------------------------------------------------------------------------
+Business rule: When creating a purchase order, the end date is not compulsory; the
+order can be "open-ended".
+
+2.1 Schema
+----------
+PurchaseOrder already has:
+  startDate  DateTime?  @db.Timestamptz(6)
+  endDate    DateTime?  @db.Timestamptz(6)
+No schema change required.
+
+2.2 Purchase Order API
+----------------------
+POST /api/v1/purchase-orders
+  Current behaviour: Validation requires both startDate and endDate.
+  Required change: Remove the validation that requires endDate (and optionally
+  startDate). Allow endDate to be null/omitted. At least one of startDate or endDate
+  may be required depending on product rules; recommend: startDate required for
+  rental period, endDate optional.
+  Example validation change:
+    - Before: if (!startDate || !endDate) return validationErrorResponse(...)
+    - After:  if (!startDate) return validationErrorResponse(..., endDate optional)
+
+GET /api/v1/purchase-orders, GET /api/v1/purchase-orders/:id
+  Response: startDate and endDate already nullable; ensure response includes null
+  when not set (no change if already so).
+
+PUT /api/v1/purchase-orders/:id
+  Allow endDate to be set to null (clear end date).
+
+--------------------------------------------------------------------------------
+3. OPEN-ENDED HIRING AGREEMENTS (RENTALS)
+--------------------------------------------------------------------------------
+Business rule: A hiring agreement (Rental) can be open-ended: no expected end date.
+Machines are tracked until they are returned (see Return flow). Invoice generation
+for open-ended agreements is driven by returns and/or periodic billing (see Section 5).
+
+3.1 Schema
+----------
+In model Rental, change:
+  expectedEndDate  DateTime  @db.Timestamptz(6)
+to:
+  expectedEndDate  DateTime?  @db.Timestamptz(6)
+
+So that an agreement can exist without an end date. actualEndDate remains DateTime?
+(already optional).
+
+3.2 Rentals API
+--------------
+POST /api/v1/rentals
+  Request body: Make "endDate" optional. If omitted or null, set rental.expectedEndDate = null.
+  Validation: Require customerId and startDate; endDate optional. If endDate is provided,
+  it must be >= startDate.
+
+POST /api/v1/rentals/from-purchase-request
+  Request body: Make "rentalEndDate" optional. If omitted or null, create the rental
+  with expectedEndDate = null (open-ended).
+  Validation: purchaseRequestId, rentalStartDate, machines required; rentalEndDate optional.
+  When rentalEndDate is null:
+    - Do not compute "months in period" for a fixed total; subtotal/vat/total can be
+      computed as zero or a placeholder until first invoice (or use first-period logic;
+      see Section 4).
+  Backend may set initial subtotal/vatAmount/total/balance to 0 or to a first-period
+  amount depending on product rules (e.g. first month prorated or full).
+
+GET /api/v1/rentals, GET /api/v1/rentals/:id
+  Response: expectedEndDate may be null; frontend will treat null as "Open-ended".
+
+GET /api/v1/rentals/by-number?number=RA...
+  Response: When expectedEndDate is null:
+    - rentalEndDate: null
+    - rentalPeriod: "Open-ended" (or similar)
+    - expectedReturnDate: null
+    - monthlyRate / totalAmount: may be derived from monthly rate × 1 or from
+      machines' daily rates × 30; document clearly for frontend.
+
+PUT /api/v1/rentals/:id
+  Allow updating expectedEndDate to null or to a date; allow setting actualEndDate
+  when agreement is closed.
+
+--------------------------------------------------------------------------------
+4. CUSTOMER PAYMENT TYPE (MONTHLY vs DAILY) FOR HIRING AGREEMENTS
+--------------------------------------------------------------------------------
+Business rule: When creating a hiring agreement from a purchase order, the user
+selects how the customer is billed: "Monthly" or "Daily". For monthly, some customers
+pay the full month for the first partial month (e.g. machines from 19th); others pay
+only the remaining days (prorated). This drives how the first invoice (and optionally
+subsequent invoices) are generated.
+
+4.1 Schema
+----------
+In model Rental, add:
+
+  // Billing / payment basis
+  paymentBasis         RentalPaymentBasis  @default(MONTHLY)   // MONTHLY | DAILY
+  firstMonthProrated  Boolean             @default(false)     // If true, first period charged by days; if false, full month
+
+  enum RentalPaymentBasis {
+    MONTHLY
+    DAILY
+  }
+
+Meaning:
+- paymentBasis = MONTHLY: Invoices are generated per calendar month (or per period).
+  firstMonthProrated = true: First period amount = (daily rate × 30) × (days remaining in month) / (days in that month).
+  firstMonthProrated = false: First period = full month amount regardless of start day.
+- paymentBasis = DAILY: Invoices can be generated for exact days (e.g. return-based;
+  see Section 5).
+
+4.2 Rentals API
+---------------
+POST /api/v1/rentals/from-purchase-request
+  Request body: Add optional fields:
+    - paymentBasis: "MONTHLY" | "DAILY" (default "MONTHLY")
+    - firstMonthProrated: boolean (default false; only relevant when paymentBasis = MONTHLY)
+  Behaviour: Persist on the created Rental. When computing initial subtotal/total for
+  the rental (if you do so at creation), use paymentBasis and firstMonthProrated to
+  compute the first period amount (e.g. for display or first invoice).
+
+POST /api/v1/rentals
+  Same optional fields paymentBasis and firstMonthProrated; persist on Rental.
+
+GET /api/v1/rentals, GET /api/v1/rentals/:id, GET /api/v1/rentals/by-number
+  Response: Include paymentBasis and firstMonthProrated on each rental object.
+
+4.3 Invoice generation (backend or dedicated endpoint)
+------------------------------------------------------
+When generating an invoice for a rental (e.g. from machine-assign-page when activating,
+or from a scheduled job):
+- Use rental.paymentBasis and rental.firstMonthProrated to compute amounts.
+- MONTHLY + firstMonthProrated = false: First period = full month (monthly rate × 1).
+- MONTHLY + firstMonthProrated = true: First period = prorated (e.g. monthly rate ×
+  (days in first month from startDate to end of month) / (days in that month)).
+- DAILY: Use daily rate × number of days for the period being invoiced.
+
+Provide a clear contract for "generate invoice for rental for period [from, to]" so
+the frontend (or a cron) can call it with the right period and get correct line items
+and totals. This may be:
+  POST /api/v1/rentals/:id/generate-invoice
+  Body: { periodFrom: "YYYY-MM-DD", periodTo: "YYYY-MM-DD" }
+  Response: Created invoice or invoice payload (line items, totals) using paymentBasis
+  and firstMonthProrated.
+
+--------------------------------------------------------------------------------
+5. RETURN TRACKING AND INVOICE GENERATION FOR OPEN-ENDED AGREEMENTS
+--------------------------------------------------------------------------------
+Business rule: For open-ended agreements, machines are billed until they are returned.
+When a machine is returned (via return-qr-page / POST /api/v1/returns), the system
+should support generating an invoice for that return covering the period from the
+last billed date (or rental start) to the return date. Example: Customer has 5
+machines; returns 2 after 2 months → invoice for those 2 for 2 months; returns
+remaining 3 after 6 months → invoice for those 3 for the period (e.g. months 3–6, or
+from last billed to return date).
+
+5.1 Schema
+----------
+(1) Track per-rental-machine how far we have billed (for open-ended and prorated logic):
+
+  In model RentalMachine, add:
+    lastBilledToDate  DateTime?  @db.Timestamptz(6)   // Last date included in an invoice for this line
+
+  When generating any rental invoice (monthly or return-based), after creating the
+  invoice, set lastBilledToDate for the involved rental machines to the end of the
+  billed period (or return date for return-based).
+
+(2) Optional: Link a return to the invoice generated for it.
+  In model Return, add:
+    invoiceId  String?  @db.Uuid
+    invoice    Invoice? @relation(...)
+
+  So we can know "this return was invoiced by invoice X".
+
+5.2 Returns API
+----------------
+POST /api/v1/returns
+  Current: Creates return and ReturnMachine records.
+  Enhancement (optional but recommended): Add optional query or body flag, e.g.
+  "generateInvoice": true. When true and the rental is open-ended (or in all cases):
+    - For each returned machine (ReturnMachine), determine the billing period:
+      from (rental.startDate or rentalMachine.lastBilledToDate) to return.returnDate.
+    - Create an invoice (type RENTAL) with line items: for each machine, quantity ×
+      dailyRate × days in period (or use monthly rate / 30 × days if paymentBasis is
+      MONTHLY and you treat partial period as daily).
+    - Update RentalMachine.lastBilledToDate for those machines to return.returnDate.
+    - Link the return to the invoice (return.invoiceId = newInvoice.id) if schema added.
+  Response: Include created invoice id and summary in the response when generateInvoice
+  was true.
+
+Alternative: New endpoint POST /api/v1/returns/:id/generate-invoice that creates the
+invoice for that return and updates lastBilledToDate; frontend calls it after
+creating the return.
+
+5.3 Rental machine status / quantity on return
+----------------------------------------------
+When machines are returned, the rental may still have other machines out (open-ended).
+So the rental stays ACTIVE until all machines are returned (or until business rule
+says otherwise). No schema change strictly required for this; ensure that:
+- Return only records which machines came back and when.
+- Invoice generation uses lastBilledToDate and return date to bill the correct period
+  for the returned machines only.
+- Optionally: when all machines of a rental have been returned, set rental.actualEndDate
+  and possibly status = COMPLETED (can be done in POST /returns or a separate job).
+
+5.4 GET /api/v1/rentals/by-number (open-ended)
+----------------------------------------------
+When expectedEndDate is null, return:
+  rentalEndDate: null
+  expectedReturnDate: null
+  rentalPeriod: "Open-ended"
+Compute monthlyRate from rental.subtotal (e.g. subtotal is monthly total) or from
+sum of (rentalMachine.dailyRate * 30 * quantity) so the return-qr-page can show
+meaningful info. totalAmount/outstandingAmount may be cumulative or zero until
+invoices are generated; document for frontend.
+
+--------------------------------------------------------------------------------
+6. SUMMARY OF SCHEMA CHANGES (prisma/schema.prisma)
+--------------------------------------------------------------------------------
+- Customer: add relation locations (CustomerLocation[]) or field locations String[].
+- CustomerLocation (if used): new model; fields as in 1.1.
+- PurchaseOrder: add customerLocationId String? @db.Uuid (and relation if Option A).
+- Rental: expectedEndDate → DateTime?; add paymentBasis (enum), firstMonthProrated (Boolean).
+- RentalMachine: add lastBilledToDate DateTime? @db.Timestamptz(6).
+- Return: optional invoiceId String? @db.Uuid, relation to Invoice.
+- New enum: RentalPaymentBasis { MONTHLY, DAILY }.
+
+--------------------------------------------------------------------------------
+7. SUMMARY OF API CHANGES
+--------------------------------------------------------------------------------
+- GET/POST/PUT /api/v1/customers (and GET /:id): support "locations" in request/response.
+- POST/GET /api/v1/purchase-orders: endDate optional; add customerLocationId (or
+  locationName) in request/response.
+- POST /api/v1/rentals: endDate optional; accept paymentBasis, firstMonthProrated.
+- POST /api/v1/rentals/from-purchase-request: rentalEndDate optional; accept
+  paymentBasis, firstMonthProrated.
+- GET /api/v1/rentals, GET /api/v1/rentals/:id, GET /api/v1/rentals/by-number: include
+  paymentBasis, firstMonthProrated; handle null expectedEndDate (open-ended).
+- POST /api/v1/returns: optional behaviour to generate invoice for returned machines
+  and set lastBilledToDate; or add POST /api/v1/returns/:id/generate-invoice.
+- Invoice generation logic (existing or new endpoint): use paymentBasis and
+  firstMonthProrated for rental invoices; use lastBilledToDate and return date for
+  return-based invoices.
+
+--------------------------------------------------------------------------------
+8. FRONTEND PAGES AFFECTED (for reference)
+--------------------------------------------------------------------------------
+- app/customers/page.tsx — Add "location(s)" to registration form; API will need to
+  accept and return locations.
+- app/purchase-order/create/page.tsx — Customer selection then location selection;
+  end date optional; API PO create with customerLocationId and optional endDate.
+- app/purchase-order/page.tsx — Create hiring from PO: end date optional; add
+  payment type (monthly/daily) and first-month prorated checkbox; API
+  from-purchase-request with rentalEndDate optional, paymentBasis, firstMonthProrated.
+- app/rental-agreement/page.tsx — Support open-ended (end date optional); display
+  payment type and open-ended where relevant.
+- app/machine-assign-page/page.tsx — Invoice creation on activate should use
+  paymentBasis and firstMonthProrated.
+- app/return-qr-page/page.tsx — Used to record returns; for open-ended agreements,
+  return triggers or links to invoice generation for the returned machines (API
+  support for return-based invoice).
+
+End of document.

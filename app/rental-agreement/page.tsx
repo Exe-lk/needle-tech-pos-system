@@ -162,7 +162,7 @@ interface ApiRental {
   purchaseOrderId: string | null;
   status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
   startDate: string;
-  expectedEndDate: string;
+  expectedEndDate: string | null;
   actualEndDate: string | null;
   subtotal: number | string;
   vatAmount: number | string;
@@ -192,8 +192,10 @@ interface ApiRental {
 
 function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
   const start = new Date(r.startDate);
-  const end = new Date(r.expectedEndDate);
-  const months = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+  const end = r.expectedEndDate ? new Date(r.expectedEndDate) : null;
+  const months = end
+    ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)))
+    : 1;
   const total = Number(r.total);
   const balance = Number(r.balance);
   const statusMap: Record<string, RentalStatus> = {
@@ -211,7 +213,7 @@ function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
     customerName: r.customer.name,
     serialNo: firstSerial,
     startDate: r.startDate,
-    endDate: r.expectedEndDate,
+    endDate: r.expectedEndDate ?? null,
     monthlyRent: months > 0 ? total / months : total,
     outstanding: balance,
     status: statusMap[r.status] ?? 'Active',
@@ -225,9 +227,15 @@ function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
 
 function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
   const start = new Date(r.startDate);
-  const end = new Date(r.expectedEndDate);
-  const months = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+  const end = r.expectedEndDate ? new Date(r.expectedEndDate) : null;
+  const months = end
+    ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)))
+    : 1;
   const total = Number(r.total);
+  // Use subtotal (before tax) for machine table so total = monthly rent for all machines (e.g. 15,000 for 5×3,000)
+  const monthlySubtotal = months > 0 ? Number(r.subtotal) / months : Number(r.subtotal);
+  const machineCount = (r.machines ?? []).length;
+  const perMachineMonthly = machineCount > 0 ? monthlySubtotal / machineCount : 0;
   const addressParts = [
     r.customer.billingAddressLine1,
     r.customer.billingAddressLine2,
@@ -241,7 +249,6 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     const model = rm.machine.model?.name ?? '';
     const type = rm.machine.type?.name ?? '';
     const desc = `${brand} ${model}${type ? ` - ${type}` : ''}`.trim() || 'Machine';
-    const dailyRate = Number(rm.dailyRate);
     return {
       serialNo: rm.machine.serialNumber,
       machineBrand: brand,
@@ -249,7 +256,7 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
       machineType: type,
       machineDescription: desc.toUpperCase(),
       motorBoxNo: rm.machine.boxNumber ?? undefined,
-      monthlyRent: dailyRate * 30,
+      monthlyRent: perMachineMonthly,
     };
   });
   const statusMap: Record<string, RentalStatus> = {
@@ -266,7 +273,7 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     customerAddress: addressParts.join(', '),
     machines,
     startDate: r.startDate,
-    endDate: r.expectedEndDate,
+    endDate: r.expectedEndDate ?? null,
     monthlyRent: months > 0 ? total / months : total,
     outstanding: Number(r.balance),
     status: statusMap[r.status] ?? 'Active',
@@ -467,9 +474,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     <div ref={containerRef} className={`relative ${className}`}>
       <div
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between ${
-          error ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-500 dark:hover:border-indigo-500'} focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-indigo-500 transition-colors`}
+        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between ${error ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-500 dark:hover:border-indigo-500'} focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-indigo-500 transition-colors`}
       >
         {isOpen ? (
           <input
@@ -509,9 +515,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                   key={option.value}
                   onClick={() => handleSelect(option.value)}
                   onMouseEnter={() => setHighlightedIndex(index)}
-                  className={`px-3 py-2 cursor-pointer flex items-center justify-between ${
-                    index === highlightedIndex ? 'bg-blue-50 dark:bg-indigo-900/30' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
-                  } ${option.value === value ? 'bg-blue-100 dark:bg-indigo-900/50' : ''}`}
+                  className={`px-3 py-2 cursor-pointer flex items-center justify-between ${index === highlightedIndex ? 'bg-blue-50 dark:bg-indigo-900/30' : 'hover:bg-gray-50 dark:hover:bg-slate-700'
+                    } ${option.value === value ? 'bg-blue-100 dark:bg-indigo-900/50' : ''}`}
                 >
                   <span className="text-gray-900 dark:text-white">{option.label}</span>
                   {option.value === value && <Check className="w-4 h-4 text-blue-600 dark:text-indigo-400" />}
@@ -868,7 +873,7 @@ const columns: TableColumn[] = [
     sortable: true,
     filterable: false,
     render: (value: string | null) =>
-      value ? new Date(value).toLocaleDateString('en-LK') : 'Ongoing',
+      value ? new Date(value).toLocaleDateString('en-LK') : 'Open-ended',
   },
   {
     key: 'monthlyRent',
@@ -1055,10 +1060,10 @@ const RentalAgreementPage: React.FC = () => {
       const items = json?.data?.items ?? json?.data ?? [];
       const list = Array.isArray(items)
         ? items.map((c: { id: string; name: string; billingAddressLine1?: string; billingCity?: string; billingRegion?: string; billingPostalCode?: string; billingCountry?: string }) => ({
-            id: c.id,
-            name: c.name,
-            address: [c.billingAddressLine1, c.billingCity, c.billingRegion, c.billingPostalCode, c.billingCountry].filter(Boolean).join(', '),
-          }))
+          id: c.id,
+          name: c.name,
+          address: [c.billingAddressLine1, c.billingCity, c.billingRegion, c.billingPostalCode, c.billingCountry].filter(Boolean).join(', '),
+        }))
         : [];
       setCustomers(list);
     } catch {
@@ -1132,29 +1137,29 @@ const RentalAgreementPage: React.FC = () => {
     }));
   }, [customers]);
 
-// Brand options for SearchableSelect
-const brandOptions = useMemo(() => {
-  return mockMachineBrands.map((brand) => ({
-    value: brand,
-    label: brand,
-  }));
-}, []);
+  // Brand options for SearchableSelect
+  const brandOptions = useMemo(() => {
+    return mockMachineBrands.map((brand) => ({
+      value: brand,
+      label: brand,
+    }));
+  }, []);
 
-// Model options for a given brand (used per machine row)
-const getModelOptions = (brand: string) => {
-  return getAvailableModels(brand).map((model) => ({
-    value: model,
-    label: model,
-  }));
-};
+  // Model options for a given brand (used per machine row)
+  const getModelOptions = (brand: string) => {
+    return getAvailableModels(brand).map((model) => ({
+      value: model,
+      label: model,
+    }));
+  };
 
-// Type options for SearchableSelect
-const typeOptions = useMemo(() => {
-  return mockMachineTypes.map((type) => ({
-    value: type,
-    label: type,
-  }));
-}, []);
+  // Type options for SearchableSelect
+  const typeOptions = useMemo(() => {
+    return mockMachineTypes.map((type) => ({
+      value: type,
+      label: type,
+    }));
+  }, []);
 
   // Get available machine IDs for add-ons
   const getAvailableMachineIds = () => {
@@ -1538,13 +1543,13 @@ const typeOptions = useMemo(() => {
     const customer = api.customer ?? api.rental?.customer;
     const addressParts = customer
       ? [
-          (customer as { billingAddressLine1?: string }).billingAddressLine1,
-          (customer as { billingAddressLine2?: string }).billingAddressLine2,
-          (customer as { billingCity?: string }).billingCity,
-          (customer as { billingRegion?: string }).billingRegion,
-          (customer as { billingPostalCode?: string }).billingPostalCode,
-          (customer as { billingCountry?: string }).billingCountry,
-        ].filter(Boolean)
+        (customer as { billingAddressLine1?: string }).billingAddressLine1,
+        (customer as { billingAddressLine2?: string }).billingAddressLine2,
+        (customer as { billingCity?: string }).billingCity,
+        (customer as { billingRegion?: string }).billingRegion,
+        (customer as { billingPostalCode?: string }).billingPostalCode,
+        (customer as { billingCountry?: string }).billingCountry,
+      ].filter(Boolean)
       : [];
     const items: GatePassItem[] = (api.machines ?? []).map((m, index) => {
       const machine = m.machine;
@@ -1605,8 +1610,8 @@ const typeOptions = useMemo(() => {
         const message = json?.message ?? 'Failed to create gate pass';
         const details = json?.data?.errors
           ? Object.entries(json.data.errors)
-              .map(([k, v]) => `${k}: ${(v as string[]).join(', ')}`)
-              .join('; ')
+            .map(([k, v]) => `${k}: ${(v as string[]).join(', ')}`)
+            .join('; ')
           : '';
         alert(details ? `${message}\n${details}` : message);
         return;
@@ -1733,11 +1738,11 @@ const typeOptions = useMemo(() => {
         prev.map((a) =>
           a.id === selectedAgreement.id
             ? {
-                ...a,
-                ...data,
-                status: newStatus as RentalStatus,
-                addedMachines: addedCount,
-              }
+              ...a,
+              ...data,
+              status: newStatus as RentalStatus,
+              addedMachines: addedCount,
+            }
             : a
         )
       );
@@ -2004,17 +2009,17 @@ const typeOptions = useMemo(() => {
     const totalMonthlyRent = agreementInfo.machines.reduce((sum, machine) => sum + machine.monthlyRent, 0);
     const dateOfIssue = agreementInfo.startDate
       ? new Date(agreementInfo.startDate).toLocaleDateString('en-LK', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        })
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
       : 'TBD';
     const signatureDate = agreementInfo.customerSignatureDate
       ? new Date(agreementInfo.customerSignatureDate).toLocaleDateString('en-LK', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        })
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
       : 'N/A';
 
     const mainContent = (
@@ -2221,11 +2226,10 @@ const typeOptions = useMemo(() => {
               </div>
               <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
                 <div
-                  className={`h-2.5 rounded-full transition-all duration-500 ease-out ${
-                    allComplete
+                  className={`h-2.5 rounded-full transition-all duration-500 ease-out ${allComplete
                       ? 'bg-gradient-to-r from-green-500 to-emerald-600 dark:from-green-500 dark:to-emerald-600'
                       : 'bg-gradient-to-r from-blue-500 to-indigo-600 dark:from-blue-500 dark:to-indigo-600'
-                  }`}
+                    }`}
                   style={{ width: `${progressPercentage}%` }}
                 />
               </div>
@@ -2249,11 +2253,10 @@ const typeOptions = useMemo(() => {
               return (
                 <div
                   key={cat.id}
-                  className={`rounded-xl border p-4 ${
-                    categoryComplete
+                  className={`rounded-xl border p-4 ${categoryComplete
                       ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800/50'
                       : 'bg-gray-50 dark:bg-slate-700/50 border-gray-200 dark:border-slate-600'
-                  }`}
+                    }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
@@ -2479,7 +2482,7 @@ const typeOptions = useMemo(() => {
                   <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                     Hiring Machine Agreement Details
                   </h2>
-                  
+
                 </div>
                 <div className="flex items-center space-x-2">
                   <Tooltip content={selectedAgreement?.status !== 'Active' ? 'Assign all machines and activate the agreement to print.' : 'Print agreement'}>
@@ -2999,12 +3002,12 @@ const typeOptions = useMemo(() => {
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
               <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                 <div>
-                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  {/* <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                     Generate Gatepass
                   </h2>
                   <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                     Agreement: {selectedAgreement.agreementNo}
-                  </p>
+                  </p> */}
                 </div>
                 <button
                   onClick={handleCloseGatePassModal}
@@ -3122,6 +3125,9 @@ const typeOptions = useMemo(() => {
                           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                             Gatepass Generated
                           </h3>
+                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Agreement: {selectedAgreement.agreementNo}
+                          </p>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
                             Gatepass No: {generatedGatePass.gatepassNo}
                           </p>

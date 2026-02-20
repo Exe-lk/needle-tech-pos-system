@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import CreateForm, { FormField } from '@/src/components/form-popup/create';
+import CreateForm, { FormField, CreateFormRef } from '@/src/components/form-popup/create';
 import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
-import { Eye, Pencil, Trash2, X } from 'lucide-react';
+import { Eye, Pencil, Trash2, X, Plus } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 import { authFetch, clearAuth, redirectToLogin } from '@/lib/auth-client';
@@ -28,6 +28,18 @@ interface Customer {
   outstandingBalance: number;
   status: CustomerStatus;
   code?: string;
+}
+
+interface CustomerLocationInput {
+  id?: string;
+  name: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  region?: string;
+  postalCode?: string;
+  country?: string;
+  isDefault?: boolean;
 }
 
 interface ApiCustomer {
@@ -55,6 +67,7 @@ interface ApiCustomer {
   status: ApiCustomerStatus;
   createdAt: string;
   updatedAt: string;
+  locations?: CustomerLocationInput[];
 }
 
 interface CustomerInfo {
@@ -76,7 +89,7 @@ interface RentalHistory {
   agreementNumber: string;
   status: string;
   startDate: string;
-  expectedEndDate: string;
+  expectedEndDate: string | null;
   actualEndDate?: string;
   total: number;
   balance: number;
@@ -363,6 +376,9 @@ const CustomerListPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [rentalHistory, setRentalHistory] = useState<RentalHistory[]>([]);
+  const [createLocations, setCreateLocations] = useState<{ name: string; address?: string }[]>([{ name: '', address: '' }]);
+  const [updateLocations, setUpdateLocations] = useState<{ name: string; address?: string }[]>([]);
+  const createFormRef = useRef<CreateFormRef>(null);
 
   // Fetch customers on component mount
   useEffect(() => {
@@ -420,6 +436,7 @@ const CustomerListPage: React.FC = () => {
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setActiveCreateTab('company');
+    setCreateLocations([{ name: '', address: '' }]);
   };
 
   const handleViewCustomer = async (customer: Customer) => {
@@ -447,6 +464,65 @@ const CustomerListPage: React.FC = () => {
     setIsUpdateModalOpen(false);
     setSelectedCustomer(null);
     setSelectedCustomerDetails(null);
+    setUpdateLocations([]);
+  };
+
+  // Sync update locations when details load (for update form)
+  useEffect(() => {
+    if (!isUpdateModalOpen || !selectedCustomerDetails) return;
+    if (selectedCustomerDetails.locations?.length) {
+      setUpdateLocations(
+        selectedCustomerDetails.locations.map((loc: CustomerLocationInput) => {
+          const parts = [
+            loc.addressLine1,
+            loc.addressLine2,
+            loc.city,
+            loc.region,
+            loc.postalCode,
+            loc.country,
+          ].filter(Boolean) as string[];
+          return { name: loc.name || '', address: parts.join(', ') };
+        })
+      );
+    } else {
+      setUpdateLocations([{ name: '', address: '' }]);
+    }
+  }, [isUpdateModalOpen, selectedCustomerDetails]);
+
+  const addCreateLocation = () => setCreateLocations((prev) => [...prev, { name: '', address: '' }]);
+  const removeCreateLocation = (index: number) => {
+    if (createLocations.length <= 1) return;
+    setCreateLocations((prev) => prev.filter((_, i) => i !== index));
+  };
+  const updateCreateLocation = (index: number, field: 'name' | 'address', value: string) => {
+    setCreateLocations((prev) => prev.map((loc, i) => (i === index ? { ...loc, [field]: value } : loc)));
+  };
+
+  const addUpdateLocation = () => setUpdateLocations((prev) => [...prev, { name: '', address: '' }]);
+  const removeUpdateLocation = (index: number) => {
+    if (updateLocations.length <= 1) return;
+    setUpdateLocations((prev) => prev.filter((_, i) => i !== index));
+  };
+  const updateUpdateLocation = (index: number, field: 'name' | 'address', value: string) => {
+    setUpdateLocations((prev) => prev.map((loc, i) => (i === index ? { ...loc, [field]: value } : loc)));
+  };
+
+  const buildLocationsPayload = (items: { name: string; address?: string }[]) => {
+    return items
+      .filter((loc) => (loc.name || '').trim())
+      .map((loc, index) => {
+        const parsed = parseAddress(loc.address || '');
+        return {
+          name: (loc.name || '').trim(),
+          addressLine1: parsed.line1 || undefined,
+          addressLine2: parsed.line2 || undefined,
+          city: parsed.city || undefined,
+          region: parsed.region || undefined,
+          postalCode: parsed.postalCode || undefined,
+          country: parsed.country || undefined,
+          isDefault: index === 0,
+        };
+      });
   };
 
   const handleDeleteCustomer = (customer: Customer) => {
@@ -663,6 +739,7 @@ const CustomerListPage: React.FC = () => {
         billingCountry: addressParts.country,
         vatRegistrationNumber: data.vatTin || null,
         status: mapFrontendStatusToApi(data.status),
+        locations: buildLocationsPayload(createLocations),
       };
 
       const result = await createCustomer(payload);
@@ -702,6 +779,7 @@ const CustomerListPage: React.FC = () => {
         billingPostalCode: addressParts.postalCode,
         billingCountry: addressParts.country,
         status: mapFrontendStatusToApi(data.status),
+        locations: buildLocationsPayload(createLocations),
       };
 
       const result = await createCustomer(payload);
@@ -741,6 +819,7 @@ const CustomerListPage: React.FC = () => {
         billingCountry: addressParts.country,
         vatRegistrationNumber: data.vatTin || null,
         status: mapFrontendStatusToApi(data.status),
+        locations: buildLocationsPayload(updateLocations),
       };
 
       const result = await updateCustomer(selectedCustomer.id, payload);
@@ -779,6 +858,7 @@ const CustomerListPage: React.FC = () => {
         billingPostalCode: addressParts.postalCode,
         billingCountry: addressParts.country,
         status: mapFrontendStatusToApi(data.status),
+        locations: buildLocationsPayload(updateLocations),
       };
 
       const result = await updateCustomer(selectedCustomer.id, payload);
@@ -922,6 +1002,24 @@ const CustomerListPage: React.FC = () => {
                   {customerInfo.email}
                 </span>
               </div>
+              {selectedCustomerDetails.locations?.length ? (
+                <div className="md:col-span-2">
+                  <span className="text-gray-500 dark:text-gray-400">Locations:</span>
+                  <ul className="mt-1 space-y-1">
+                    {selectedCustomerDetails.locations.map((loc: CustomerLocationInput, idx: number) => (
+                      <li key={loc.id || idx} className="text-gray-900 dark:text-white font-medium">
+                        {loc.name}
+                        {[loc.addressLine1, loc.city, loc.country].filter(Boolean).length > 0 && (
+                          <span className="text-gray-500 dark:text-gray-400 font-normal">
+                            {' — '}
+                            {[loc.addressLine1, loc.city, loc.country].filter(Boolean).join(', ')}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -984,7 +1082,7 @@ const CustomerListPage: React.FC = () => {
         key: 'expectedEndDate',
         label: 'Expected End Date',
         sortable: true,
-        render: (value: string) => new Date(value).toLocaleDateString('en-LK'),
+        render: (value: string | null) => value ? new Date(value).toLocaleDateString('en-LK') : 'Open-ended',
       },
       {
         key: 'actualEndDate',
@@ -1194,6 +1292,7 @@ const CustomerListPage: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-6">
               {activeCreateTab === 'company' ? (
                 <CreateForm
+                  ref={createFormRef}
                   title="Business Details"
                   fields={companyFields}
                   onSubmit={handleCompanySubmit}
@@ -1202,10 +1301,13 @@ const CustomerListPage: React.FC = () => {
                   clearButtonLabel="Clear"
                   loading={isSubmitting}
                   enableDynamicSpecs={false}
+                  hideFooterActions
+                  formId="create-customer-form-company"
                   className="shadow-none border-0 p-0"
                 />
               ) : (
                 <CreateForm
+                  ref={createFormRef}
                   title="Customer Details"
                   fields={individualFields}
                   onSubmit={handleIndividualSubmit}
@@ -1214,9 +1316,70 @@ const CustomerListPage: React.FC = () => {
                   clearButtonLabel="Clear"
                   loading={isSubmitting}
                   enableDynamicSpecs={false}
+                  hideFooterActions
+                  formId="create-customer-form-individual"
                   className="shadow-none border-0 p-0"
                 />
               )}
+              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-slate-700">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Locations (optional)</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Add one or more locations for this customer (e.g. delivery or site addresses).</p>
+                {createLocations.map((loc, index) => (
+                  <div key={index} className="flex flex-wrap items-start gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={loc.name}
+                      onChange={(e) => updateCreateLocation(index, 'name', e.target.value)}
+                      placeholder="Location name (e.g. Main Factory)"
+                      className="flex-1 min-w-[140px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={loc.address || ''}
+                      onChange={(e) => updateCreateLocation(index, 'address', e.target.value)}
+                      placeholder="Address (optional)"
+                      className="flex-1 min-w-[180px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeCreateLocation(index)}
+                      disabled={createLocations.length <= 1}
+                      className="p-2 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Remove location"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addCreateLocation}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 dark:text-indigo-400 hover:bg-blue-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Add location
+                </button>
+                <div className="flex justify-end space-x-4 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => createFormRef.current?.clear()}
+                    className="px-6 py-3 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-slate-600 transition-colors duration-200 font-medium"
+                    disabled={isSubmitting}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="submit"
+                    form={activeCreateTab === 'company' ? 'create-customer-form-company' : 'create-customer-form-individual'}
+                    className="px-6 py-3 bg-[#4154F1] dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting && (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                    )}
+                    Save
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1271,6 +1434,46 @@ const CustomerListPage: React.FC = () => {
                   initialData={getUpdateInitialData(selectedCustomer)}
                   className="shadow-none border-0 p-0"
                 />
+              )}
+              {selectedCustomerDetails && (
+                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-slate-700">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Locations</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Add or edit locations for this customer.</p>
+                  {updateLocations.map((loc, index) => (
+                    <div key={index} className="flex flex-wrap items-start gap-2 mb-3">
+                      <input
+                        type="text"
+                        value={loc.name}
+                        onChange={(e) => updateUpdateLocation(index, 'name', e.target.value)}
+                        placeholder="Location name"
+                        className="flex-1 min-w-[140px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={loc.address || ''}
+                        onChange={(e) => updateUpdateLocation(index, 'address', e.target.value)}
+                        placeholder="Address (optional)"
+                        className="flex-1 min-w-[180px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeUpdateLocation(index)}
+                        disabled={updateLocations.length <= 1}
+                        className="p-2 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                        aria-label="Remove location"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addUpdateLocation}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 dark:text-indigo-400 hover:bg-blue-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> Add location
+                  </button>
+                </div>
               )}
             </div>
           </div>

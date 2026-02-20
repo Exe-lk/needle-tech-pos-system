@@ -4,7 +4,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
-import CreateForm, { FormField } from '@/src/components/form-popup/create';
+import CreateForm, { FormField, CreateFormRef } from '@/src/components/form-popup/create';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 import { X, Plus, Trash2, ChevronDown, ChevronRight, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
@@ -13,6 +13,11 @@ import { authFetch } from '@/lib/auth-client';
 
 const API_BASE_URL = '/api/v1';
 
+interface CustomerLocationOption {
+    id: string;
+    name: string;
+    addressLine1?: string | null;
+}
 interface ApiCustomer {
     id: string;
     code: string;
@@ -22,6 +27,7 @@ interface ApiCustomer {
     phones?: string[];
     emails?: string[];
     status?: string;
+    locations?: CustomerLocationOption[];
 }
 
 type CustomerType = 'Company' | 'Individual';
@@ -502,9 +508,13 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     // Create form state
     const [selectedCustomerId, setSelectedCustomerId] = useState('');
+    const [selectedCustomerLocationId, setSelectedCustomerLocationId] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [isOpenEnded, setIsOpenEnded] = useState(false);
     const [activeCreateTab, setActiveCreateTab] = useState<'company' | 'individual'>('company');
+    const [createLocations, setCreateLocations] = useState<{ name: string; address?: string }[]>([{ name: '', address: '' }]);
+    const createFormRef = useRef<CreateFormRef>(null);
     const [machines, setMachines] = useState<MachineRequestItem[]>([
         { id: '1', brand: '', model: '', type: '', quantity: 1, availableStock: 0, unitPrice: 0, totalPrice: 0, monthlyRentalFee: 0 },
     ]);
@@ -702,6 +712,14 @@ const CreatePurchaseRequestPage: React.FC = () => {
             }));
     }, [customers]);
 
+    // Location options for selected customer (from API response which includes locations)
+    const locationOptions = useMemo(() => {
+        if (!selectedCustomerId) return [];
+        const customer = customers.find((c) => c.id === selectedCustomerId);
+        const locs = customer?.locations ?? [];
+        return locs.map((loc) => ({ value: loc.id, label: loc.name || loc.id }));
+    }, [selectedCustomerId, customers]);
+
     // Prepare brand options (from inventory API when loaded)
     const brandOptions = useMemo(() => {
         return getAvailableBrands().map((brand) => ({
@@ -755,6 +773,53 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleCloseRegisterModal = () => {
         setIsRegisterModalOpen(false);
         setActiveCreateTab('company');
+        setCreateLocations([{ name: '', address: '' }]);
+    };
+
+    const parseAddress = (address: string) => {
+        const parts = (address || '').split(',').map((p: string) => p.trim());
+        return {
+            line1: parts[0] || '',
+            line2: parts[1] || '',
+            city: parts[2] || '',
+            region: parts[3] || '',
+            postalCode: parts[4] || '',
+            country: parts[5] || 'Sri Lanka',
+        };
+    };
+
+    const buildLocationsPayload = (items: { name: string; address?: string }[]) => {
+        return items
+            .filter((loc) => (loc.name || '').trim())
+            .map((loc, index) => {
+                const parsed = parseAddress(loc.address || '');
+                return {
+                    name: (loc.name || '').trim(),
+                    addressLine1: parsed.line1 || undefined,
+                    addressLine2: parsed.line2 || undefined,
+                    city: parsed.city || undefined,
+                    region: parsed.region || undefined,
+                    postalCode: parsed.postalCode || undefined,
+                    country: parsed.country || undefined,
+                    isDefault: index === 0,
+                };
+            });
+    };
+
+    const generateCustomerCode = async (): Promise<string> => {
+        const prefix = 'CUST';
+        const timestamp = Date.now().toString().slice(-6);
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        return `${prefix}-${timestamp}${random}`;
+    };
+
+    const addCreateLocation = () => setCreateLocations((prev) => [...prev, { name: '', address: '' }]);
+    const removeCreateLocation = (index: number) => {
+        if (createLocations.length <= 1) return;
+        setCreateLocations((prev) => prev.filter((_, i) => i !== index));
+    };
+    const updateCreateLocation = (index: number, field: 'name' | 'address', value: string) => {
+        setCreateLocations((prev) => prev.map((loc, i) => (i === index ? { ...loc, [field]: value } : loc)));
     };
 
     const handleAddMachine = () => {
@@ -805,8 +870,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
         if (!selectedCustomerId) errors.selectedCustomerId = 'Customer is required';
         if (!startDate.trim()) errors.startDate = 'Start date is required';
-        if (!endDate.trim()) errors.endDate = 'End date is required';
-        if (startDate && endDate && endDate < startDate) {
+        if (!isOpenEnded && !endDate.trim()) errors.endDate = 'End date is required (or check Open-ended)';
+        if (startDate && endDate && !isOpenEnded && endDate < startDate) {
             errors.endDate = 'End date must be on or after start date';
         }
 
@@ -863,7 +928,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 customerName,
                 requestDate: new Date().toISOString().split('T')[0],
                 startDate: startDate || undefined,
-                endDate: endDate || undefined,
+                endDate: isOpenEnded ? undefined : (endDate || undefined),
+                customerLocationId: selectedCustomerLocationId || undefined,
                 machines: machinesWithStatus,
                 totalAmount: pricing,
             };
@@ -889,13 +955,13 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }
     };
 
-    // Form fields for Business
+    // Form fields for Business (aligned with customers page)
     const companyFields: FormField[] = [
         {
             name: 'companyName',
-            label: 'Company Name',
+            label: 'Business Name',
             type: 'text',
-            placeholder: 'Enter company name',
+            placeholder: 'Enter business name',
             required: true,
         },
         {
@@ -903,7 +969,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             label: 'VAT / TIN Number',
             type: 'text',
             placeholder: 'Enter VAT or TIN number',
-            required: true,
+            required: false,
             validation: validateVATTIN,
         },
         {
@@ -937,9 +1003,20 @@ const CreatePurchaseRequestPage: React.FC = () => {
             required: true,
             validation: validateEmail,
         },
+        {
+            name: 'status',
+            label: 'Status',
+            type: 'select',
+            placeholder: 'Select status',
+            required: true,
+            options: [
+                { label: 'Active', value: 'Active' },
+                { label: 'Inactive', value: 'Inactive' },
+            ],
+        },
     ];
 
-    // Form fields for Customer
+    // Form fields for Customer (aligned with customers page)
     const individualFields: FormField[] = [
         {
             name: 'fullName',
@@ -953,7 +1030,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             label: 'NIC Number',
             type: 'text',
             placeholder: 'Enter NIC number',
-            required: true,
+            required: false,
             validation: validateNICNumber,
         },
         {
@@ -980,12 +1057,25 @@ const CreatePurchaseRequestPage: React.FC = () => {
             required: true,
             validation: validateEmail,
         },
+        {
+            name: 'status',
+            label: 'Status',
+            type: 'select',
+            placeholder: 'Select status',
+            required: true,
+            options: [
+                { label: 'Active', value: 'Active' },
+                { label: 'Inactive', value: 'Inactive' },
+            ],
+        },
     ];
 
     const handleCompanySubmit = async (data: Record<string, any>) => {
         setIsSubmitting(true);
         try {
-            const code = (data.vatTin || (data.companyName || '').replace(/\s+/g, '').substring(0, 8)).toUpperCase() + '-' + Date.now().toString(36);
+            const addressParts = parseAddress(data.businessAddress || '');
+            const code = await generateCustomerCode();
+            const statusApi = (data.status === 'Active' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE';
             const payload = {
                 code,
                 type: 'GARMENT_FACTORY',
@@ -993,6 +1083,15 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 contactPerson: data.contactPerson || '',
                 phones: [data.phone].filter(Boolean),
                 emails: [data.email].filter(Boolean),
+                billingAddressLine1: addressParts.line1 || undefined,
+                billingAddressLine2: addressParts.line2 || undefined,
+                billingCity: addressParts.city || undefined,
+                billingRegion: addressParts.region || undefined,
+                billingPostalCode: addressParts.postalCode || undefined,
+                billingCountry: addressParts.country || undefined,
+                vatRegistrationNumber: data.vatTin || null,
+                status: statusApi,
+                locations: buildLocationsPayload(createLocations),
             };
             const response = await authFetch(`${API_BASE_URL}/customers`, {
                 method: 'POST',
@@ -1021,7 +1120,9 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleIndividualSubmit = async (data: Record<string, any>) => {
         setIsSubmitting(true);
         try {
-            const code = (data.nicNumber || (data.fullName || '').replace(/\s+/g, '').substring(0, 8)).toUpperCase() + '-' + Date.now().toString(36);
+            const addressParts = parseAddress(data.address || '');
+            const code = await generateCustomerCode();
+            const statusApi = (data.status === 'Active' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE';
             const payload = {
                 code,
                 type: 'INDIVIDUAL',
@@ -1029,6 +1130,14 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 contactPerson: data.fullName || '',
                 phones: [data.phone].filter(Boolean),
                 emails: [data.email].filter(Boolean),
+                billingAddressLine1: addressParts.line1 || undefined,
+                billingAddressLine2: addressParts.line2 || undefined,
+                billingCity: addressParts.city || undefined,
+                billingRegion: addressParts.region || undefined,
+                billingPostalCode: addressParts.postalCode || undefined,
+                billingCountry: addressParts.country || undefined,
+                status: statusApi,
+                locations: buildLocationsPayload(createLocations),
             };
             const response = await authFetch(`${API_BASE_URL}/customers`, {
                 method: 'POST',
@@ -1144,7 +1253,10 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     </label>
                                     <SearchableSelect
                                         value={selectedCustomerId}
-                                        onChange={setSelectedCustomerId}
+                                        onChange={(val) => {
+                                            setSelectedCustomerId(val);
+                                            setSelectedCustomerLocationId('');
+                                        }}
                                         options={customerOptions}
                                         placeholder={customersLoading ? 'Loading customers...' : 'Select Customer'}
                                         disabled={customersLoading}
@@ -1152,7 +1264,23 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     />
                                 </div>
 
-                                {/* Renting period – Start Date & End Date */}
+                                {/* Customer Location (optional) */}
+                                {selectedCustomerId && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Location (optional)
+                                        </label>
+                                        <SearchableSelect
+                                            value={selectedCustomerLocationId}
+                                            onChange={setSelectedCustomerLocationId}
+                                            options={locationOptions}
+                                            placeholder={locationOptions.length === 0 ? 'No locations defined' : 'Select location'}
+                                            disabled={locationOptions.length === 0}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Renting period – Start Date & End Date (end date optional for open-ended) */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1172,20 +1300,34 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                            End Date <span className="text-red-500">*</span>
+                                            End Date {!isOpenEnded && <span className="text-red-500">*</span>}
+                                            {isOpenEnded && <span className="text-gray-500 dark:text-gray-400 font-normal">(Open-ended)</span>}
                                         </label>
                                         <input
                                             type="date"
                                             value={endDate}
                                             onChange={(e) => setEndDate(e.target.value)}
                                             min={startDate || undefined}
-                                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${formErrors.endDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'}`}
+                                            disabled={isOpenEnded}
+                                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${formErrors.endDate ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'} ${isOpenEnded ? 'opacity-60 cursor-not-allowed' : ''}`}
                                         />
                                         {formErrors.endDate && (
                                             <p className="mt-1 text-sm text-red-600 dark:text-red-400">
                                                 {formErrors.endDate}
                                             </p>
                                         )}
+                                        <label className="mt-2 flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={isOpenEnded}
+                                                onChange={(e) => {
+                                                    setIsOpenEnded(e.target.checked);
+                                                    if (e.target.checked) setEndDate('');
+                                                }}
+                                                className="w-4 h-4 rounded border-gray-300 dark:border-slate-500 text-blue-600 dark:text-indigo-500 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                            />
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">Open-ended (no end date)</span>
+                                        </label>
                                     </div>
                                 </div>
 
@@ -1546,33 +1688,98 @@ const CreatePurchaseRequestPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Modal Content - Scrollable (no extra wrapper, same as customer page) */}
+                        {/* Modal Content - Scrollable (same structure as customers page Create Customer popup) */}
                         <div className="flex-1 overflow-y-auto p-6">
                             {activeCreateTab === 'company' ? (
                                 <CreateForm
+                                    ref={createFormRef}
                                     title="Business Details"
                                     fields={companyFields}
                                     onSubmit={handleCompanySubmit}
                                     onClear={handleClear}
-                                    submitButtonLabel="Register Business"
+                                    submitButtonLabel="Save"
                                     clearButtonLabel="Clear"
                                     loading={isSubmitting}
                                     enableDynamicSpecs={false}
+                                    hideFooterActions
+                                    formId="register-customer-form-company"
                                     className="shadow-none border-0 p-0"
                                 />
                             ) : (
                                 <CreateForm
+                                    ref={createFormRef}
                                     title="Customer Details"
                                     fields={individualFields}
                                     onSubmit={handleIndividualSubmit}
                                     onClear={handleClear}
-                                    submitButtonLabel="Register Customer"
+                                    submitButtonLabel="Save"
                                     clearButtonLabel="Clear"
                                     loading={isSubmitting}
                                     enableDynamicSpecs={false}
+                                    hideFooterActions
+                                    formId="register-customer-form-individual"
                                     className="shadow-none border-0 p-0"
                                 />
                             )}
+                            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-slate-700">
+                                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Locations (optional)</h3>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Add one or more locations for this customer (e.g. delivery or site addresses).</p>
+                                {createLocations.map((loc, index) => (
+                                    <div key={index} className="flex flex-wrap items-start gap-2 mb-3">
+                                        <input
+                                            type="text"
+                                            value={loc.name}
+                                            onChange={(e) => updateCreateLocation(index, 'name', e.target.value)}
+                                            placeholder="Location name (e.g. Main Factory)"
+                                            className="flex-1 min-w-[140px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={loc.address || ''}
+                                            onChange={(e) => updateCreateLocation(index, 'address', e.target.value)}
+                                            placeholder="Address (optional)"
+                                            className="flex-1 min-w-[180px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => removeCreateLocation(index)}
+                                            disabled={createLocations.length <= 1}
+                                            className="p-2 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                            aria-label="Remove location"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={addCreateLocation}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 dark:text-indigo-400 hover:bg-blue-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                                >
+                                    <Plus className="w-4 h-4" /> Add location
+                                </button>
+                                <div className="flex justify-end space-x-4 mt-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => createFormRef.current?.clear()}
+                                        className="px-6 py-3 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-slate-600 transition-colors duration-200 font-medium"
+                                        disabled={isSubmitting}
+                                    >
+                                        Clear
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        form={activeCreateTab === 'company' ? 'register-customer-form-company' : 'register-customer-form-individual'}
+                                        className="px-6 py-3 bg-[#4154F1] dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting && (
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                                        )}
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

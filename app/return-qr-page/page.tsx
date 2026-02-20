@@ -47,7 +47,7 @@ interface RentalAgreement {
   customerPhone: string;
   customerEmail: string;
   rentalStartDate: string;
-  rentalEndDate: string;
+  rentalEndDate: string | null; // null = open-ended
   rentalPeriod: string;
   monthlyRate: number;
   totalAmount: number;
@@ -55,7 +55,7 @@ interface RentalAgreement {
   outstandingAmount: number;
   securityDeposit: number;
   dispatchedDate: string;
-  expectedReturnDate: string;
+  expectedReturnDate: string | null; // null when open-ended
   machines: RentalAgreementMachine[];
 }
 
@@ -134,7 +134,7 @@ interface RentalByNumberApiData {
   customerPhone?: string;
   customerEmail?: string;
   rentalStartDate: string;
-  rentalEndDate: string;
+  rentalEndDate: string | null;
   rentalPeriod: string;
   monthlyRate: number;
   totalAmount: number;
@@ -142,7 +142,7 @@ interface RentalByNumberApiData {
   outstandingAmount: number;
   securityDeposit: number;
   dispatchedDate: string;
-  expectedReturnDate: string;
+  expectedReturnDate: string | null;
   machines: Array<{
     id: string;
     model: string;
@@ -207,15 +207,15 @@ function mapRentalByNumberToAgreement(data: RentalByNumberApiData): RentalAgreem
     customerPhone: data.customerPhone ?? '',
     customerEmail: data.customerEmail ?? '',
     rentalStartDate: data.rentalStartDate ?? '',
-    rentalEndDate: data.rentalEndDate ?? '',
-    rentalPeriod: data.rentalPeriod ?? '',
+    rentalEndDate: data.rentalEndDate ?? null,
+    rentalPeriod: data.rentalPeriod ?? 'Open-ended',
     monthlyRate: Number(data.monthlyRate) || 0,
     totalAmount: Number(data.totalAmount) || 0,
     paidAmount: Number(data.paidAmount) || 0,
     outstandingAmount: Number(data.outstandingAmount) || 0,
     securityDeposit: Number(data.securityDeposit) || 0,
     dispatchedDate: data.dispatchedDate ?? '',
-    expectedReturnDate: data.expectedReturnDate ?? '',
+    expectedReturnDate: data.expectedReturnDate ?? null,
     machines: (data.machines ?? []).map((m) => ({
       id: String(m.id),
       model: m.model ?? '',
@@ -1091,7 +1091,7 @@ const ReturnQRPage: React.FC = () => {
               </p>
               <p className="text-xs text-gray-500 dark:text-slate-400">{selectedAgreement.customerAddress}</p>
               <p className="text-xs text-gray-500 dark:text-slate-400">
-                Period: {selectedAgreement.rentalStartDate} → {selectedAgreement.rentalEndDate}
+                Period: {selectedAgreement.rentalStartDate ? new Date(selectedAgreement.rentalStartDate).toLocaleDateString('en-LK') : '—'} → {selectedAgreement.rentalEndDate ? new Date(selectedAgreement.rentalEndDate).toLocaleDateString('en-LK') : 'Open-ended'}
               </p>
               <p className="text-xs text-gray-500 dark:text-slate-400">
                 Machines: {machines.length} · Verified: {scannedCount}/{totalMachines}

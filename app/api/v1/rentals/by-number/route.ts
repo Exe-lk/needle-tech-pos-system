@@ -45,8 +45,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
             },
           },
         },
-      },
-    });
+      } as any,
+    }) as any;
     
     if (!rental) {
       return notFoundResponse('Rental agreement not found');
@@ -77,10 +77,18 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       description: `${rm.machine.brand?.name || ''} ${rm.machine.model?.name || ''} - ${rm.machine.type?.name || ''}`.trim(),
     }));
     
-    // Get expected machine categories from purchase order if available
+    // Get expected machine categories: from requestedMachineLines (agreements from PO without assigned machines) or from purchase order
     let expectedMachineCategories: any[] = [];
-    if (rental.purchaseOrder && Array.isArray(rental.purchaseOrder.machines)) {
-      // Group by brand/model/type and sum quantities
+    const requestedLines = rental.requestedMachineLines as { id?: string; brand?: string; model?: string; type?: string; quantity?: number }[] | null;
+    if (Array.isArray(requestedLines) && requestedLines.length > 0) {
+      expectedMachineCategories = requestedLines.map((m, i) => ({
+        id: String((m as any).id ?? i),
+        brand: m.brand || '',
+        model: m.model || '',
+        type: m.type || '',
+        quantity: typeof m.quantity === 'number' ? m.quantity : 1,
+      }));
+    } else if (rental.purchaseOrder && Array.isArray(rental.purchaseOrder.machines)) {
       const categoryMap = new Map<string, any>();
       rental.purchaseOrder.machines.forEach((m: any) => {
         const key = `${m.brand || ''}_${m.model || ''}_${m.type || ''}`;
@@ -98,11 +106,13 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       });
       expectedMachineCategories = Array.from(categoryMap.values());
     }
-    
+
     const transformed = {
       id: rental.agreementNumber,
+      rentalId: rental.id,
       agreementNo: rental.agreementNumber,
       status: rental.status,
+      customerId: rental.customerId,
       customerName: rental.customer.name,
       customerAddress: [
         rental.customer.billingAddressLine1,
