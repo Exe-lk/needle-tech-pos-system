@@ -5539,6 +5539,11 @@ swagger-ui-react@^5.31.0:
     xml-but-prettier "^1.0.1"
     zenscroll "^4.0.2"
 
+sweetalert2@^11.26.20:
+  version "11.26.20"
+  resolved "https://registry.yarnpkg.com/sweetalert2/-/sweetalert2-11.26.20.tgz#947a53ccbaaac1c010517098a01692e000c5f770"
+  integrity sha512-mG3guPRzmpqGufTQ05Kr7WQIe1xfBEB9JwPIJbR2plL0ezVzS3qmazuzse0J8+/YYGCGrAL4Us2Sm5VCgHyuRg==
+
 tailwindcss@4.1.18, tailwindcss@^4:
   version "4.1.18"
   resolved "https://registry.yarnpkg.com/tailwindcss/-/tailwindcss-4.1.18.tgz#f488ba47853abdb5354daf9679d3e7791fc4f4e3"

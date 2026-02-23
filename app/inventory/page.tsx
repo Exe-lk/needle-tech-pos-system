@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Script from 'next/script';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
@@ -147,15 +148,7 @@ const InventoryManagementPage: React.FC = () => {
     fetchMachineUnits();
   }, [fetchMachineUnits]);
 
-  // BrowserPrint (Zebra): detect SDK and init default/local printers
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const wp = (window as any).BrowserPrint;
-    if (wp) {
-      setIsBrowserPrintLoaded(true);
-    }
-  }, []);
-
+  // BrowserPrint (Zebra): init default/local printers after SDK loads (Script onLoad sets isBrowserPrintLoaded)
   useEffect(() => {
     if (!isBrowserPrintLoaded || typeof window === 'undefined') return;
     const wp = (window as any).BrowserPrint;
@@ -786,6 +779,11 @@ const InventoryManagementPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+      <Script
+        src="/browser-print/BrowserPrint-3.1.250.min.js"
+        strategy="afterInteractive"
+        onLoad={() => setIsBrowserPrintLoaded(true)}
+      />
       {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
 
@@ -1019,27 +1017,39 @@ const InventoryManagementPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              {/* <p className="text-sm text-gray-600 dark:text-gray-400">
                 QR encodes serial and box number for gatepass/returns. Print sends ZPL to Zebra or opens preview.
-              </p>
-              {isBrowserPrintLoaded && devices.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              </p> */}
+              {isBrowserPrintLoaded && (
+                <div className="rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800/50 p-4 space-y-2">
+                  <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">
                     Select Printer
                   </label>
                   <select
                     value={selectedDevice?.uid ?? ''}
-                    onChange={(e) =>
-                      setSelectedDevice(devices.find((d: any) => d.uid === e.target.value) ?? null)
-                    }
-                    className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white px-3 py-2 text-sm"
+                    onChange={(e) => {
+                      const uid = e.target.value;
+                      if (uid) setSelectedDevice(devices.find((d: any) => d.uid === uid) ?? null);
+                    }}
+                    className="w-full rounded-lg border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white px-3 py-2.5 text-sm font-medium focus:border-blue-500 dark:focus:border-indigo-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-indigo-500/20 outline-none"
                   >
-                    {devices.map((d: any, i: number) => (
-                      <option key={d.uid ?? i} value={d.uid}>
-                        {d.manufacturer || d.model || d.uid || `Printer ${i + 1}`}
+                    {devices.length > 0 ? (
+                      devices.map((d: any, i: number) => (
+                        <option key={d.uid ?? i} value={d.uid}>
+                          {[d.name, d.manufacturer, d.model].filter(Boolean).join(' — ') || d.uid || `Printer ${i + 1}`}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="" disabled>
+                        No printers available — connect a printer or start Browser Print service
                       </option>
-                    ))}
+                    )}
                   </select>
+                  {devices.length === 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Ensure the Browser Print service is running on this machine. Refresh after connecting a printer.
+                    </p>
+                  )}
                 </div>
               )}
               <button

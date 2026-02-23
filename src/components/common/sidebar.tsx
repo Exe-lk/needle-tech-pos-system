@@ -23,6 +23,7 @@ import {
     ChevronUp,
     ShoppingCart,
     Wrench,
+    QrCode,
 } from 'lucide-react';
 import { AUTH_ACCESS_TOKEN_KEY } from '@/lib/auth-constants';
 import { clearAuth, getAccessToken } from '@/lib/auth-client';
@@ -130,6 +131,11 @@ const Sidebar: React.FC<SidebarProps> = ({
             icon: Shield,
             label: 'User Management',
             href: '/users'
+        },
+        {
+            icon: QrCode,
+            label: 'Generate QR Code',
+            href: '/qr-generate',
         },
     ];
 
