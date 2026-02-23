@@ -22,6 +22,7 @@ export const GET = withAuthAndPermission(['customers:view', 'management:*', '*']
     
     const customer = await prisma.customer.findUnique({
       where: { id },
+      include: { locations: true },
     });
     
     if (!customer) {
@@ -59,19 +60,46 @@ export const PUT = withAuthAndPermission(['customers:update', 'management:*', '*
     }
     
     const updateData: any = {
-      ...(body.name && { name: body.name }),
+      ...(body.name != null && { name: body.name }),
       ...(body.type && { type: body.type }),
-      ...(body.contactPerson && { contactPerson: body.contactPerson }),
+      ...(body.contactPerson != null && { contactPerson: body.contactPerson }),
       ...(body.phones && { phones: body.phones }),
       ...(body.emails && { emails: body.emails }),
-      ...(body.billingAddress && { billingAddress: body.billingAddress }),
-      ...(body.shippingAddress && { shippingAddress: body.shippingAddress }),
+      ...(body.billingAddressLine1 != null && { billingAddressLine1: body.billingAddressLine1 }),
+      ...(body.billingAddressLine2 != null && { billingAddressLine2: body.billingAddressLine2 }),
+      ...(body.billingCity != null && { billingCity: body.billingCity }),
+      ...(body.billingRegion != null && { billingRegion: body.billingRegion }),
+      ...(body.billingPostalCode != null && { billingPostalCode: body.billingPostalCode }),
+      ...(body.billingCountry != null && { billingCountry: body.billingCountry }),
+      ...(body.shippingAddressLine1 != null && { shippingAddressLine1: body.shippingAddressLine1 }),
+      ...(body.shippingAddressLine2 != null && { shippingAddressLine2: body.shippingAddressLine2 }),
+      ...(body.shippingCity != null && { shippingCity: body.shippingCity }),
+      ...(body.shippingRegion != null && { shippingRegion: body.shippingRegion }),
+      ...(body.shippingPostalCode != null && { shippingPostalCode: body.shippingPostalCode }),
+      ...(body.shippingCountry != null && { shippingCountry: body.shippingCountry }),
+      ...(body.vatRegistrationNumber != null && { vatRegistrationNumber: body.vatRegistrationNumber }),
       ...(body.status && { status: body.status }),
     };
-    
+
+    if (body.locations && Array.isArray(body.locations)) {
+      await prisma.customerLocation.deleteMany({ where: { customerId: id } });
+      const validLocations = body.locations.filter((loc: any) => loc && (loc.name || loc.address));
+      if (validLocations.length > 0) {
+        await prisma.customerLocation.createMany({
+          data: validLocations.map((loc: any, index: number) => ({
+            customerId: id,
+            name: (loc.name && String(loc.name).trim()) || `Location ${index + 1}`,
+            addressLine1: (loc.address && String(loc.address).trim()) || null,
+            isDefault: index === 0,
+          })),
+        });
+      }
+    }
+
     const updatedCustomer = await prisma.customer.update({
       where: { id },
       data: updateData,
+      include: { locations: true },
     });
     
     return successResponse(updatedCustomer, 'Customer updated successfully');

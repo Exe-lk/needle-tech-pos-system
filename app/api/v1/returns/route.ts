@@ -141,6 +141,9 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         rentalId: rentalId ? ['Rental not found'] : [],
       });
     }
+
+    // Set of machine IDs that belong to this rental (must be returning only these)
+    const rentalMachineIds = new Set((rental.machines as { machineId: string }[]).map((m) => m.machineId));
     
     if (!machines || !Array.isArray(machines) || machines.length === 0) {
       return validationErrorResponse('Missing required fields', {
@@ -179,6 +182,20 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           machines: [`Machine with serial number ${serialNumber} not found`],
         });
       }
+
+      // Ensure machine belongs to this rental
+      if (!rentalMachineIds.has(machine.id)) {
+        return validationErrorResponse('Machine not in this rental', {
+          machines: [`Machine ${serialNumber} is not assigned to this rental agreement.`],
+        });
+      }
+
+      // Ensure machine is currently RENTED (dispatched via gate pass)
+      if (machine.status !== 'RENTED') {
+        return validationErrorResponse('Machine not rented', {
+          machines: [`Machine ${serialNumber} is not in RENTED status (may already be returned or not yet dispatched).`],
+        });
+      }
       
       // Validate damage/missing requirements
       if ((returnType === 'Damage' || returnType === 'Missing') && (!damageNote || photosCount === 0)) {
@@ -203,6 +220,10 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         damageNote: (returnType === 'Damage' || returnType === 'Missing') ? damageNote : null,
         photos: [], // Photos would be uploaded separately and URLs stored here
         triageCategory,
+        brand: machine.brand?.name ?? 'Unknown',
+        model: machine.model?.name ?? 'Unknown',
+        machineType: machine.type?.name ?? null,
+        serialNumber: machine.serialNumber,
       });
       
       // Create damage report if needed
@@ -257,16 +278,53 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           },
         });
       }
+
+      // Set all returned machines to AVAILABLE (inventory back in stock)
+      const returnedMachineIds = returnMachines.map((rm) => rm.machineId);
+      if (returnedMachineIds.length > 0) {
+        await tx.machine.updateMany({
+          where: { id: { in: returnedMachineIds } },
+          data: { status: 'AVAILABLE' },
+        });
+      }
+
+      // Create bincard RETURN_IN entries for each returned machine (inventory update)
+      const performedBy = auth?.fullName ?? auth?.username ?? 'System';
+      for (const rm of returnMachines) {
+        const brand = rm.brand ?? 'Unknown';
+        const model = rm.model ?? 'Unknown';
+        const machineType = rm.machineType ?? null;
+        const lastEntry = await (tx as any).bincardEntry.findFirst({
+          where: { brand, model },
+          orderBy: { date: 'desc' },
+          select: { balance: true },
+        });
+        const previousBalance = lastEntry?.balance ?? 0;
+        const newBalance = previousBalance + 1;
+        await (tx as any).bincardEntry.create({
+          data: {
+            date: returnDate,
+            transactionType: 'RETURN_IN',
+            brand,
+            model,
+            machineType,
+            reference: returnNumber,
+            quantityIn: 1,
+            quantityOut: 0,
+            balance: newBalance,
+            performedBy,
+            notes: `Return ${returnNumber} – machine ${rm.serialNumber} returned`,
+          },
+        });
+      }
       
-      // Create damage reports if needed
+      // Create damage reports (one per damaged/missing machine); link first to Return
       let damageReportId: string | null = null;
       if (damageReports.length > 0) {
-        const damageReport = await tx.damageReport.create({
-          data: damageReports[0], // Create one damage report for the return
-        });
-        damageReportId = damageReport.id;
-        
-        // Update return with damage report ID
+        for (const dr of damageReports) {
+          const report = await tx.damageReport.create({ data: dr });
+          if (!damageReportId) damageReportId = report.id;
+        }
         await tx.return.update({
           where: { id: returnRecord.id },
           data: { damageReportId },

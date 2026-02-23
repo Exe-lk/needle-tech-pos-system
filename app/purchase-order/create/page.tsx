@@ -22,6 +22,14 @@ interface ApiCustomer {
     phones?: string[];
     emails?: string[];
     status?: string;
+    locations?: ApiCustomerLocation[];
+}
+
+interface ApiCustomerLocation {
+    id: string;
+    name: string;
+    addressLine1?: string | null;
+    isDefault?: boolean;
 }
 
 type CustomerType = 'Company' | 'Individual';
@@ -502,10 +510,15 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     // Create form state
     const [selectedCustomerId, setSelectedCustomerId] = useState('');
+    const [selectedCustomerLocationId, setSelectedCustomerLocationId] = useState('');
+    const [customerLocations, setCustomerLocations] = useState<ApiCustomerLocation[]>([]);
+    const [locationsLoading, setLocationsLoading] = useState(false);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [activeCreateTab, setActiveCreateTab] = useState<'company' | 'individual'>('company');
     const createFormRef = useRef<CreateFormRef>(null);
+    // Locations (optional) for Business in Register New Customer modal – same as customers page
+    const [businessLocations, setBusinessLocations] = useState<{ name: string; address: string }[]>([{ name: '', address: '' }]);
     const [machines, setMachines] = useState<MachineRequestItem[]>([
         { id: '1', brand: '', model: '', type: '', quantity: 1, availableStock: 0, unitPrice: 0, totalPrice: 0, monthlyRentalFee: 0 },
     ]);
@@ -606,6 +619,46 @@ const CreatePurchaseRequestPage: React.FC = () => {
         fetchInventory();
         fetchMasterData();
     }, [fetchCustomers, fetchInventory, fetchMasterData]);
+
+    // Selected customer from API or mock (for type check)
+    const selectedCustomer = useMemo(() => {
+        if (!selectedCustomerId) return null;
+        const fromApi = customers.find((c) => c.id === selectedCustomerId);
+        if (fromApi) return { ...fromApi, type: fromApi.type as string };
+        const fromMock = mockCustomers.find((c) => c.id.toString() === selectedCustomerId);
+        if (fromMock) return { id: fromMock.id.toString(), type: fromMock.type === 'Company' ? 'GARMENT_FACTORY' : 'INDIVIDUAL', name: fromMock.name };
+        return null;
+    }, [selectedCustomerId, customers]);
+
+    const isBusinessCustomer = selectedCustomer?.type === 'GARMENT_FACTORY';
+
+    // When customer changes: clear location; if business, fetch locations for that customer
+    useEffect(() => {
+        setSelectedCustomerLocationId('');
+        setCustomerLocations([]);
+        if (!selectedCustomerId || !isBusinessCustomer) {
+            setLocationsLoading(false);
+            return;
+        }
+        let cancelled = false;
+        setLocationsLoading(true);
+        authFetch(`${API_BASE_URL}/customers/${selectedCustomerId}`, { method: 'GET', credentials: 'include' })
+            .then((res) => res.json())
+            .then((json) => {
+                if (cancelled) return;
+                const locs = (json?.data?.locations ?? []).filter((l: any) => l && l.id && l.name);
+                setCustomerLocations(locs);
+                const defaultLoc = locs.find((l: ApiCustomerLocation) => l.isDefault) || locs[0];
+                if (defaultLoc) setSelectedCustomerLocationId(defaultLoc.id);
+            })
+            .catch(() => {
+                if (!cancelled) setCustomerLocations([]);
+            })
+            .finally(() => {
+                if (!cancelled) setLocationsLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [selectedCustomerId, isBusinessCustomer]);
 
     // Get outstanding alerts for selected customer (mock data; when using API customers, match by id string or skip)
     const customerOutstandingAlerts = useMemo(() => {
@@ -756,6 +809,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
     const handleCloseRegisterModal = () => {
         setIsRegisterModalOpen(false);
         setActiveCreateTab('company');
+        setBusinessLocations([{ name: '', address: '' }]);
     };
 
     const parseAddress = (address: string) => {
@@ -881,6 +935,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             const payload = {
                 customerId: selectedCustomerId,
                 customerName,
+                ...(selectedCustomerLocationId && { customerLocationId: selectedCustomerLocationId }),
                 requestDate: new Date().toISOString().split('T')[0],
                 startDate: startDate || undefined,
                 endDate: endDate || undefined,
@@ -1030,6 +1085,9 @@ const CreatePurchaseRequestPage: React.FC = () => {
             const addressParts = parseAddress(data.businessAddress || '');
             const code = await generateCustomerCode();
             const statusApi = (data.status === 'Active' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE';
+            const locationsPayload = businessLocations
+                .filter((loc) => (loc.name && loc.name.trim()) || (loc.address && loc.address.trim()))
+                .map((loc) => ({ name: (loc.name || '').trim(), address: (loc.address || '').trim() }));
             const payload = {
                 code,
                 type: 'GARMENT_FACTORY',
@@ -1045,6 +1103,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 billingCountry: addressParts.country || undefined,
                 vatRegistrationNumber: data.vatTin || null,
                 status: statusApi,
+                ...(locationsPayload.length > 0 && { locations: locationsPayload }),
             };
             const response = await authFetch(`${API_BASE_URL}/customers`, {
                 method: 'POST',
@@ -1116,7 +1175,9 @@ const CreatePurchaseRequestPage: React.FC = () => {
     };
 
     const handleClear = () => {
-        console.log('Form cleared');
+        if (activeCreateTab === 'company') {
+            setBusinessLocations([{ name: '', address: '' }]);
+        }
     };
 
     // Get severity styling
@@ -1212,6 +1273,28 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                         error={formErrors.selectedCustomerId}
                                     />
                                 </div>
+
+                                {/* Location (only for business customers) – hidden for individuals */}
+                                {isBusinessCustomer && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Delivery / Location
+                                        </label>
+                                        {locationsLoading ? (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 py-2">Loading locations...</p>
+                                        ) : customerLocations.length > 0 ? (
+                                            <SearchableSelect
+                                                value={selectedCustomerLocationId}
+                                                onChange={setSelectedCustomerLocationId}
+                                                options={customerLocations.map((loc) => ({ value: loc.id, label: loc.name }))}
+                                                placeholder="Select location (optional)"
+                                                error={formErrors.selectedCustomerLocationId}
+                                            />
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 py-2">No locations added for this business. You can add locations in the customer profile.</p>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Renting period – Start Date & End Date */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1610,20 +1693,97 @@ const CreatePurchaseRequestPage: React.FC = () => {
                         {/* Modal Content - Scrollable (same structure as customers page Create Customer popup) */}
                         <div className="flex-1 overflow-y-auto p-6">
                             {activeCreateTab === 'company' ? (
-                                <CreateForm
-                                    ref={createFormRef}
-                                    title="Business Details"
-                                    fields={companyFields}
-                                    onSubmit={handleCompanySubmit}
-                                    onClear={handleClear}
-                                    submitButtonLabel="Save"
-                                    clearButtonLabel="Clear"
-                                    loading={isSubmitting}
-                                    enableDynamicSpecs={false}
-                                    hideFooterActions
-                                    formId="register-customer-form-company"
-                                    className="shadow-none border-0 p-0"
-                                />
+                                <>
+                                    <CreateForm
+                                        ref={createFormRef}
+                                        title="Business Details"
+                                        fields={companyFields}
+                                        onSubmit={handleCompanySubmit}
+                                        onClear={handleClear}
+                                        submitButtonLabel="Save"
+                                        clearButtonLabel="Clear"
+                                        loading={isSubmitting}
+                                        enableDynamicSpecs={false}
+                                        hideFooterActions
+                                        formId="register-customer-form-company"
+                                        className="shadow-none border-0 p-0"
+                                    />
+                                    {/* Locations (optional) – same as customer page create form */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                Locations (optional)
+                                            </label>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                Add one or more locations for this customer (e.g. delivery or site addresses).
+                                            </p>
+                                        </div>
+                                        {businessLocations.map((loc, index) => (
+                                            <React.Fragment key={index}>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Location name
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. Main Factory"
+                                                        value={loc.name}
+                                                        onChange={(e) =>
+                                                            setBusinessLocations((prev) => {
+                                                                const next = [...prev];
+                                                                next[index] = { ...next[index], name: e.target.value };
+                                                                return next;
+                                                            })
+                                                        }
+                                                        className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                                                    />
+                                                </div>
+                                                <div className="flex gap-2 items-end">
+                                                    <div className="flex-1 min-w-0">
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                            Address (optional)
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Address"
+                                                            value={loc.address}
+                                                            onChange={(e) =>
+                                                                setBusinessLocations((prev) => {
+                                                                    const next = [...prev];
+                                                                    next[index] = { ...next[index], address: e.target.value };
+                                                                    return next;
+                                                                })
+                                                            }
+                                                            className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setBusinessLocations((prev) =>
+                                                                prev.length > 1 ? prev.filter((_, i) => i !== index) : [{ name: '', address: '' }]
+                                                            )
+                                                        }
+                                                        className="shrink-0 p-3 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                                        aria-label="Remove location"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </React.Fragment>
+                                        ))}
+                                        <div className="md:col-span-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setBusinessLocations((prev) => [...prev, { name: '', address: '' }])}
+                                                className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-indigo-400 hover:underline focus:outline-none"
+                                            >
+                                                <Plus className="w-4 h-4" />
+                                                Add location
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
                             ) : (
                                 <CreateForm
                                     ref={createFormRef}

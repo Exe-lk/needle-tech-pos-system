@@ -124,6 +124,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     const {
       customerId,
       customerName,
+      customerLocationId: bodyCustomerLocationId,
       startDate,
       endDate,
       requestDate,
@@ -156,6 +157,20 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       });
     }
     
+    // Validate optional customerLocationId belongs to this customer (for business customers)
+    let customerLocationId: string | null = null;
+    if (bodyCustomerLocationId) {
+      const location = await prisma.customerLocation.findFirst({
+        where: { id: bodyCustomerLocationId, customerId },
+      });
+      if (!location) {
+        return validationErrorResponse('Invalid location', {
+          customerLocationId: ['Location does not belong to this customer'],
+        });
+      }
+      customerLocationId = location.id;
+    }
+    
     // Generate request number
     const count = await prisma.purchaseOrder.count();
     const requestNumber = `PO${new Date().getFullYear().toString().substr(2)}${String(count + 1).padStart(6, '0')}`;
@@ -178,6 +193,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       data: {
         requestNumber,
         customerId,
+        ...(customerLocationId && { customerLocationId }),
         requestDate: new Date(requestDate),
         startDate: new Date(startDate),
         endDate: new Date(endDate),

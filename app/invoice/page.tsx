@@ -62,6 +62,8 @@ interface MonthlyInvoicePreview {
   daysInPeriod: number;
   daysInMonth: number;
   isPartialMonth: boolean;
+  /** When true, this month was calculated with full monthly fee (no proration) */
+  usedFullMonthlyFee?: boolean;
   proratedItems: {
     item: InvoiceItem;
     originalRate: number;
@@ -541,6 +543,8 @@ const InvoicePage: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [monthlyInvoicePreviews, setMonthlyInvoicePreviews] = useState<MonthlyInvoicePreview[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set());
+  /** When true, monthly invoice generation uses full monthly rental fee for all months (no proration for partial months). */
+  const [useFullMonthlyFee, setUseFullMonthlyFee] = useState(false);
   /** When set, a hidden print-only div shows multi-month invoice and print is triggered */
   const [monthlyPrintPreviews, setMonthlyPrintPreviews] = useState<MonthlyInvoicePreview[] | null>(null);
   const monthlyPrintTriggeredRef = useRef(false);
@@ -894,7 +898,7 @@ const InvoicePage: React.FC = () => {
     return new Date(year, month + 1, 0).getDate();
   };
 
-  const calculateMonthlyInvoices = (invoice: Invoice): MonthlyInvoicePreview[] => {
+  const calculateMonthlyInvoices = (invoice: Invoice, useFullFee = false): MonthlyInvoicePreview[] => {
     const startDate = new Date(invoice.periodFrom);
     const endDate = new Date(invoice.periodTo);
     const previews: MonthlyInvoicePreview[] = [];
@@ -915,13 +919,14 @@ const InvoicePage: React.FC = () => {
       const daysInPeriod = periodEnd - periodStart + 1;
 
       const isPartialMonth = daysInPeriod < daysInMonth;
+      const applyFullFee = useFullFee;
 
-      // Calculate prorated amounts for each item
+      // Calculate amounts: when useFullFee, always use full monthly rate; otherwise prorate partial months
       const proratedItems = invoice.items.map(item => {
         const originalRate = item.monthlyRentPerMachine;
-        const proratedRate = isPartialMonth 
-          ? (originalRate / daysInMonth) * daysInPeriod 
-          : originalRate;
+        const proratedRate = applyFullFee
+          ? originalRate
+          : (isPartialMonth ? (originalRate / daysInMonth) * daysInPeriod : originalRate);
         const proratedSubtotal = proratedRate * item.numberOfMachines;
 
         return {
@@ -948,6 +953,7 @@ const InvoicePage: React.FC = () => {
         daysInPeriod,
         daysInMonth,
         isPartialMonth,
+        usedFullMonthlyFee: applyFullFee ? true : undefined,
         proratedItems,
         subtotal,
         vatAmount,
@@ -963,7 +969,7 @@ const InvoicePage: React.FC = () => {
 
   const handleGenerateMonthlyInvoices = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
-    const previews = calculateMonthlyInvoices(invoice);
+    const previews = calculateMonthlyInvoices(invoice, useFullMonthlyFee);
     setMonthlyInvoicePreviews(previews);
     setSelectedMonths(new Set(previews.map((_, idx) => idx))); // Select all by default
     setIsMonthlyInvoiceModalOpen(true);
@@ -975,6 +981,7 @@ const InvoicePage: React.FC = () => {
     setMonthlyInvoicePreviews([]);
     setSelectedMonths(new Set());
     setMonthlyPrintPreviews(null);
+    setUseFullMonthlyFee(false);
   };
 
   const toggleMonthSelection = (index: number) => {
@@ -1366,7 +1373,10 @@ const InvoicePage: React.FC = () => {
                 <div key={sectionIndex} className="mt-6 print:mt-4 print:break-inside-avoid">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 mb-2 print:text-xs">
                     {preview.month} {preview.year} — Period: {dateStr(preview.periodFrom)} to {dateStr(preview.periodTo)}
-                    {preview.isPartialMonth && (
+                    {preview.usedFullMonthlyFee && (
+                      <span className="ml-1 font-normal text-gray-600 dark:text-slate-400 print:text-gray-600">(Full monthly fee)</span>
+                    )}
+                    {preview.isPartialMonth && !preview.usedFullMonthlyFee && (
                       <span className="ml-1 font-normal text-gray-600 dark:text-slate-400 print:text-gray-600">(Prorated: {preview.daysInPeriod}/{preview.daysInMonth} days)</span>
                     )}
                   </h3>
@@ -1467,7 +1477,10 @@ const InvoicePage: React.FC = () => {
                 <div key={sectionIndex} className="mt-6 print:mt-4 print:break-inside-avoid">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 mb-2 print:text-xs">
                     {preview.month} {preview.year} — Period: {dateStr(preview.periodFrom)} to {dateStr(preview.periodTo)}
-                    {preview.isPartialMonth && (
+                    {preview.usedFullMonthlyFee && (
+                      <span className="ml-1 font-normal text-gray-600 dark:text-slate-400 print:text-gray-600">(Full monthly fee)</span>
+                    )}
+                    {preview.isPartialMonth && !preview.usedFullMonthlyFee && (
                       <span className="ml-1 font-normal text-gray-600 dark:text-slate-400 print:text-gray-600">(Prorated: {preview.daysInPeriod}/{preview.daysInMonth} days)</span>
                     )}
                   </h3>
@@ -2019,6 +2032,27 @@ const InvoicePage: React.FC = () => {
           </div>
         </div>
 
+        {/* Use full monthly fee option */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={useFullMonthlyFee}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setUseFullMonthlyFee(checked);
+                if (selectedInvoice) {
+                  const nextPreviews = calculateMonthlyInvoices(selectedInvoice, checked);
+                  setMonthlyInvoicePreviews(nextPreviews);
+                  setSelectedMonths(new Set(nextPreviews.map((_, idx) => idx)));
+                }
+              }}
+              className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Use full monthly rental fee for all months (no proration)</span>
+          </label>
+        </div>
+
         {/* Select all months checkbox */}
         <div className="flex items-center gap-4 flex-wrap">
           <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -2062,7 +2096,8 @@ const InvoicePage: React.FC = () => {
                 </div>
                 <div>
                   <span className="font-medium">Days:</span> {preview.daysInPeriod}/{preview.daysInMonth}
-                  {preview.isPartialMonth && <span className="ml-1 text-orange-600 dark:text-orange-400">(Prorated)</span>}
+                  {preview.usedFullMonthlyFee && <span className="ml-1 text-blue-600 dark:text-blue-400">(Full monthly fee)</span>}
+                  {preview.isPartialMonth && !preview.usedFullMonthlyFee && <span className="ml-1 text-orange-600 dark:text-orange-400">(Prorated)</span>}
                 </div>
                 <div>
                   <span className="font-medium">Subtotal:</span> LKR {preview.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
@@ -2075,11 +2110,19 @@ const InvoicePage: React.FC = () => {
           ))}
         </div>
 
-        {/* Note about prorated invoices */}
+        {/* Note about prorated / full fee invoices */}
         <div className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-3">
           <p className="text-xs text-gray-600 dark:text-gray-400">
-            <span className="font-semibold">Note:</span> Prorated invoices are calculated as: 
-            (Monthly Rate ÷ Days in Month) × Renting Days in that Month. VAT is applied to the prorated amount.
+            {useFullMonthlyFee ? (
+              <>
+                <span className="font-semibold">Note:</span> Full monthly rental fee is applied to every month. Partial months are charged the full month rate (no proration).
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">Note:</span> Prorated invoices are calculated as: 
+                (Monthly Rate ÷ Days in Month) × Renting Days in that Month. VAT is applied to the prorated amount.
+              </>
+            )}
           </p>
         </div>
       </div>

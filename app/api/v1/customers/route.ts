@@ -144,8 +144,24 @@ export const GET = withAuthAndPermission(['customers:view', 'management:*', '*']
 export const POST = withAuthAndPermission(['customers:create', 'management:*', '*'], async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const { code, type, name, contactPerson, phones = [], emails = [] } = body;
-    
+    const {
+      code,
+      type,
+      name,
+      contactPerson,
+      phones = [],
+      emails = [],
+      billingAddressLine1,
+      billingAddressLine2,
+      billingCity,
+      billingRegion,
+      billingPostalCode,
+      billingCountry,
+      vatRegistrationNumber,
+      status,
+      locations = [],
+    } = body;
+
     if (!code || !type || !name) {
       return validationErrorResponse('Missing required fields', {
         code: !code ? ['Code is required'] : [],
@@ -153,30 +169,49 @@ export const POST = withAuthAndPermission(['customers:create', 'management:*', '
         name: !name ? ['Name is required'] : [],
       });
     }
-    
-    // Check if code already exists
+
     const existingCustomer = await prisma.customer.findUnique({
       where: { code },
     });
-    
+
     if (existingCustomer) {
       return validationErrorResponse('Customer code already exists', {
         code: ['Code already exists'],
       });
     }
-    
+
     const newCustomer = await prisma.customer.create({
       data: {
         code,
         type,
         name,
         contactPerson: contactPerson || '',
-        phones: phones || [],
-        emails: emails || [],
-        status: 'ACTIVE',
+        phones: Array.isArray(phones) ? phones : [],
+        emails: Array.isArray(emails) ? emails : [],
+        billingAddressLine1: billingAddressLine1 ?? null,
+        billingAddressLine2: billingAddressLine2 ?? null,
+        billingCity: billingCity ?? null,
+        billingRegion: billingRegion ?? null,
+        billingPostalCode: billingPostalCode ?? null,
+        billingCountry: billingCountry ?? null,
+        vatRegistrationNumber: vatRegistrationNumber ?? null,
+        status: status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+        locations:
+          Array.isArray(locations) && locations.length > 0
+            ? {
+                create: locations
+                  .filter((loc: any) => loc && (loc.name || loc.address))
+                  .map((loc: any, index: number) => ({
+                    name: (loc.name && String(loc.name).trim()) || `Location ${index + 1}`,
+                    addressLine1: (loc.address && String(loc.address).trim()) || null,
+                    isDefault: index === 0,
+                  })),
+              }
+            : undefined,
       },
+      include: { locations: true },
     });
-    
+
     return successResponse(newCustomer, 'Customer created successfully', 201);
   } catch (error: any) {
     console.error('Error creating customer:', error);

@@ -30,6 +30,12 @@ interface Customer {
   code?: string;
 }
 
+interface CustomerLocationItem {
+  id?: string;
+  name: string;
+  addressLine1?: string | null;
+}
+
 interface ApiCustomer {
   id: string;
   code: string;
@@ -55,6 +61,7 @@ interface ApiCustomer {
   status: ApiCustomerStatus;
   createdAt: string;
   updatedAt: string;
+  locations?: CustomerLocationItem[];
 }
 
 interface CustomerInfo {
@@ -364,11 +371,32 @@ const CustomerListPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [rentalHistory, setRentalHistory] = useState<RentalHistory[]>([]);
   const createFormRef = useRef<CreateFormRef>(null);
+  // Locations (optional) for Business create – each item: { name, address }
+  const [businessLocations, setBusinessLocations] = useState<{ name: string; address: string }[]>([{ name: '', address: '' }]);
+  // Locations for Business update (loaded from API)
+  const [updateBusinessLocations, setUpdateBusinessLocations] = useState<{ name: string; address: string }[]>([]);
 
   // Fetch customers on component mount
   useEffect(() => {
     loadCustomers();
   }, []);
+
+  // Sync update modal locations when business details load (only when details match selected customer)
+  useEffect(() => {
+    if (
+      isUpdateModalOpen &&
+      selectedCustomer?.type === 'Business' &&
+      selectedCustomerDetails &&
+      selectedCustomerDetails.id === selectedCustomer.id
+    ) {
+      const locs = selectedCustomerDetails.locations ?? [];
+      setUpdateBusinessLocations(
+        locs.length > 0
+          ? locs.map((loc) => ({ name: loc.name ?? '', address: loc.addressLine1 ?? '' }))
+          : [{ name: '', address: '' }]
+      );
+    }
+  }, [isUpdateModalOpen, selectedCustomer?.id, selectedCustomer?.type, selectedCustomerDetails?.id, selectedCustomerDetails?.locations]);
 
   const loadCustomers = async () => {
     setIsLoading(true);
@@ -421,6 +449,7 @@ const CustomerListPage: React.FC = () => {
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setActiveCreateTab('company');
+    setBusinessLocations([{ name: '', address: '' }]);
   };
 
   const handleViewCustomer = async (customer: Customer) => {
@@ -448,6 +477,7 @@ const CustomerListPage: React.FC = () => {
     setIsUpdateModalOpen(false);
     setSelectedCustomer(null);
     setSelectedCustomerDetails(null);
+    setUpdateBusinessLocations([]);
   };
 
   const handleDeleteCustomer = (customer: Customer) => {
@@ -649,6 +679,10 @@ const CustomerListPage: React.FC = () => {
       const addressParts = parseAddress(data.businessAddress);
       const code = await generateCustomerCode();
 
+      const locationsPayload = businessLocations
+        .filter((loc) => (loc.name && loc.name.trim()) || (loc.address && loc.address.trim()))
+        .map((loc) => ({ name: (loc.name || '').trim(), address: (loc.address || '').trim() }));
+
       const payload = {
         code,
         type: mapFrontendTypeToApi('Business'),
@@ -664,6 +698,7 @@ const CustomerListPage: React.FC = () => {
         billingCountry: addressParts.country,
         vatRegistrationNumber: data.vatTin || null,
         status: mapFrontendStatusToApi(data.status),
+        ...(locationsPayload.length > 0 && { locations: locationsPayload }),
       };
 
       const result = await createCustomer(payload);
@@ -729,6 +764,10 @@ const CustomerListPage: React.FC = () => {
     try {
       const addressParts = parseAddress(data.businessAddress);
 
+      const locationsPayload = updateBusinessLocations
+        .filter((loc) => (loc.name && loc.name.trim()) || (loc.address && loc.address.trim()))
+        .map((loc) => ({ name: (loc.name || '').trim(), address: (loc.address || '').trim() }));
+
       const payload = {
         name: data.companyName,
         contactPerson: data.contactPerson,
@@ -742,6 +781,7 @@ const CustomerListPage: React.FC = () => {
         billingCountry: addressParts.country,
         vatRegistrationNumber: data.vatTin || null,
         status: mapFrontendStatusToApi(data.status),
+        locations: locationsPayload,
       };
 
       const result = await updateCustomer(selectedCustomer.id, payload);
@@ -800,7 +840,9 @@ const CustomerListPage: React.FC = () => {
   };
 
   const handleClear = () => {
-    console.log('Form cleared');
+    if (activeCreateTab === 'company') {
+      setBusinessLocations([{ name: '', address: '' }]);
+    }
   };
 
   const getRowClassName = (customer: Customer) => {
@@ -1194,20 +1236,97 @@ const CustomerListPage: React.FC = () => {
             {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               {activeCreateTab === 'company' ? (
-                <CreateForm
-                  ref={createFormRef}
-                  title="Business Details"
-                  fields={companyFields}
-                  onSubmit={handleCompanySubmit}
-                  onClear={handleClear}
-                  submitButtonLabel="Save"
-                  clearButtonLabel="Clear"
-                  loading={isSubmitting}
-                  enableDynamicSpecs={false}
-                  hideFooterActions
-                  formId="create-customer-form-company"
-                  className="shadow-none border-0 p-0"
-                />
+                <>
+                  <CreateForm
+                    ref={createFormRef}
+                    title="Business Details"
+                    fields={companyFields}
+                    onSubmit={handleCompanySubmit}
+                    onClear={handleClear}
+                    submitButtonLabel="Save"
+                    clearButtonLabel="Clear"
+                    loading={isSubmitting}
+                    enableDynamicSpecs={false}
+                    hideFooterActions
+                    formId="create-customer-form-company"
+                    className="shadow-none border-0 p-0"
+                  />
+                  {/* Locations (optional) – same grid as form, integrated after Email/Status */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Locations (optional)
+                      </label>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Add one or more locations for this customer (e.g. delivery or site addresses).
+                      </p>
+                    </div>
+                    {businessLocations.map((loc, index) => (
+                      <React.Fragment key={index}>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Location name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Main Factory"
+                            value={loc.name}
+                            onChange={(e) =>
+                              setBusinessLocations((prev) => {
+                                const next = [...prev];
+                                next[index] = { ...next[index], name: e.target.value };
+                                return next;
+                              })
+                            }
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                          />
+                        </div>
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1 min-w-0">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Address (optional)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Address"
+                              value={loc.address}
+                              onChange={(e) =>
+                                setBusinessLocations((prev) => {
+                                  const next = [...prev];
+                                  next[index] = { ...next[index], address: e.target.value };
+                                  return next;
+                                })
+                              }
+                              className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setBusinessLocations((prev) =>
+                                prev.length > 1 ? prev.filter((_, i) => i !== index) : [{ name: '', address: '' }]
+                              )
+                            }
+                            className="shrink-0 p-3 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            aria-label="Remove location"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </React.Fragment>
+                    ))}
+                    <div className="md:col-span-2">
+                      <button
+                        type="button"
+                        onClick={() => setBusinessLocations((prev) => [...prev, { name: '', address: '' }])}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-indigo-400 hover:underline focus:outline-none"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add location
+                      </button>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <CreateForm
                   ref={createFormRef}
@@ -1278,17 +1397,94 @@ const CustomerListPage: React.FC = () => {
                   <div className="text-gray-500 dark:text-gray-400">Loading customer details...</div>
                 </div>
               ) : selectedCustomer.type === 'Business' ? (
-                <UpdateForm
-                  title="Update Business Details"
-                  fields={companyFields}
-                  onSubmit={handleCompanyUpdate}
-                  onClear={handleClear}
-                  submitButtonLabel="Update"
-                  clearButtonLabel="Reset"
-                  loading={isSubmitting}
-                  initialData={getUpdateInitialData(selectedCustomer)}
-                  className="shadow-none border-0 p-0"
-                />
+                <>
+                  <UpdateForm
+                    title="Update Business Details"
+                    fields={companyFields}
+                    onSubmit={handleCompanyUpdate}
+                    onClear={handleClear}
+                    submitButtonLabel="Update"
+                    clearButtonLabel="Reset"
+                    loading={isSubmitting}
+                    initialData={getUpdateInitialData(selectedCustomer)}
+                    className="shadow-none border-0 p-0"
+                  />
+                  {/* Locations (optional) – same grid as form, integrated after Email/Status */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Locations (optional)
+                      </label>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Add one or more locations for this customer (e.g. delivery or site addresses).
+                      </p>
+                    </div>
+                    {updateBusinessLocations.map((loc, index) => (
+                      <React.Fragment key={index}>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Location name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Main Factory"
+                            value={loc.name}
+                            onChange={(e) =>
+                              setUpdateBusinessLocations((prev) => {
+                                const next = [...prev];
+                                next[index] = { ...next[index], name: e.target.value };
+                                return next;
+                              })
+                            }
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                          />
+                        </div>
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1 min-w-0">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Address (optional)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Address"
+                              value={loc.address}
+                              onChange={(e) =>
+                                setUpdateBusinessLocations((prev) => {
+                                  const next = [...prev];
+                                  next[index] = { ...next[index], address: e.target.value };
+                                  return next;
+                                })
+                              }
+                              className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setUpdateBusinessLocations((prev) =>
+                                prev.length > 1 ? prev.filter((_, i) => i !== index) : [{ name: '', address: '' }]
+                              )
+                            }
+                            className="shrink-0 p-3 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            aria-label="Remove location"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </React.Fragment>
+                    ))}
+                    <div className="md:col-span-2">
+                      <button
+                        type="button"
+                        onClick={() => setUpdateBusinessLocations((prev) => [...prev, { name: '', address: '' }])}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-indigo-400 hover:underline focus:outline-none"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add location
+                      </button>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <UpdateForm
                   title="Update Customer Details"
