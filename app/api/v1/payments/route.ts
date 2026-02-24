@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Decimal } from '@prisma/client/runtime/client';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
-import { withAuthAndRole } from '@/lib/auth-middleware';
+import { AuthUser, withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
 /**
@@ -34,7 +34,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     const totalItems = await prisma.payment.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const payments = await prisma.payment.findMany({
       where,
@@ -69,10 +69,10 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
-    const { customerId, totalAmount, currency = 'USD', paymentMethod, referenceNumber, paidAt, notes } = body;
+    const { customerId, totalAmount, currency = 'USD', paymentMethod, referenceNumber, paidAt, notes, receiptNumber } = body;
     
     if (!customerId || !totalAmount) {
       return validationErrorResponse('Missing required fields', {
@@ -91,13 +91,15 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
     
     const newPayment = await prisma.payment.create({
       data: {
+        receiptNumber: receiptNumber || `RCP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         customerId,
         totalAmount: new Decimal(totalAmount),
         currency,
         paymentMethod: paymentMethod || 'CASH',
-        referenceNumber: referenceNumber || '',
+        referenceNumber: referenceNumber ?? null,
         paidAt: paidAt ? new Date(paidAt) : new Date(),
-        notes: notes || '',
+        receivedByUserId: auth.id,
+        notes: notes ?? null,
       },
       include: { customer: true, invoices: true }
     });

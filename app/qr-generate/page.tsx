@@ -239,9 +239,9 @@ const QRGeneratePage: React.FC = () => {
       input: 'number',
       inputValue: 1,
       inputAttributes: {
-        min: 1,
-        max: 100,
-        step: 1,
+        min: '1',
+        max: '100',
+        step: '1',
       },
       inputValidator: (value: string) => {
         const num = Number(value);

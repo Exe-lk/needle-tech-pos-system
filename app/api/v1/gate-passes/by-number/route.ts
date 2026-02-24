@@ -82,7 +82,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       vehicleNumber: gatePass.vehicleNumber || '',
       driverName: gatePass.driverName || '',
       items,
-      issuedBy: gatePass.issuedBy?.name || 'System',
+      issuedBy: gatePass.issuedBy?.fullName || 'System',
       receivedBy: gatePass.driverName || '',
     };
     

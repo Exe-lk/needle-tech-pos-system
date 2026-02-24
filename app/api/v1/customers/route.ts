@@ -70,7 +70,7 @@ export const GET = withAuthAndPermission(['customers:view', 'management:*', '*']
     
     const totalItems = await prisma.customer.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const customers = await prisma.customer.findMany({
       where,

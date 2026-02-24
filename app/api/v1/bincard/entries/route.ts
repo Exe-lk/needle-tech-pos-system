@@ -83,7 +83,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      { entries: transformed },
+      transformed ,
       pagination,
       'Bincard entries retrieved successfully',
       { sortBy, sortOrder: sortOrder_ },

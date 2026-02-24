@@ -84,15 +84,15 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
     );
 
     // Update machine record with photo URLs
-    const existingPhotos = machine.photoUrls || [];
+    const existingPhotos = machine.photos || [];
     const updatedPhotos = append 
       ? [...existingPhotos, ...publicUrls] 
       : publicUrls;
 
-    await prisma.machine.update(
-      { where: { id: machine.id } },
-      { data: { photoUrls: updatedPhotos } }
-    );
+    await prisma.machine.update({
+       where: { id: machine.id },
+       data: { photos: updatedPhotos }, 
+  });
 
     return successResponse(
       { photoUrls: updatedPhotos },
@@ -103,23 +103,4 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
     return errorResponse('Failed to upload machine photos', 500);
   }
 });
-          photos: updatedPhotos,
-          updatedAt: new Date(),
-        },
-      }
-    );
-
-    return successResponse(
-      {
-        uploadedUrls: publicUrls,
-        totalPhotos: updatedPhotos.length,
-        machineId: machine._id.toString(),
-        serialNumber: machine.serialNumber,
-      },
-      `${publicUrls.length} photo(s) uploaded successfully`
-    );
-  } catch (error: any) {
-    console.error('Error uploading machine photos:', error);
-    return errorResponse(error.message || 'Failed to upload machine photos', 500);
-  }
-});
+          

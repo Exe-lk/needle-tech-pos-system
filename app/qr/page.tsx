@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { 
@@ -21,7 +21,7 @@ interface ScanHistoryItem {
   source?: string;
 }
 
-const QRScannerPage: React.FC = () => {
+const QRScannerContent: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [scanResult, setScanResult] = useState<string | null>(null);
@@ -370,5 +370,18 @@ const QRScannerPage: React.FC = () => {
     </div>
   );
 };
+// At the bottom of the file, replace the export with:
 
-export default QRScannerPage;
+function QRScannerPageWithSuspense() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-muted-foreground">Loading scanner...</div>
+      </div>
+    }>
+      <QRScannerContent />
+    </Suspense>
+  );
+}
+
+export default QRScannerPageWithSuspense;

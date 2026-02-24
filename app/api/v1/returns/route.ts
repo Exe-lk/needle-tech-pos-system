@@ -4,6 +4,7 @@ import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import type { AuthUser } from '@/lib/auth-supabase';
+import { getReturnedMachineIdsForRental } from '@/lib/rental-returns';
 
 /**
  * @swagger
@@ -142,8 +143,12 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       });
     }
 
-    // Set of machine IDs that belong to this rental (must be returning only these)
-    const rentalMachineIds = new Set((rental.machines as { machineId: string }[]).map((m) => m.machineId));
+    // Only machines that are still active (not already returned) can be returned again
+    const returnedIds = await getReturnedMachineIdsForRental(prisma, rental.id);
+    const activeRentalMachines = (rental.machines as { machineId: string }[]).filter(
+      (m) => !returnedIds.has(m.machineId)
+    );
+    const rentalMachineIds = new Set(activeRentalMachines.map((m) => m.machineId));
     
     if (!machines || !Array.isArray(machines) || machines.length === 0) {
       return validationErrorResponse('Missing required fields', {
@@ -183,10 +188,14 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         });
       }
 
-      // Ensure machine belongs to this rental
+      // Ensure machine belongs to this rental and has not already been returned
       if (!rentalMachineIds.has(machine.id)) {
+        const alreadyReturned = returnedIds.has(machine.id);
+        const message = alreadyReturned
+          ? `Machine ${serialNumber} has already been returned for this agreement.`
+          : `Machine ${serialNumber} is not assigned to this rental agreement.`;
         return validationErrorResponse('Machine not in this rental', {
-          machines: [`Machine ${serialNumber} is not assigned to this rental agreement.`],
+          machines: [message],
         });
       }
 
