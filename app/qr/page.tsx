@@ -21,7 +21,7 @@ interface ScanHistoryItem {
   source?: string;
 }
 
-const QRScannerPage: React.FC = () => {
+const QRScannerContent: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [scanResult, setScanResult] = useState<string | null>(null);
@@ -370,17 +370,16 @@ const QRScannerPage: React.FC = () => {
     </div>
   );
 };
+// At the bottom of the file, replace the export with:
 
 function QRScannerPageWithSuspense() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex items-center justify-center">
-          <div className="animate-pulse text-gray-500 dark:text-gray-400">Loading scanner...</div>
-        </div>
-      }
-    >
-      <QRScannerPage />
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-muted-foreground">Loading scanner...</div>
+      </div>
+    }>
+      <QRScannerContent />
     </Suspense>
   );
 }

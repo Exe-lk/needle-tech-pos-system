@@ -2,9 +2,11 @@
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Script from 'next/script';
+import Swal, { type SweetAlertResult } from 'sweetalert2';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
-import { X, ChevronDown, Check, Plus, Trash2, QrCode, Download, ChevronRight, ChevronUp, AlertCircle } from 'lucide-react';
+import { X, ChevronDown, Check, Plus, Trash2, QrCode, Download, ChevronRight, ChevronUp, AlertCircle, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateSerialNumber, validateBoxNumber } from '@/src/utils/validation';
@@ -285,10 +287,17 @@ const StockInPage: React.FC = () => {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [selectedMachineForQR, setSelectedMachineForQR] = useState<{ modelId: string; machineId: string } | null>(null);
   const qrCodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const singlePrintLabelRef = useRef<HTMLDivElement | null>(null);
 
-  // QR Batch modal (after submit): Print Now / Print Later
+  // QR Batch modal (after submit): QR printing UI like qr-generate (label format + batch sets)
   const [showQrBatchModal, setShowQrBatchModal] = useState(false);
   const [submittedStockModels, setSubmittedStockModels] = useState<StockModelEntry[]>([]);
+
+  // BrowserPrint (Zebra) for batch QR printing
+  const [isBrowserPrintLoaded, setIsBrowserPrintLoaded] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState<any>(null);
+  const [devices, setDevices] = useState<any[]>([]);
+  const batchLabelRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Fetch brands and models on mount
   const fetchBrandsAndModels = useCallback(async () => {
@@ -315,6 +324,35 @@ const StockInPage: React.FC = () => {
   useEffect(() => {
     fetchBrandsAndModels();
   }, [fetchBrandsAndModels]);
+
+  // BrowserPrint (Zebra): init default/local printers after SDK loads
+  useEffect(() => {
+    if (!isBrowserPrintLoaded || typeof window === 'undefined') return;
+    const wp = (window as any).BrowserPrint;
+    if (!wp) return;
+    wp.getDefaultDevice(
+      'printer',
+      (device: any) => {
+        setSelectedDevice(device);
+        setDevices((prev) => (device ? [...prev, device] : prev));
+        wp.getLocalDevices(
+          (list: any[]) => {
+            const others = (list || []).filter((d: any) => d.uid !== device?.uid);
+            setDevices((prev) => {
+              const seen = new Set(prev.map((d: any) => d.uid));
+              const added = others.filter((d: any) => !seen.has(d.uid));
+              return added.length ? [...prev, ...added] : prev;
+            });
+            const zebra = others.find((d: any) => d.manufacturer === 'Zebra Technologies');
+            if (zebra) setSelectedDevice(zebra);
+          },
+          () => {},
+          'printer'
+        );
+      },
+      () => {}
+    );
+  }, [isBrowserPrintLoaded]);
 
   // Get unique brand names (sorted) for dropdown
   const uniqueBrands = useMemo(() => {
@@ -353,7 +391,7 @@ const StockInPage: React.FC = () => {
     return `${brand}-${model}-${serialNumber}`.replace(/\s+/g, '-').toUpperCase();
   };
 
-  // Generate QR code data
+  // Generate QR code data (full payload for records / single QR modal)
   const generateQRCodeData = (modelEntry: StockModelEntry, machine: MachineEntry): string => {
     const qrData = {
       barcode: machine.barcode,
@@ -369,6 +407,36 @@ const StockInPage: React.FC = () => {
       notes: modelEntry.notes || null,
     };
     return JSON.stringify(qrData, null, 2);
+  };
+
+  // QR payload for printed labels (same format as qr-generate page for consistency)
+  const getQRPayloadForLabel = (serialNumber: string, boxNo: string): string =>
+    JSON.stringify({ serialNumber, boxNo: boxNo || '' });
+
+  // ZPL for Zebra label (same layout as qr-generate: Needle Technologies header, QR left, S/N & B/N right)
+  const getZPLForMachine = (serialNumber: string, boxNumber: string): string => {
+    const qrData = getQRPayloadForLabel(serialNumber, boxNumber);
+    return `^XA
+^CI27
+^PW464
+^LL320
+
+### Header: Company Name ###
+^FO20,20^GB424,55,3^FS
+^FO20,32^A0N,30,30^FB424,1,0,C^FDNeedle Technologies^FS
+
+### LEFT SIDE: JSON Formatted QR Code ###
+^FO50,100^BQN,2,5,H
+^FDQA,${qrData}^FS
+
+### RIGHT SIDE: Label Data ###
+^FO250,135^A0N,22,22^FDS/N:^FS
+^FO250,165^A0N,28,28^FD${serialNumber}^FS
+
+^FO250,225^A0N,22,22^FDB/N:^FS
+^FO250,255^A0N,28,28^FD${boxNumber}^FS
+
+^XZ`;
   };
 
   // Sync default type when brand/model change (only set when type is empty)
@@ -628,8 +696,144 @@ const StockInPage: React.FC = () => {
     }
   };
 
-  const handlePrintNow = () => {
-    window.print();
+  // Flatten all machines from submitted stock models for batch print (order preserved)
+  const batchMachines = useMemo(() => {
+    const list: { serialNumber: string; boxNo: string; modelId: string; machineId: string }[] = [];
+    submittedStockModels.forEach((model) => {
+      model.machines.forEach((machine) => {
+        list.push({
+          serialNumber: machine.serialNumber,
+          boxNo: machine.boxNo || '',
+          modelId: model.id,
+          machineId: machine.id,
+        });
+      });
+    });
+    return list;
+  }, [submittedStockModels]);
+
+  const performBatchPrint = (setsCount: number) => {
+    if (batchMachines.length === 0) return;
+
+    const totalLabels = batchMachines.length * setsCount;
+
+    // Zebra: send ZPL for each label (set 1..setsCount, each set = one ZPL per machine)
+    if (isBrowserPrintLoaded && selectedDevice && typeof selectedDevice.send === 'function') {
+      const zplList: string[] = [];
+      for (let s = 0; s < setsCount; s++) {
+        batchMachines.forEach((m) => {
+          zplList.push(getZPLForMachine(m.serialNumber, m.boxNo));
+        });
+      }
+      let sent = 0;
+      const sendNext = () => {
+        if (sent >= zplList.length) return;
+        selectedDevice.send(zplList[sent], undefined, (err: string) => {
+          if (err) console.error('Print error:', err);
+          sent += 1;
+          if (sent < zplList.length) sendNext();
+        });
+      };
+      sendNext();
+      return;
+    }
+
+    // Browser fallback: build HTML from rendered label refs (one set), then repeat setsCount times
+    const oneSetHtmlParts: string[] = [];
+    batchMachines.forEach((m) => {
+      const key = `${m.modelId}-${m.machineId}`;
+      const el = batchLabelRefs.current[key];
+      const svg = el?.querySelector('.left svg');
+      if (!svg) return;
+      const svgData = new XMLSerializer().serializeToString(svg);
+      oneSetHtmlParts.push(`
+      <div class="label">
+        <div class="header">Needle Technologies</div>
+        <div class="body">
+          <div class="left">${svgData}</div>
+          <div class="right">
+            <div class="row">Serial Number:<div class="value">${m.serialNumber}</div></div>
+            <div class="row">Box Number:<div class="value">${m.boxNo}</div></div>
+          </div>
+        </div>
+      </div>
+    `);
+    });
+    const oneSetHtml = oneSetHtmlParts.join('');
+    const fullHtml = Array(setsCount).fill(oneSetHtml).join('');
+
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('style', 'position:absolute;width:0;height:0;border:0;');
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Stock In – QR Labels</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+            .label { width: 464px; min-height: 320px; border: 2px solid #000; padding: 0; display: flex; flex-direction: column; page-break-after: always; }
+            .label:last-child { page-break-after: auto; }
+            .header { border-bottom: 3px solid #000; padding: 12px; text-align: center; font-weight: bold; font-size: 22px; }
+            .body { display: flex; flex: 1; }
+            .left { padding: 16px; }
+            .right { flex: 1; padding: 16px; display: flex; flex-direction: column; justify-content: center; gap: 24px; }
+            .row { font-size: 14px; color: #333; }
+            .row .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
+          </style>
+        </head>
+        <body>
+          ${fullHtml}
+        </body>
+      </html>
+    `);
+    doc.close();
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+    setTimeout(() => {
+      if (iframe.parentNode) document.body.removeChild(iframe);
+    }, 1000);
+  };
+
+  const handlePrintBatch = () => {
+    if (batchMachines.length === 0) return;
+    const totalMachines = batchMachines.length;
+    Swal.fire({
+      title: 'How many sets to print?',
+      text: `One set = ${totalMachines} label(s) (one per machine).`,
+      input: 'number',
+      inputValue: 1,
+      inputAttributes: { min: 1, max: 100, step: 1 },
+      inputValidator: (value: string) => {
+        const num = Number(value);
+        if (Number.isNaN(num) || num < 1 || num > 100) return 'Please enter a number between 1 and 100';
+        return null;
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Print',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#2563eb',
+    } as any).then((result: SweetAlertResult) => {
+      if (result.isConfirmed && result.value !== undefined && result.value !== '') {
+        const setsCount = Math.min(100, Math.max(1, Math.floor(Number(result.value))));
+        const totalLabels = totalMachines * setsCount;
+        performBatchPrint(setsCount);
+        Swal.fire({
+          title: 'Printing',
+          text: `Printing ${totalLabels} label(s) (${setsCount} set(s) × ${totalMachines} machine(s))...`,
+          icon: 'info',
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      }
+    });
   };
 
   const handlePrintLater = () => {
@@ -637,6 +841,115 @@ const StockInPage: React.FC = () => {
     setShowQrBatchModal(false);
     setSubmittedStockModels([]);
     router.push('/inventory');
+  };
+
+  // Single-machine QR modal: print one machine's label (same flow as qr-generate)
+  const performSinglePrint = (serialNumber: string, boxNo: string, count: number) => {
+    const zplString = getZPLForMachine(serialNumber, boxNo || '');
+
+    if (isBrowserPrintLoaded && selectedDevice && typeof selectedDevice.send === 'function') {
+      let sent = 0;
+      const sendNext = () => {
+        if (sent >= count) return;
+        selectedDevice.send(zplString, undefined, (err: string) => {
+          if (err) console.error('Print error:', err);
+          sent += 1;
+          if (sent < count) sendNext();
+        });
+      };
+      sendNext();
+      return;
+    }
+
+    const el = singlePrintLabelRef.current;
+    const svg = el?.querySelector('.left svg');
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const labelHtml = `
+      <div class="label">
+        <div class="header">Needle Technologies</div>
+        <div class="body">
+          <div class="left">${svgData}</div>
+          <div class="right">
+            <div class="row">Serial Number:<div class="value">${serialNumber}</div></div>
+            <div class="row">Box Number:<div class="value">${boxNo}</div></div>
+          </div>
+        </div>
+      </div>
+    `;
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('style', 'position:absolute;width:0;height:0;border:0;');
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>QR Label - ${serialNumber}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+            .label { width: 464px; min-height: 320px; border: 2px solid #000; padding: 0; display: flex; flex-direction: column; page-break-after: always; }
+            .label:last-child { page-break-after: auto; }
+            .header { border-bottom: 3px solid #000; padding: 12px; text-align: center; font-weight: bold; font-size: 22px; }
+            .body { display: flex; flex: 1; }
+            .left { padding: 16px; }
+            .right { flex: 1; padding: 16px; display: flex; flex-direction: column; justify-content: center; gap: 24px; }
+            .row { font-size: 14px; color: #333; }
+            .row .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
+          </style>
+        </head>
+        <body>
+          ${Array(count).fill(labelHtml).join('')}
+        </body>
+      </html>
+    `);
+    doc.close();
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+    setTimeout(() => {
+      if (iframe.parentNode) document.body.removeChild(iframe);
+    }, 1000);
+  };
+
+  const handlePrintSingleQR = () => {
+    if (!selectedMachineForQR) return;
+    const model = stockModels.find(m => m.id === selectedMachineForQR.modelId);
+    const machine = model?.machines.find(m => m.id === selectedMachineForQR.machineId);
+    if (!model || !machine || !machine.serialNumber) return;
+
+    Swal.fire({
+      title: 'How many QR codes to print?',
+      input: 'number',
+      inputValue: 1,
+      inputAttributes: { min: 1, max: 100, step: 1 },
+      inputValidator: (value: string) => {
+        const num = Number(value);
+        if (Number.isNaN(num) || num < 1 || num > 100) return 'Please enter a number between 1 and 100';
+        return null;
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Print',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#2563eb',
+    } as any).then((result: SweetAlertResult) => {
+      if (result.isConfirmed && result.value !== undefined && result.value !== '') {
+        const count = Math.min(100, Math.max(1, Math.floor(Number(result.value))));
+        performSinglePrint(machine.serialNumber, machine.boxNo || '', count);
+        Swal.fire({
+          title: 'Printing',
+          text: `Printing ${count} QR code label${count > 1 ? 's' : ''}...`,
+          icon: 'info',
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      }
+    });
   };
 
   // Clear all
@@ -675,6 +988,11 @@ const StockInPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+      <Script
+        src="/browser-print/BrowserPrint-3.1.250.min.js"
+        strategy="afterInteractive"
+        onLoad={() => setIsBrowserPrintLoaded(true)}
+      />
       {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
 
@@ -1213,14 +1531,86 @@ const StockInPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Download Button */}
-                    <button
-                      onClick={() => handleDownloadQR(selectedMachineForQR.modelId, selectedMachineForQR.machineId)}
-                      className="inline-flex items-center px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                    {/* Label preview for printing (same format as qr-generate) */}
+                    <div
+                      ref={singlePrintLabelRef}
+                      className="label mx-auto w-[464px] min-h-[320px] border-2 border-black bg-white dark:bg-slate-900 flex flex-col overflow-hidden rounded"
                     >
-                      <Download className="w-4 h-4 mr-2" />
-                      Download QR Code
-                    </button>
+                      <div className="header border-b-2 border-black py-2 text-center font-bold text-lg text-gray-900 dark:text-white">
+                        Needle Technologies
+                      </div>
+                      <div className="body flex flex-1 p-4 gap-6">
+                        <div className="left flex items-center justify-center shrink-0 p-2 bg-white dark:bg-slate-800 rounded">
+                          <QRCodeSVG
+                            value={getQRPayloadForLabel(machine.serialNumber, machine.boxNo || '')}
+                            size={180}
+                            level="H"
+                          />
+                        </div>
+                        <div className="right flex flex-col justify-center gap-6 text-gray-900 dark:text-white">
+                          <div>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Serial Number:</p>
+                            <p className="text-xl font-bold mt-0.5">{machine.serialNumber}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Box Number:</p>
+                            <p className="text-xl font-bold mt-0.5">{machine.boxNo || '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Select Printer — same as qr-generate page */}
+                    <div className="rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800/50 p-4 space-y-2">
+                      <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        Select Printer
+                      </label>
+                      <select
+                        value={selectedDevice?.uid ?? ''}
+                        onChange={(e) => {
+                          const uid = e.target.value;
+                          if (uid) setSelectedDevice(devices.find((d: any) => d.uid === uid) ?? null);
+                        }}
+                        className="w-full rounded-lg border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white px-3 py-2.5 text-sm font-medium focus:border-blue-500 dark:focus:border-indigo-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-indigo-500/20 outline-none"
+                      >
+                        {!isBrowserPrintLoaded ? (
+                          <option value="" disabled>Loading printers...</option>
+                        ) : devices.length > 0 ? (
+                          devices.map((d: any, i: number) => (
+                            <option key={d.uid ?? i} value={d.uid}>
+                              {[d.name, d.manufacturer, d.model].filter(Boolean).join(' — ') || d.uid || `Printer ${i + 1}`}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="" disabled>
+                            No printers available — connect a printer or start Browser Print service
+                          </option>
+                        )}
+                      </select>
+                      {isBrowserPrintLoaded && devices.length === 0 && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          Ensure the Browser Print service is running on this machine. Refresh after connecting a printer.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={handlePrintSingleQR}
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print
+                      </button>
+                      <button
+                        onClick={() => handleDownloadQR(selectedMachineForQR.modelId, selectedMachineForQR.machineId)}
+                        className="inline-flex items-center px-6 py-3 bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white text-sm font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors duration-200"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download QR Code
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1229,17 +1619,17 @@ const StockInPage: React.FC = () => {
         );
       })()}
 
-      {/* QR Batch Modal: after submit – Print Now / Print Later */}
+      {/* QR Batch Modal: after submit – same label format as qr-generate, batch sets printing */}
       {showQrBatchModal && submittedStockModels.length > 0 && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700 shrink-0">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Stock In Successful
+                  Stock In Successful – Print QR Labels
                 </h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Generate and print QR codes for each machine as a batch.
+                  {batchMachines.length} machine(s). One set = one label per machine. Choose how many sets to print.
                 </p>
               </div>
               <button
@@ -1249,47 +1639,99 @@ const StockInPage: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                {submittedStockModels.reduce((sum, m) => sum + m.machines.length, 0)} machine(s) across{' '}
-                {submittedStockModels.length} model(s) have been recorded. You can print all QR codes now or later.
-              </p>
-              <div className="flex gap-3 justify-end pt-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
+              {/* Label preview(s): same format as qr-generate (Needle Technologies header, QR left, S/N & B/N right) */}
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Label preview (one per machine)
+                </label>
+                <div className="space-y-4 max-h-[280px] overflow-y-auto pr-1">
+                  {submittedStockModels.map((model) =>
+                    model.machines.map((machine) => {
+                      const key = `${model.id}-${machine.id}`;
+                      const payload = getQRPayloadForLabel(machine.serialNumber, machine.boxNo || '');
+                      return (
+                        <div
+                          key={key}
+                          ref={(el) => {
+                            batchLabelRefs.current[key] = el;
+                          }}
+                          className="label mx-auto w-[464px] min-h-[320px] border-2 border-black bg-white dark:bg-slate-900 flex flex-col overflow-hidden rounded shrink-0"
+                        >
+                          <div className="header border-b-2 border-black py-2 text-center font-bold text-lg text-gray-900 dark:text-white">
+                            Needle Technologies
+                          </div>
+                          <div className="body flex flex-1 p-4 gap-6">
+                            <div className="left flex items-center justify-center shrink-0 p-2 bg-white dark:bg-slate-800 rounded">
+                              <QRCodeSVG value={payload} size={180} level="H" />
+                            </div>
+                            <div className="right flex flex-col justify-center gap-6 text-gray-900 dark:text-white">
+                              <div>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">Serial Number:</p>
+                                <p className="text-xl font-bold mt-0.5">{machine.serialNumber}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">Box Number:</p>
+                                <p className="text-xl font-bold mt-0.5">{machine.boxNo || '—'}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+              {/* Select Printer — same as qr-generate page */}
+              <div className="rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800/50 p-4 space-y-2">
+                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Select Printer
+                </label>
+                <select
+                  value={selectedDevice?.uid ?? ''}
+                  onChange={(e) => {
+                    const uid = e.target.value;
+                    if (uid) setSelectedDevice(devices.find((d: any) => d.uid === uid) ?? null);
+                  }}
+                  className="w-full rounded-lg border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white px-3 py-2.5 text-sm font-medium focus:border-blue-500 dark:focus:border-indigo-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-indigo-500/20 outline-none"
+                >
+                  {!isBrowserPrintLoaded ? (
+                    <option value="" disabled>Loading printers...</option>
+                  ) : devices.length > 0 ? (
+                    devices.map((d: any, i: number) => (
+                      <option key={d.uid ?? i} value={d.uid}>
+                        {[d.name, d.manufacturer, d.model].filter(Boolean).join(' — ') || d.uid || `Printer ${i + 1}`}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>
+                      No printers available — connect a printer or start Browser Print service
+                    </option>
+                  )}
+                </select>
+                {isBrowserPrintLoaded && devices.length === 0 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    Ensure the Browser Print service is running on this machine. Refresh after connecting a printer.
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-end pt-2">
                 <button
+                  type="button"
                   onClick={handlePrintLater}
                   className="px-5 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
                 >
                   Print Later
                 </button>
                 <button
-                  onClick={handlePrintNow}
-                  className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors inline-flex items-center gap-2"
+                  type="button"
+                  onClick={handlePrintBatch}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors"
                 >
-                  <QrCode className="w-4 h-4" />
-                  Print Now
+                  <Printer className="w-4 h-4" />
+                  Print
                 </button>
               </div>
-            </div>
-          </div>
-          {/* Printable area: only visible when printing (see globals.css) */}
-          <div id="qr-batch-print" className="hidden print:block p-4">
-            <h1 className="text-lg font-semibold text-gray-900 mb-4">Stock In – QR Codes</h1>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {submittedStockModels.map((model) =>
-                model.machines.map((machine, idx) => {
-                  const qrData = machine.qrCodeData || generateQRCodeData(model, machine);
-                  return (
-                    <div key={`${model.id}-${machine.id}`} className="border border-gray-300 p-3 rounded-lg break-inside-avoid">
-                      <div className="flex justify-center mb-2">
-                        <QRCodeSVG value={qrData} size={120} level="H" includeMargin />
-                      </div>
-                      <p className="text-xs font-medium text-gray-900 truncate">{model.brand} {model.model}</p>
-                      <p className="text-xs text-gray-600">SN: {machine.serialNumber}</p>
-                      {machine.boxNo && <p className="text-xs text-gray-600">Box: {machine.boxNo}</p>}
-                    </div>
-                  );
-                })
-              )}
             </div>
           </div>
         </div>

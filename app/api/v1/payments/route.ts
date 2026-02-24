@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { Decimal } from '@prisma/client/runtime/client';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
-import { withAuthAndRole, type AuthUser } from '@/lib/auth-middleware';
+import { AuthUser, withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
 /**
@@ -72,7 +72,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
 export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
-    const { customerId, totalAmount, currency = 'USD', paymentMethod, referenceNumber, paidAt, notes } = body;
+    const { customerId, totalAmount, currency = 'USD', paymentMethod, referenceNumber, paidAt, notes, receiptNumber } = body;
     
     if (!customerId || !totalAmount) {
       return validationErrorResponse('Missing required fields', {
@@ -91,7 +91,7 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRe
     
     const newPayment = await prisma.payment.create({
       data: {
-        receiptNumber: body.receiptNumber || `REC-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        receiptNumber: receiptNumber || `RCP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         customerId,
         totalAmount: new Decimal(totalAmount),
         currency,

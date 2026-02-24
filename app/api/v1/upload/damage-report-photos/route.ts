@@ -62,7 +62,10 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
       ? [...existingPhotos, ...publicUrls] 
       : publicUrls;
 
-      await prisma.damageReport.update({ where: { id: damageReportId }, data: { photos: updatedPhotos }, });
+      await prisma.damageReport.update({
+        where: { id: damageReportId },
+        data: { photos: updatedPhotos },
+      });
 
     return successResponse(
       {

@@ -118,7 +118,7 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
         category,
         description,
         estimatedRepairCost: new Decimal(estimatedRepairCost),
-        createdByUserId: auth.id, 
+        createdByUserId: auth.id,
       },
       include: { machine: true, rental: true, createdBy: true }
     });

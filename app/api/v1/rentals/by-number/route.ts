@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import { getReturnedMachineIdsForRental } from '@/lib/rental-returns';
 
 /**
  * @swagger
@@ -57,15 +58,39 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
         number: ['This agreement has no end date. Please use the full system.'],
       });
     }
+
+    const returnedIds = await getReturnedMachineIdsForRental(prisma, rental.id);
+    const allMachines = Array.isArray(rental.machines) ? rental.machines : [];
+    const activeMachines = returnedIds.size > 0
+      ? allMachines.filter((rm: any) => !returnedIds.has(rm.machineId))
+      : allMachines;
     
     const startDate = new Date(rental.startDate);
     const endDate = new Date(rental.expectedEndDate);
     const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
     const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
     const rentalPeriod = `${diffMonths} month${diffMonths !== 1 ? 's' : ''}`;
+
+    let monthlyRate: number;
+    let totalAmountFromActive: number;
+    if (returnedIds.size > 0) {
+      const monthlySubtotalFromActive = activeMachines.reduce(
+        (sum: number, rm: any) => sum + (parseFloat(String(rm.dailyRate)) || 0) * 30,
+        0
+      );
+      const totalSubtotalFromActive = monthlySubtotalFromActive * diffMonths;
+      const origSubtotal = parseFloat(rental.subtotal.toString()) || 0;
+      const origVat = parseFloat(rental.vatAmount?.toString() || '0') || 0;
+      const vatRatio = origSubtotal > 0 ? origVat / origSubtotal : 0;
+      totalAmountFromActive = totalSubtotalFromActive * (1 + vatRatio);
+      monthlyRate = diffMonths > 0 ? totalAmountFromActive / diffMonths : 0;
+    } else {
+      monthlyRate = parseFloat(rental.subtotal.toString()) / diffMonths;
+      totalAmountFromActive = parseFloat(rental.total.toString());
+    }
     
-    // Transform machines
-    const machines = rental.machines.map((rm: any) => ({
+    // Transform machines (active only when there are returns)
+    const machines = activeMachines.map((rm: any) => ({
       id: rm.machineId,
       model: rm.machine.model?.name || '',
       serialNumber: rm.machine.serialNumber,
@@ -123,8 +148,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       rentalStartDate: rental.startDate,
       rentalEndDate: rental.expectedEndDate,
       rentalPeriod,
-      monthlyRate: parseFloat(rental.subtotal.toString()) / diffMonths,
-      totalAmount: parseFloat(rental.total.toString()),
+      monthlyRate,
+      totalAmount: totalAmountFromActive,
       paidAmount: parseFloat(rental.paidAmount.toString()),
       outstandingAmount: parseFloat(rental.balance.toString()),
       securityDeposit: parseFloat(rental.depositTotal.toString()),
@@ -132,7 +157,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
       expectedReturnDate: rental.expectedEndDate,
       machines,
       expectedMachines: expectedMachineCategories.reduce((sum, cat) => sum + cat.quantity, 0),
-      addedMachines: rental.machines.length,
+      addedMachines: activeMachines.length,
       expectedMachineCategories,
       purchaseRequestId: rental.purchaseOrderId,
       purchaseRequestNumber: rental.purchaseOrder?.requestNumber,

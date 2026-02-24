@@ -82,7 +82,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      transformed,
+      transformed ,
       pagination,
       'Outstanding alerts retrieved successfully',
       { sortBy, sortOrder: sortOrder_ },

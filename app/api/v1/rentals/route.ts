@@ -4,6 +4,7 @@ import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import { Decimal } from '@prisma/client/runtime/client';
+import { getReturnedMachineIdsForRentals } from '@/lib/rental-returns';
 
 function parseExpectedFromLockedReason(lockedReason: string | null): { expectedMachineCount?: number; expectedMachineCategories?: { id: string; brand: string; model: string; type: string; quantity: number }[] } {
   if (!lockedReason) return {};
@@ -32,6 +33,39 @@ function parseExpectedFromRequestedLines(requestedMachineLines: unknown): { expe
   }));
   const count = categories.reduce((sum, c) => sum + c.quantity, 0);
   return { expectedMachineCount: count, expectedMachineCategories: categories };
+}
+
+/** When rental has returns, filter to active machines and recompute totals for response. Otherwise leave unchanged. */
+function applyActiveMachinesAndTotals(rental: any, returnedIds: Set<string>): any {
+  if (returnedIds.size === 0) return rental;
+
+  const machines = Array.isArray(rental.machines) ? rental.machines : [];
+  const activeMachines = machines.filter((rm: any) => !returnedIds.has(rm.machineId));
+
+  const start = rental.startDate ? new Date(rental.startDate) : new Date();
+  const end = rental.expectedEndDate ? new Date(rental.expectedEndDate) : null;
+  const diffMonths = end
+    ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)))
+    : 1;
+
+  const monthlySubtotal = activeMachines.reduce(
+    (sum: number, rm: any) => sum + (Number(rm.dailyRate) || 0) * 30,
+    0
+  );
+  const newSubtotal = monthlySubtotal * diffMonths;
+  const origSubtotal = Number(rental.subtotal) || 0;
+  const origVat = Number(rental.vatAmount) || 0;
+  const newVatAmount = origSubtotal > 0 ? newSubtotal * (origVat / origSubtotal) : 0;
+  const newTotal = newSubtotal + newVatAmount;
+
+  return {
+    ...rental,
+    machines: activeMachines,
+    subtotal: new Decimal(newSubtotal),
+    vatAmount: new Decimal(newVatAmount),
+    total: new Decimal(newTotal),
+    balance: new Decimal(Math.max(0, newTotal - Number(rental.paidAmount || 0))),
+  };
 }
 
 /**
@@ -88,10 +122,14 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
       },
     });
 
+    const rentalIds = rentals.map((r: any) => r.id);
+    const returnedByRental = await getReturnedMachineIdsForRentals(prisma, rentalIds);
+
     const withExpected = rentals.map((r: any) => {
       const fromRequested = parseExpectedFromRequestedLines(r.requestedMachineLines);
       const fromLocked = parseExpectedFromLockedReason(r.lockedReason);
-      return { ...r, ...(fromRequested.expectedMachineCount != null ? fromRequested : fromLocked) };
+      const withExp = { ...r, ...(fromRequested.expectedMachineCount != null ? fromRequested : fromLocked) };
+      return applyActiveMachinesAndTotals(withExp, returnedByRental.get(r.id) ?? new Set());
     });
     const pagination = buildPaginationMeta(totalItems, page, limit);
     

@@ -90,9 +90,9 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
       : publicUrls;
 
     await prisma.machine.update({
-      where: { id: machine.id },
-      data: { photos: updatedPhotos },
-    });
+       where: { id: machine.id },
+       data: { photos: updatedPhotos }, 
+  });
 
     return successResponse(
       { photoUrls: updatedPhotos },
@@ -103,3 +103,4 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
     return errorResponse('Failed to upload machine photos', 500);
   }
 });
+          
