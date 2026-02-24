@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Decimal } from '@prisma/client/runtime/client';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
-import { withAuthAndRole } from '@/lib/auth-middleware';
+import { AuthUser, withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
 /**
@@ -39,14 +39,14 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
     
     const totalItems = await prisma.damageReport.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const damageReports = await prisma.damageReport.findMany({
       where,
       skip,
       take: limit,
       orderBy: { [sortBy]: sortOrder_ },
-      include: { machine: true, rental: true, inspector: true }
+      include: { machine: true, rental: true, createdBy: true }
     });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
@@ -79,7 +79,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { machineId, rentalId, severity, category, description, estimatedRepairCost = 0 } = body;
@@ -118,8 +118,9 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
         category,
         description,
         estimatedRepairCost: new Decimal(estimatedRepairCost),
+        createdByUserId: auth.id, 
       },
-      include: { machine: true, rental: true, inspector: true }
+      include: { machine: true, rental: true, createdBy: true }
     });
     
     return successResponse(newReport, 'Damage report created successfully', 201);

@@ -57,15 +57,15 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
     );
 
     // Update return record with photo URLs
-    const existingPhotos = returnRecord.photoUrls || [];
+    const existingPhotos = returnRecord.photos || [];
     const updatedPhotos = append 
       ? [...existingPhotos, ...publicUrls] 
       : publicUrls;
 
-    await prisma.return.update(
-      { where: { id: returnId } },
-      { data: { photoUrls: updatedPhotos } }
-    );
+      await prisma.return.update({
+        where: { id: returnId },
+        data: { photos: updatedPhotos },
+      });
 
     return successResponse(
       {

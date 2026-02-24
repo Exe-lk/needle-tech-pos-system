@@ -50,7 +50,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     
     const totalItems = await prisma.outstandingAlert.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const alerts = await prisma.outstandingAlert.findMany({
       where,
@@ -82,7 +82,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      { outstandingAlerts: transformed },
+      transformed,
       pagination,
       'Outstanding alerts retrieved successfully',
       { sortBy, sortOrder: sortOrder_ },

@@ -33,7 +33,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
     
     const totalItems = await prisma.model.count({ where });
     const skip = (page - 1) * limit;
-    const sortOrder_ = sortOrder === 1 ? 'asc' : 'desc';
+    const sortOrder_ = sortOrder === 'asc' ? 'asc' : 'desc';
     
     const models = await prisma.model.findMany({
       where,

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Script from 'next/script';
-import Swal, { type SweetAlertResult } from 'sweetalert2';
+import Swal, { type SweetAlertResult, type SweetAlertOptions } from 'sweetalert2';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
@@ -239,9 +239,9 @@ const QRGeneratePage: React.FC = () => {
       input: 'number',
       inputValue: 1,
       inputAttributes: {
-        min: 1,
-        max: 100,
-        step: 1,
+        min: '1',
+        max: '100',
+        step: '1',
       },
       inputValidator: (value: string) => {
         const num = Number(value);
@@ -254,7 +254,7 @@ const QRGeneratePage: React.FC = () => {
       confirmButtonText: 'Print',
       cancelButtonText: 'Cancel',
       confirmButtonColor: '#2563eb',
-    }).then((result: SweetAlertResult) => {
+    } as SweetAlertOptions).then((result: SweetAlertResult) => {
       if (result.isConfirmed && result.value !== undefined && result.value !== '') {
         const count = Math.min(100, Math.max(1, Math.floor(Number(result.value))));
         performPrint(count);

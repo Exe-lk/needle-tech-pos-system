@@ -140,7 +140,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      { transactions },
+       transactions ,
       pagination,
       'Stock transactions retrieved successfully',
       { sortBy: sortBy || 'date', sortOrder: sortOrder_ },

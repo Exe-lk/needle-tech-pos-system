@@ -57,15 +57,12 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
     );
 
     // Update damage report record with photo URLs
-    const existingPhotos = damageReport.photoUrls || [];
+    const existingPhotos = damageReport.photos || [];
     const updatedPhotos = append 
       ? [...existingPhotos, ...publicUrls] 
       : publicUrls;
 
-    await prisma.damageReport.update(
-      { where: { id: damageReportId } },
-      { data: { photoUrls: updatedPhotos } }
-    );
+      await prisma.damageReport.update({ where: { id: damageReportId }, data: { photos: updatedPhotos }, });
 
     return successResponse(
       {

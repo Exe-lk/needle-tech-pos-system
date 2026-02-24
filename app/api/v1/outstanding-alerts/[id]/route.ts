@@ -39,7 +39,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
       description: alert.description || '',
       amount: alert.amount ? parseFloat(alert.amount.toString()) : null,
       dueDate: alert.dueDate,
-      severity: alert.severity?.charAt(0) + alert.severity?.slice(1).toLowerCase() || '',
+      severity: alert.severity ? (alert.severity.charAt(0) + alert.severity.slice(1).toLowerCase()) : '',
       status: alert.status === 'RESOLVED' ? 'Resolved' : 'Active',
       createdAt: alert.createdAt,
       relatedAgreement: alert.relatedAgreement || null,

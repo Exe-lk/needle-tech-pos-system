@@ -50,10 +50,10 @@ export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (req
     );
 
     // Update machine record with QR code image URL
-    await prisma.machine.update(
-      { where: { id: machine.id } },
-      { data: { qrCodeImageUrl: publicUrl } }
-    );
+    await prisma.machine.update({
+      where: { id: machine.id },
+      data: { qrCodeImageUrl: publicUrl },
+    });
 
     return successResponse(
       {

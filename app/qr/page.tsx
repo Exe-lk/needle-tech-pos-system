@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { 
@@ -371,4 +371,18 @@ const QRScannerPage: React.FC = () => {
   );
 };
 
-export default QRScannerPage;
+function QRScannerPageWithSuspense() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex items-center justify-center">
+          <div className="animate-pulse text-gray-500 dark:text-gray-400">Loading scanner...</div>
+        </div>
+      }
+    >
+      <QRScannerPage />
+    </Suspense>
+  );
+}
+
+export default QRScannerPageWithSuspense;
