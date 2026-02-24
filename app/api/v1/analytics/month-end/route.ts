@@ -52,14 +52,14 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (re
     });
     
     // Calculations
-    const totalRevenue = invoices.reduce((sum, inv) => sum + (parseFloat(inv.grandTotal?.toString() || '0')), 0);
-    const totalPayments = payments.reduce((sum, p) => sum + parseFloat(p.totalAmount?.toString() || '0'), 0);
+    const totalRevenue = invoices.reduce((sum: number, inv) => sum + (parseFloat(inv.grandTotal?.toString() || '0')), 0);
+    const totalPayments = payments.reduce((sum: number, p) => sum + parseFloat(p.totalAmount?.toString() || '0'), 0);
     
     const vatInvoices = invoices.filter(inv => inv.taxCategory === 'VAT');
     const nonVatInvoices = invoices.filter(inv => inv.taxCategory === 'NON_VAT');
     
-    const vatRevenue = vatInvoices.reduce((sum, inv) => sum + parseFloat(inv.grandTotal?.toString() || '0'), 0);
-    const nonVatRevenue = nonVatInvoices.reduce((sum, inv) => sum + parseFloat(inv.grandTotal?.toString() || '0'), 0);
+    const vatRevenue = vatInvoices.reduce((sum: number, inv) => sum + parseFloat(inv.grandTotal?.toString() || '0'), 0);
+    const nonVatRevenue = nonVatInvoices.reduce((sum : number, inv) => sum + parseFloat(inv.grandTotal?.toString() || '0'), 0);
     
     // Machine utilization
     const activeRentals = await prisma.rental.count({
@@ -79,7 +79,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (re
     
     // Outstanding amounts
     const outstandingInvoices = invoices.filter(inv => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(inv.paymentStatus));
-    const totalOutstanding = outstandingInvoices.reduce((sum, inv) => sum + parseFloat(inv.balance?.toString() || '0'), 0);
+    const totalOutstanding = outstandingInvoices.reduce((sum: number, inv) => sum + parseFloat(inv.balance?.toString() || '0'), 0);
     
     // Returns and damages
     const returns = await prisma.return.count({
