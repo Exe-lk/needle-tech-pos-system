@@ -1,13 +1,17 @@
 import { NextRequest } from 'next/server';
-import type { Prisma } from '@prisma/client';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
-type InvoiceRow = Prisma.InvoiceGetPayload<{
-  select: { id: true; grandTotal: true; taxCategory: true; paymentStatus: true; balance: true };
-}>;
-type PaymentRow = Prisma.PaymentGetPayload<{ select: { totalAmount: true } }>;
+// Explicit types matching the select shapes (no Prisma namespace)
+type InvoiceRow = {
+  id: string;
+  grandTotal: unknown; // Decimal from DB
+  taxCategory: string;
+  paymentStatus: string;
+  balance: unknown;
+};
+type PaymentRow = { totalAmount: unknown };
 
 export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
   try {
