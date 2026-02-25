@@ -47,6 +47,7 @@ model User {
   inspectedReturns  Return[]       @relation("ReturnInspector")
   createdDamageReports DamageReport[] @relation("DamageReportCreator")
   auditLogs         AuditLog[]
+  qrPrintLogs       QrPrintLog[]
 
   @@index([username])
   @@index([email])
@@ -327,6 +328,7 @@ model Machine {
   returns         Return[] @relation("ReturnMachine")
   returnMachines  ReturnMachine[] @relation("ReturnMachineItems")
   damageReports   DamageReport[]
+  qrPrintLogs     QrPrintLog[]
 
   @@index([serialNumber])
   @@index([qrCodeValue])
@@ -1027,4 +1029,38 @@ enum AuditAction {
   VIEW
   LOGIN
   LOGOUT
+}
+
+// ============ QR Print Logs ============
+
+model QrPrintLog {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  machineId       String   @db.Uuid
+  printedByUserId String   @db.Uuid
+  
+  // Denormalized fields for easier querying
+  serialNumber    String
+  boxNumber       String?
+  qrCodeValue     String
+  
+  // Print details
+  printCount      Int      @default(1) // Number of copies printed in this session
+  printedAt       DateTime @default(now()) @db.Timestamptz(6)
+  
+  // Additional metadata
+  notes           String?
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  machine         Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  printedBy       User     @relation(fields: [printedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([machineId])
+  @@index([printedByUserId])
+  @@index([printedAt(sort: Desc)])
+  @@index([serialNumber])
+  @@index([qrCodeValue])
+  @@map("qr_print_logs")
 }

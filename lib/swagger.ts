@@ -276,6 +276,7 @@ export const getApiDocs = async () => {
         { name: 'Settings', description: 'Settings management endpoints' },
         { name: 'Analytics', description: 'Analytics endpoints' },
         { name: 'Outstanding Alerts', description: 'Outstanding alerts endpoints' },
+        { name: 'QR Print Logs', description: 'QR code print logging endpoints' },
       ],
     },
   });

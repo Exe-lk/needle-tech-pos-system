@@ -1477,6 +1477,165 @@ export const swaggerPaths = {
       },
     },
   },
+  '/api/v1/qr-print-logs': {
+    post: {
+      summary: 'Log QR code print',
+      description: 'Record a QR code print event for a machine with timestamp and print count',
+      tags: ['QR Print Logs'],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['machineId', 'printCount'],
+              properties: {
+                machineId: {
+                  type: 'string',
+                  format: 'uuid',
+                  description: 'ID of the machine',
+                },
+                printCount: {
+                  type: 'integer',
+                  minimum: 1,
+                  default: 1,
+                  description: 'Number of copies printed',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Optional notes about the print',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        '201': {
+          description: 'QR print log created successfully',
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { $ref: '#/components/schemas/ApiResponse' },
+                  {
+                    type: 'object',
+                    properties: {
+                      data: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string', format: 'uuid' },
+                          machineId: { type: 'string', format: 'uuid' },
+                          serialNumber: { type: 'string' },
+                          boxNumber: { type: 'string' },
+                          qrCodeValue: { type: 'string' },
+                          printCount: { type: 'integer' },
+                          printedAt: { type: 'string', format: 'date-time' },
+                          notes: { type: 'string', nullable: true },
+                          machine: { type: 'object' },
+                          printedBy: { type: 'object' },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+        '400': { description: 'Validation error' },
+        '404': { description: 'Machine not found' },
+      },
+    },
+    get: {
+      summary: 'Get QR print logs',
+      description: 'Retrieve paginated list of QR print logs with filtering and search',
+      tags: ['QR Print Logs'],
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { $ref: '#/components/parameters/PageParam' },
+        { $ref: '#/components/parameters/LimitParam' },
+        { $ref: '#/components/parameters/SearchParam' },
+        {
+          name: 'machineId',
+          in: 'query',
+          schema: { type: 'string', format: 'uuid' },
+          description: 'Filter by machine ID',
+        },
+        {
+          name: 'serialNumber',
+          in: 'query',
+          schema: { type: 'string' },
+          description: 'Filter by serial number',
+        },
+        {
+          name: 'printedByUserId',
+          in: 'query',
+          schema: { type: 'string', format: 'uuid' },
+          description: 'Filter by user who printed',
+        },
+        {
+          name: 'startDate',
+          in: 'query',
+          schema: { type: 'string', format: 'date-time' },
+          description: 'Filter by start date',
+        },
+        {
+          name: 'endDate',
+          in: 'query',
+          schema: { type: 'string', format: 'date-time' },
+          description: 'Filter by end date',
+        },
+        { $ref: '#/components/parameters/SortByParam' },
+        { $ref: '#/components/parameters/SortOrderParam' },
+      ],
+      responses: {
+        '200': {
+          description: 'QR print logs retrieved successfully',
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { $ref: '#/components/schemas/ApiResponse' },
+                  {
+                    type: 'object',
+                    properties: {
+                      data: {
+                        type: 'object',
+                        properties: {
+                          items: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'string', format: 'uuid' },
+                                machineId: { type: 'string', format: 'uuid' },
+                                serialNumber: { type: 'string' },
+                                boxNumber: { type: 'string', nullable: true },
+                                qrCodeValue: { type: 'string' },
+                                printCount: { type: 'integer' },
+                                printedAt: { type: 'string', format: 'date-time' },
+                                notes: { type: 'string', nullable: true },
+                                createdAt: { type: 'string', format: 'date-time' },
+                                machine: { type: 'object' },
+                                printedBy: { type: 'object' },
+                              },
+                            },
+                          },
+                          pagination: { $ref: '#/components/schemas/PaginationMeta' },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 };
 
 export const swaggerComponents = {
