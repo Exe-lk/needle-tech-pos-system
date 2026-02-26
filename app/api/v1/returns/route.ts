@@ -277,7 +277,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         },
       });
       
-      // Create return machines
+      // Create return machines (links return to each machine with condition/notes/photos)
       for (const rm of returnMachines) {
         await tx.returnMachine.create({
           data: {
@@ -295,7 +295,11 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       if (returnedMachineIds.length > 0) {
         await tx.machine.updateMany({
           where: { id: { in: returnedMachineIds } },
-          data: { status: 'AVAILABLE' },
+          data: { 
+            status: 'AVAILABLE',
+            currentLocationType: 'WAREHOUSE',
+            currentLocationName: 'Main Warehouse',
+          },
         });
       }
 
@@ -324,7 +328,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
             quantityOut: 0,
             balance: newBalance,
             performedBy,
-            notes: `Return ${returnNumber} – machine ${rm.serialNumber} returned`,
+            notes: `Return ${returnNumber} – machine ${rm.serialNumber} returned from agreement ${rental.agreementNumber}`,
           },
         });
       }
@@ -342,8 +346,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         });
       }
 
-      // Post-processing: update agreement (remove returned machines), recalc rental totals,
-      // cancel future invoices, create new invoice for remaining period with remaining machines only
+      // Post-processing: update agreement, recalc rental totals, cancel future invoices,
+      // create new invoices (past months with all machines, future months with remaining only)
       const machineIdsForProcessing = returnMachines.map((rm) => rm.machineId);
       const processing = await processReturnPostProcessing(
         tx as any,
