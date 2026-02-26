@@ -70,7 +70,7 @@ export default function LoginPage() {
                 src="/logo.jpg"
                 alt="NeedleTech"
                 fill
-                className="object-cover"
+                className="object-contain"
                 priority
               />
             </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Swal from 'sweetalert2';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import {
   ArrowLeft,
@@ -250,8 +251,10 @@ const ReturnQRPage: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  // Machines + return state
+  // Machines + return state (machines = list being returned this movement; may be partial)
   const [machines, setMachines] = useState<MachineReturnState[]>([]);
+  /** How many machines to return in this movement (set when user clicks Start Scan); null until then */
+  const [returnCountLimit, setReturnCountLimit] = useState<number | null>(null);
   const [currentMachineIndex, setCurrentMachineIndex] = useState<number | null>(null);
 
   // Scanner
@@ -276,15 +279,24 @@ const ReturnQRPage: React.FC = () => {
   const [recentTransactions, setRecentTransactions] = useState<InventoryTransactionItem[]>([]);
   const [recentTransactionsLoading, setRecentTransactionsLoading] = useState(false);
 
-  // Derived
-  const totalMachines = machines.length;
+  // Derived (total for this return = returnCountLimit when set, else agreement total for display)
+  const totalMachines = useMemo(
+    () =>
+      returnCountLimit != null
+        ? returnCountLimit
+        : (selectedAgreement?.machines?.length ?? 0),
+    [returnCountLimit, selectedAgreement]
+  );
   const scannedCount = useMemo(
-    () => machines.filter((m) => m.scanned).length,
+    () => machines.filter((m) => m.scanned && m.returnType).length,
     [machines]
   );
   const allDone = useMemo(
-    () => machines.length > 0 && machines.every((m) => m.scanned && m.returnType),
-    [machines]
+    () =>
+      returnCountLimit != null &&
+      machines.length === returnCountLimit &&
+      machines.every((m) => m.scanned && m.returnType),
+    [returnCountLimit, machines]
   );
   const canSubmit = allDone && !isSubmitting;
 
@@ -369,6 +381,7 @@ const ReturnQRPage: React.FC = () => {
     setAgreementLoading(false);
     setSelectedAgreement(null);
     setMachines([]);
+    setReturnCountLimit(null);
     setCurrentMachineIndex(null);
     setScannerKey((k) => k + 1);
     setLastFeedback(null);
@@ -386,6 +399,12 @@ const ReturnQRPage: React.FC = () => {
     if (view === 'scan' || view === 'details') {
       setView('menu');
       setShowMachinePopup(false);
+      if (view === 'scan') {
+        machines.forEach((m) => m.photoPreviews?.forEach((p) => URL.revokeObjectURL(p)));
+        setMachines([]);
+        setReturnCountLimit(null);
+        setCurrentMachineIndex(null);
+      }
       return;
     }
     setStep(1);
@@ -434,17 +453,10 @@ const ReturnQRPage: React.FC = () => {
       }
 
       const agreement = mapRentalByNumberToAgreement(data);
-      const initialMachines: MachineReturnState[] = agreement.machines.map((m) => ({
-        ...m,
-        scanned: false,
-        returnType: undefined,
-        damageNote: '',
-        photos: [],
-        photoPreviews: [],
-      }));
 
       setSelectedAgreement(agreement);
-      setMachines(initialMachines);
+      setMachines([]);
+      setReturnCountLimit(null);
       setCurrentMachineIndex(null);
       setStep(2);
       setView('menu');
@@ -521,7 +533,10 @@ const ReturnQRPage: React.FC = () => {
   // -------------------------------------------------------------------------
 
   const handleScanSuccess = (decodedText: string) => {
-    if (machines.length === 0) return;
+    if (!selectedAgreement) return;
+    const agreementList = selectedAgreement.machines;
+    const limit = returnCountLimit ?? 0;
+    if (limit <= 0) return;
 
     const parsed = extractSerialAndBoxFromQR(decodedText);
     const serialNorm = parsed?.serial ? normalizeSerial(parsed.serial) : '';
@@ -536,36 +551,61 @@ const ReturnQRPage: React.FC = () => {
       return;
     }
 
-    const foundIndex = machines.findIndex(
+    // Match against agreement machines (allowed set for this return)
+    const agreementIndex = agreementList.findIndex(
       (m) =>
         normalizeSerial(m.serialNumber) === serialNorm ||
         (parsed?.box && pairKey(m.serialNumber, m.boxNumber) === pairKey(parsed.serial, parsed.box))
     );
 
-    if (foundIndex === -1) {
+    if (agreementIndex === -1) {
       showFeedback({
         type: 'failed',
         title: 'Not in this agreement',
-        message: `Serial ${serialNorm} is not in this return.`,
+        message: `Serial ${serialNorm} is not in this agreement.`,
       });
       restartScannerSoon();
       return;
     }
 
-    const machine = machines[foundIndex];
-
-    // Open popup for this machine
-    setCurrentMachineIndex(foundIndex);
-
-    // If not scanned yet, default to Good
-    if (!machine.scanned) {
-      updateMachineAtIndex(foundIndex, (m) => ({
-        ...m,
-        scanned: true,
-        returnType: m.returnType ?? 'Good',
-      }));
+    // Already added to this return?
+    const alreadyInReturn = machines.some(
+      (m) =>
+        normalizeSerial(m.serialNumber) === serialNorm ||
+        (parsed?.box && pairKey(m.serialNumber, m.boxNumber) === pairKey(parsed.serial, parsed.box))
+    );
+    if (alreadyInReturn) {
+      showFeedback({
+        type: 'duplicate',
+        title: 'Already scanned',
+        message: `${serialNorm} is already in this return.`,
+      });
+      restartScannerSoon();
+      return;
     }
 
+    if (machines.length >= limit) {
+      showFeedback({
+        type: 'failed',
+        title: 'Return limit reached',
+        message: `You are returning ${limit} machine(s). Add more in a new return.`,
+      });
+      restartScannerSoon();
+      return;
+    }
+
+    const agreementMachine = agreementList[agreementIndex];
+    const newMachine: MachineReturnState = {
+      ...agreementMachine,
+      scanned: true,
+      returnType: 'Good',
+      damageNote: '',
+      photos: [],
+      photoPreviews: [],
+    };
+    const newIndex = machines.length;
+    setMachines((prev) => [...prev, newMachine]);
+    setCurrentMachineIndex(newIndex);
     setShowMachinePopup(true);
 
     showFeedback({
@@ -573,8 +613,6 @@ const ReturnQRPage: React.FC = () => {
       title: 'Matched',
       message: `${serialNorm} recorded. Select return type & proof.`,
     });
-
-    // Scanner will restart after popup closes; no need to immediately restart here
   };
 
   // -------------------------------------------------------------------------
@@ -644,7 +682,11 @@ const ReturnQRPage: React.FC = () => {
         return;
       }
 
-      const created = json?.data as CreateReturnApiResponse | undefined;
+      const created = json?.data as (CreateReturnApiResponse & {
+        rentalUpdated?: boolean;
+        invoiceCreated?: boolean;
+        cancelledInvoiceCount?: number;
+      }) | undefined;
       const returnNumber = created?.returnNumber ?? 'Return';
       const returnId = created?.id;
 
@@ -662,7 +704,17 @@ const ReturnQRPage: React.FC = () => {
         }
       }
 
-      alert(`Return ${returnNumber} created successfully.`);
+      let successMessage = `Return ${returnNumber} created successfully.`;
+      if (created?.rentalUpdated) {
+        successMessage += ' Agreement updated to reflect remaining machines.';
+      }
+      if (created?.invoiceCreated) {
+        successMessage += ' A new invoice has been generated for the remaining rental period.';
+      }
+      if (created?.cancelledInvoiceCount != null && created.cancelledInvoiceCount > 0) {
+        successMessage += ` ${created.cancelledInvoiceCount} future invoice(s) cancelled and replaced.`;
+      }
+      alert(successMessage);
       resetAll();
       router.push('/returns');
     } catch (e) {
@@ -1025,15 +1077,53 @@ const ReturnQRPage: React.FC = () => {
                   View agreement details
                 </span>
                 <span className="text-[11px] text-gray-500 dark:text-slate-400">
-                  {machines.length} machine{machines.length !== 1 ? 's' : ''}
+                  {selectedAgreement.machines.length} machine{selectedAgreement.machines.length !== 1 ? 's' : ''} in agreement
                 </span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
-                  setView('scan');
-                  setScannerKey((k) => k + 1);
+                  const totalInAgreement = selectedAgreement.machines.length;
+                  Swal.fire({
+                    title: 'How many machines are you returning?',
+                    html: `<p class="text-sm text-gray-600 dark:text-slate-400 mt-2">Enter a number from 1 to ${totalInAgreement} (total machines in this agreement). This allows partial returns before the rental end date.</p>`,
+                    input: 'number',
+                    inputValue: totalInAgreement,
+                    inputAttributes: {
+                      min: '1',
+                      max: String(totalInAgreement),
+                      step: '1',
+                      placeholder: `1 – ${totalInAgreement}`,
+                    },
+                    inputValidator: (value: string) => {
+                      const num = Number(value);
+                      if (Number.isNaN(num) || !Number.isInteger(num)) {
+                        return 'Please enter a whole number.';
+                      }
+                      if (num < 1 || num > totalInAgreement) {
+                        return `Please enter a number between 1 and ${totalInAgreement}.`;
+                      }
+                      return null;
+                    },
+                    showCancelButton: true,
+                    confirmButtonText: 'Start scan',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#2563eb',
+                  }).then((result) => {
+                    if (result.isConfirmed && result.value !== undefined && result.value !== '') {
+                      const count = Math.min(
+                        totalInAgreement,
+                        Math.max(1, Math.floor(Number(result.value)))
+                      );
+                      setReturnCountLimit(count);
+                      setMachines([]);
+                      setCurrentMachineIndex(null);
+                      setShowMachinePopup(false);
+                      setView('scan');
+                      setScannerKey((k) => k + 1);
+                    }
+                  });
                 }}
                 className="w-full min-h-[52px] px-4 py-3 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
@@ -1097,7 +1187,9 @@ const ReturnQRPage: React.FC = () => {
                 Period: {selectedAgreement.rentalStartDate ? new Date(selectedAgreement.rentalStartDate).toLocaleDateString('en-LK') : '—'} → {selectedAgreement.rentalEndDate ? new Date(selectedAgreement.rentalEndDate).toLocaleDateString('en-LK') : 'Open-ended'}
               </p>
               <p className="text-xs text-gray-500 dark:text-slate-400">
-                Machines: {machines.length} · Verified: {scannedCount}/{totalMachines}
+                {returnCountLimit != null
+                  ? `Returning ${returnCountLimit} machine(s) · Verified: ${scannedCount}/${totalMachines}`
+                  : `Machines in agreement: ${selectedAgreement.machines.length} · Start QR Scan to begin return`}
               </p>
               <div className="mt-2">
                 <div className="w-full bg-gray-200 dark:bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
@@ -1111,48 +1203,55 @@ const ReturnQRPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Machine list */}
+            {/* Machine list: return list when started, otherwise agreement list (read-only) */}
             <div className="bg-white dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm dark:shadow-none">
               <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-900 dark:text-slate-100">Machines</p>
+                <p className="text-xs font-semibold text-gray-900 dark:text-slate-100">
+                  {returnCountLimit != null ? 'Machines in this return' : 'Machines in agreement'}
+                </p>
                 <p className="text-[11px] text-gray-500 dark:text-slate-400">
                   {scannedCount}/{totalMachines} verified
                 </p>
               </div>
               <div className="max-h-[60vh] overflow-y-auto">
-                {machines.map((m, idx) => (
-                  <div
-                    key={m.id}
-                    className="px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800/80 last:border-b-0"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center text-[11px] text-gray-600 dark:text-slate-300">
-                        {idx + 1}
+                {(machines.length > 0 ? machines : selectedAgreement.machines).map((m, idx) => {
+                  const isReturnList = machines.length > 0;
+                  const state = isReturnList ? (m as MachineReturnState) : null;
+                  const showVerified = state?.scanned && state?.returnType;
+                  return (
+                    <div
+                      key={m.id}
+                      className="px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800/80 last:border-b-0"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center text-[11px] text-gray-600 dark:text-slate-300">
+                          {idx + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-gray-900 dark:text-slate-100 truncate">
+                            {m.serialNumber}
+                          </p>
+                          <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
+                            Box {m.boxNumber || '—'}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-gray-900 dark:text-slate-100 truncate">
-                          {m.serialNumber}
-                        </p>
-                        <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
-                          Box {m.boxNumber || '—'}
-                        </p>
+                      <div className="flex items-center gap-2">
+                        {showVerified && state ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-[10px] text-emerald-700 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-500/40">
+                            <CheckCircle2 className="w-3 h-3" />
+                            {state.returnType}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-gray-500 dark:text-slate-400">Pending</span>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {m.scanned && m.returnType ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-[10px] text-emerald-700 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-500/40">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {m.returnType}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-gray-500 dark:text-slate-400">Pending</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {machines.length === 0 && (
+                  );
+                })}
+                {machines.length === 0 && selectedAgreement.machines.length === 0 && (
                   <div className="py-6 px-4 text-center text-xs text-gray-500 dark:text-slate-500">
-                    No machines found for this agreement.
+                    No machines in this agreement.
                   </div>
                 )}
               </div>
@@ -1192,7 +1291,7 @@ const ReturnQRPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Submit */}
+            {/* Submit (only enabled when return started and all N machines verified) */}
             <div className="pb-4">
               <button
                 type="button"
@@ -1216,9 +1315,14 @@ const ReturnQRPage: React.FC = () => {
                   </>
                 )}
               </button>
-              {!allDone && (
+              {returnCountLimit == null && (
                 <p className="mt-2 text-[11px] text-gray-500 dark:text-slate-400 text-center">
-                  All machines must be scanned and have a return type before submitting.
+                  Start QR Scan and complete the scanned machines to submit.
+                </p>
+              )}
+              {returnCountLimit != null && !allDone && (
+                <p className="mt-2 text-[11px] text-gray-500 dark:text-slate-400 text-center">
+                  Scan and set return type for all {returnCountLimit} machine(s) before submitting.
                 </p>
               )}
             </div>
@@ -1229,10 +1333,10 @@ const ReturnQRPage: React.FC = () => {
   }
 
   // -------------------------------------------------------------------------
-  // Step 2 view: full-screen scanner
+  // Step 2 view: full-screen scanner (only when return count was set)
   // -------------------------------------------------------------------------
 
-  if (step === 2 && view === 'scan' && selectedAgreement) {
+  if (step === 2 && view === 'scan' && selectedAgreement && returnCountLimit != null) {
     const progressPct = totalMachines > 0 ? (scannedCount / totalMachines) * 100 : 0;
 
     return (
@@ -1304,6 +1408,37 @@ const ReturnQRPage: React.FC = () => {
             </p>
           </div>
         </div>
+
+        {/* Submit button in scan view when all machines scanned and verified – so user can submit without going back to menu */}
+        {allDone && (
+          <div className="sticky bottom-0 left-0 right-0 p-4 bg-gray-900/95 dark:bg-black/95 backdrop-blur-sm border-t border-gray-700 dark:border-slate-700 safe-area-pb">
+            <button
+              type="button"
+              onClick={handleSubmitReturn}
+              disabled={!canSubmit}
+              className={`w-full min-h-[52px] px-5 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                canSubmit
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-900/30 active:scale-[0.98]'
+                  : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-950 border-t-transparent" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-5 h-5" />
+                  Submit return ({scannedCount} machine{scannedCount !== 1 ? 's' : ''})
+                </>
+              )}
+            </button>
+            <p className="text-[11px] text-gray-400 dark:text-slate-400 text-center mt-2">
+              All {returnCountLimit} machine(s) verified. You can submit or go back to review.
+            </p>
+          </div>
+        )}
 
         {/* Feedback toast (top of scanner) */}
         <div className="pointer-events-none fixed inset-x-0 top-[72px] px-4 z-30 flex justify-center">

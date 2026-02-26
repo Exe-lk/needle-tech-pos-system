@@ -5,6 +5,7 @@ import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import type { AuthUser } from '@/lib/auth-supabase';
 import { getReturnedMachineIdsForRental } from '@/lib/rental-returns';
+import { processReturnPostProcessing } from '@/lib/return-post-processing';
 
 /**
  * @swagger
@@ -257,7 +258,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
     
     const returnDate = new Date();
     
-    // Create return with machines in a transaction
+    let postProcessingResult: { rentalUpdated?: boolean; invoiceCreated?: boolean; cancelledInvoiceCount?: number } = {};
+    // Create return with machines in a transaction (timeout 15s – return + post-processing can exceed default 5s)
     const newReturn = await prisma.$transaction(async (tx) => {
       // Create the return record
       const returnRecord = await tx.return.create({
@@ -275,7 +277,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
         },
       });
       
-      // Create return machines
+      // Create return machines (links return to each machine with condition/notes/photos)
       for (const rm of returnMachines) {
         await tx.returnMachine.create({
           data: {
@@ -293,7 +295,11 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       if (returnedMachineIds.length > 0) {
         await tx.machine.updateMany({
           where: { id: { in: returnedMachineIds } },
-          data: { status: 'AVAILABLE' },
+          data: { 
+            status: 'AVAILABLE',
+            currentLocationType: 'WAREHOUSE',
+            currentLocationName: 'Main Warehouse',
+          },
         });
       }
 
@@ -322,7 +328,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
             quantityOut: 0,
             balance: newBalance,
             performedBy,
-            notes: `Return ${returnNumber} – machine ${rm.serialNumber} returned`,
+            notes: `Return ${returnNumber} – machine ${rm.serialNumber} returned from agreement ${rental.agreementNumber}`,
           },
         });
       }
@@ -339,6 +345,22 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           data: { damageReportId },
         });
       }
+
+      // Post-processing: update agreement, recalc rental totals, cancel future invoices,
+      // create new invoices (past months with all machines, future months with remaining only)
+      const machineIdsForProcessing = returnMachines.map((rm) => rm.machineId);
+      const processing = await processReturnPostProcessing(
+        tx as any,
+        rental.id,
+        returnDate,
+        machineIdsForProcessing,
+        auth.id
+      );
+      postProcessingResult = {
+        rentalUpdated: processing.rentalUpdated,
+        invoiceCreated: processing.invoiceCreated,
+        cancelledInvoiceCount: processing.cancelledInvoiceCount,
+      };
       
       // Fetch complete return with relations
       return await tx.return.findUnique({
@@ -361,7 +383,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
           damageReport: true,
         },
       });
-    });
+    }, { timeout: 15000 });
     
     // Transform response to match frontend expectations
     const transformed: any = {
@@ -383,7 +405,11 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (
       })),
     };
     
-    return successResponse(transformed, 'Return created successfully', 201);
+    return successResponse(
+      { ...transformed, ...postProcessingResult },
+      'Return created successfully',
+      201
+    );
   } catch (error: any) {
     console.error('Error creating return:', error);
     return errorResponse('Failed to create return', 500);
