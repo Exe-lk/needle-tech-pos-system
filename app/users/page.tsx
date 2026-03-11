@@ -37,6 +37,10 @@ const PERMISSION_MATRIX_ROWS: FormPermissionRow[] = [
   { key: 'purchase-order', label: 'Purchase Order', permissions: { view: 'purchase-orders:view', create: 'purchase-orders:create', update: 'purchase-orders:approve' } },
   { key: 'rental', label: 'Hiring Machine Agreement', permissions: { view: 'rentals:view', create: 'rentals:create', update: 'rentals:update', delete: 'rentals:delete' } },
   { key: 'gatepass', label: 'Gate Pass', permissions: { view: 'gatepasses:view', create: 'gatepasses:create', update: 'gatepasses:approve', delete: 'gatepasses:delete' } },
+  // Mobile flows (route-gated via /api/v1/auth/permissions → lib/permissions.ts FEATURES)
+  { key: 'gatepass-qr-mobile', label: 'Mobile: Gate Pass QR', permissions: { view: 'gatepasses:approve' } },
+  { key: 'machine-assign-mobile', label: 'Mobile: Machine Assign', permissions: { view: 'operations:machine-assign' } },
+  { key: 'return-qr-mobile', label: 'Mobile: Return QR', permissions: { view: 'operations:return-process' } },
   { key: 'returns', label: 'Returns Management', permissions: { view: 'returns:view', create: 'returns:create' } },
   { key: 'invoice', label: 'Invoice & Payments', permissions: { view: 'invoices:view', create: 'invoices:create', update: 'invoices:update' } },
   { key: 'inventory', label: 'Inventory Management', permissions: { view: 'inventory:view', create: 'inventory:stock-in' } },
