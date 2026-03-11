@@ -6,15 +6,12 @@ import { useRouter } from 'next/navigation';
 import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { AUTH_ACCESS_TOKEN_KEY, AUTH_REFRESH_TOKEN_KEY, AUTH_USER_KEY } from '@/lib/auth-constants';
 
-// Define role-based routing configuration
-const ROLE_ROUTE_MAP: Record<string, string[]> = {
-  'Security Officer': ['/gatepass-qr-page'],
-  'Stock Keeper': ['/machine-assign-page', '/return-qr-page'],
-};
+const MOBILE_ROUTES_PRIORITY = ['/gatepass-qr-page', '/machine-assign-page', '/return-qr-page'] as const;
 
-const ROLE_DEFAULT_ROUTE: Record<string, string> = {
-  'Security Officer': '/gatepass-qr-page',
-  'Stock Keeper': '/machine-assign-page',
+type PermissionsResponse = {
+  permissions: string[];
+  accessibleRoutes: string[];
+  user?: { role?: { name?: string } };
 };
 
 export default function MobileLoginPage() {
@@ -25,15 +22,11 @@ export default function MobileLoginPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  /**
-   * Validate if user has access to mobile features
-   */
-  const validateMobileAccess = (roleName: string): { isValid: boolean; defaultRoute: string | null } => {
-    const allowedRoles = Object.keys(ROLE_ROUTE_MAP);
-    const isValid = allowedRoles.includes(roleName);
-    const defaultRoute = isValid ? ROLE_DEFAULT_ROUTE[roleName] : null;
-    
-    return { isValid, defaultRoute };
+  const pickDefaultMobileRoute = (accessibleRoutes: string[]): string | null => {
+    for (const r of MOBILE_ROUTES_PRIORITY) {
+      if (accessibleRoutes.includes(r)) return r;
+    }
+    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,23 +62,34 @@ export default function MobileLoginPage() {
 
       const { accessToken, refreshToken, user } = json.data;
 
-      // Validate user role and permissions
-      if (!user?.role?.name) {
-        setError('User role information is missing. Please contact support.');
+      if (!accessToken) {
+        setError('Login succeeded but access token is missing. Please contact support.');
         return;
       }
 
-      const { isValid, defaultRoute } = validateMobileAccess(user.role.name);
+      // Validate access based on permissions (not role name)
+      const permRes = await fetch('/api/v1/auth/permissions', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const permJson = (await permRes.json()) as { status?: string; data?: PermissionsResponse; message?: string };
 
-      if (!isValid) {
-        setError(`Access denied. The role "${user.role.name}" is not authorized to use mobile features.`);
+      if (!permRes.ok || permJson?.status !== 'success' || !permJson?.data) {
+        setError(permJson?.message || 'Failed to verify permissions. Please try again.');
+        return;
+      }
+
+      const defaultRoute = pickDefaultMobileRoute(permJson.data.accessibleRoutes || []);
+      if (!defaultRoute) {
+        const roleName = permJson.data.user?.role?.name || user?.role?.name || 'Unknown';
+        setError(`Access denied. The role "${roleName}" does not have access to any mobile features.`);
         return;
       }
 
       // Store authentication data
-      if (accessToken) {
-        localStorage.setItem(AUTH_ACCESS_TOKEN_KEY, accessToken);
-      }
+      localStorage.setItem(AUTH_ACCESS_TOKEN_KEY, accessToken);
       if (refreshToken) {
         localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, refreshToken);
       }
@@ -94,11 +98,7 @@ export default function MobileLoginPage() {
       }
 
       // Redirect to role-specific default route
-      if (defaultRoute) {
-        router.push(defaultRoute);
-      } else {
-        setError('No accessible features found for your role.');
-      }
+      router.push(defaultRoute);
     } catch (err) {
       console.error('Login error:', err);
       setError('Something went wrong. Please try again.');
