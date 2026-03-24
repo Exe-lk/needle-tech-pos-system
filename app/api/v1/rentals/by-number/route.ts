@@ -14,7 +14,9 @@ import { getReturnedMachineIdsForRental } from '@/lib/rental-returns';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(
+  ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER', 'Stock_Keeper'],
+  async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const agreementNumber = searchParams.get('number');
