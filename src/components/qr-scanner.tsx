@@ -147,29 +147,53 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
       scannerRef.current = html5QrCode;
 
       const qrboxSize = getQRBoxSize();
+      const scannerConfig = {
+        fps: 10,
+        qrbox: { width: qrboxSize, height: qrboxSize },
+        aspectRatio: 1.0,
+        disableFlip: false,
+      };
 
-      await html5QrCode.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: qrboxSize, height: qrboxSize },
-          aspectRatio: 1.0,
-          disableFlip: false,
-          videoConstraints: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        },
-        (decodedText) => {
-          if (isMountedRef.current) {
-            handleScanSuccess(decodedText);
-          }
-        },
-        (errorMessage) => {
-          // Ignore scanning errors (they're just failed attempts)
+      const onDecode = (decodedText: string) => {
+        if (isMountedRef.current) {
+          handleScanSuccess(decodedText);
         }
-      );
+      };
+
+      const onScanError = () => {
+        // Ignore scan frame errors (non-fatal while trying to detect QR)
+      };
+
+      // Try preferred camera first, then fall back to any available device.
+      let startError: any = null;
+      const candidateCameraConfigs: Array<string | { facingMode: string }> = [
+        { facingMode: 'environment' },
+        { facingMode: 'user' },
+      ];
+
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (Array.isArray(devices) && devices.length > 0) {
+          // Use first discovered camera as a final fallback.
+          candidateCameraConfigs.push(devices[0].id);
+        }
+      } catch {
+        // If camera enumeration fails, keep facingMode fallbacks only.
+      }
+
+      for (const cameraConfig of candidateCameraConfigs) {
+        try {
+          await html5QrCode.start(cameraConfig as any, scannerConfig as any, onDecode, onScanError);
+          startError = null;
+          break;
+        } catch (err: any) {
+          startError = err;
+        }
+      }
+
+      if (startError) {
+        throw startError;
+      }
 
       if (isMountedRef.current) {
         setScanning(true);
@@ -182,7 +206,14 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({
       retryCountRef.current += 1;
       
       if (isMountedRef.current) {
-        const errorMessage = err.message || 'Failed to start camera. Please check permissions.';
+        const rawMessage = String(err?.message || err || '');
+        const errorMessage = rawMessage.includes('NotAllowedError')
+          ? 'Camera permission denied. Please allow camera access in browser/site settings.'
+          : rawMessage.includes('NotFoundError')
+            ? 'No camera device was found on this device/browser.'
+            : rawMessage.includes('NotReadableError')
+              ? 'Camera is in use by another app or browser tab. Please close other camera apps and retry.'
+              : (rawMessage || 'Failed to start camera. Please check permissions.');
         setError(errorMessage);
         setScanning(false);
         setIsInitializing(false);
