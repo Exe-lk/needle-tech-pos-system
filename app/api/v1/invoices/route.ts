@@ -109,7 +109,9 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
  *               totalAmount:
  *                 type: number
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
+export const POST = withAuthAndRole(
+  ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'Stock_Keeper'],
+  async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { customerId, rentalId, type, taxCategory, lineItems, issueDate, dueDate, subtotal, vatAmount, grandTotal } = body;

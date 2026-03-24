@@ -88,7 +88,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
   }
 });
 
-export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (
+export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'Stock_Keeper'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
