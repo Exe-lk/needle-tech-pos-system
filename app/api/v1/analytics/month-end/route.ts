@@ -3,17 +3,7 @@ import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
-// Explicit types matching the select shapes (no Prisma namespace)
-type InvoiceRow = {
-  id: string;
-  grandTotal: unknown; // Decimal from DB
-  taxCategory: string;
-  paymentStatus: string;
-  balance: unknown;
-};
-type PaymentRow = { totalAmount: unknown };
-
-export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get('month'); // Format: YYYY-MM
@@ -62,14 +52,14 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (re
     });
     
     // Calculations
-    const totalRevenue = invoices.reduce((sum: number, inv: InvoiceRow) => sum + (parseFloat(inv.grandTotal?.toString() || '0')), 0);
-    const totalPayments = payments.reduce((sum: number, p: PaymentRow) => sum + parseFloat(p.totalAmount?.toString() || '0'), 0);
+    const totalRevenue = invoices.reduce((sum, inv) => sum + (parseFloat(inv.grandTotal?.toString() || '0')), 0);
+    const totalPayments = payments.reduce((sum, p) => sum + parseFloat(p.totalAmount?.toString() || '0'), 0);
     
-    const vatInvoices = invoices.filter((inv: InvoiceRow) => inv.taxCategory === 'VAT');
-    const nonVatInvoices = invoices.filter((inv: InvoiceRow) => inv.taxCategory === 'NON_VAT');
+    const vatInvoices = invoices.filter(inv => inv.taxCategory === 'VAT');
+    const nonVatInvoices = invoices.filter(inv => inv.taxCategory === 'NON_VAT');
     
-    const vatRevenue = vatInvoices.reduce((sum: number, inv: InvoiceRow) => sum + parseFloat(inv.grandTotal?.toString() || '0'), 0);
-    const nonVatRevenue = nonVatInvoices.reduce((sum: number, inv: InvoiceRow) => sum + parseFloat(inv.grandTotal?.toString() || '0'), 0);
+    const vatRevenue = vatInvoices.reduce((sum, inv) => sum + parseFloat(inv.grandTotal?.toString() || '0'), 0);
+    const nonVatRevenue = nonVatInvoices.reduce((sum, inv) => sum + parseFloat(inv.grandTotal?.toString() || '0'), 0);
     
     // Machine utilization
     const activeRentals = await prisma.rental.count({
@@ -88,8 +78,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER'], async (re
     const utilizationRate = totalMachines > 0 ? (activeRentals / totalMachines) * 100 : 0;
     
     // Outstanding amounts
-    const outstandingInvoices = invoices.filter((inv: InvoiceRow) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(inv.paymentStatus));
-    const totalOutstanding = outstandingInvoices.reduce((sum: number, inv: InvoiceRow) => sum + parseFloat(inv.balance?.toString() || '0'), 0);
+    const outstandingInvoices = invoices.filter(inv => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(inv.paymentStatus));
+    const totalOutstanding = outstandingInvoices.reduce((sum, inv) => sum + parseFloat(inv.balance?.toString() || '0'), 0);
     
     // Returns and damages
     const returns = await prisma.return.count({
