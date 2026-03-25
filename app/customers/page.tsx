@@ -9,11 +9,20 @@ import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, Plus } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
-import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
+import { validateVATTIN, validateNICNumber, validateEmail } from '@/src/utils/validation';
 import { authFetch, clearAuth, redirectToLogin } from '@/lib/auth-client';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+
+const validateLocalPhoneNumber = (value: string): string | null => {
+  if (!value || typeof value !== 'string') return 'Phone number is required';
+  const trimmed = value.trim().replace(/\s+/g, '');
+  if (!/^0\d{9}$/.test(trimmed)) {
+    return 'Phone number must be 10 digits and start with 0 (e.g., 0771234567)';
+  }
+  return null;
+};
 
 // Type Definitions
 type CustomerType = 'Business' | 'Customer';
@@ -358,6 +367,7 @@ const columns: TableColumn[] = [
 const CustomerListPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isCreateTypeSelectOpen, setIsCreateTypeSelectOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -442,14 +452,23 @@ const CustomerListPage: React.FC = () => {
   };
 
   const handleCreateCustomer = () => {
-    setIsCreateModalOpen(true);
-    setActiveCreateTab('company');
+    setIsCreateTypeSelectOpen(true);
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setActiveCreateTab('company');
     setBusinessLocations([{ name: '', address: '' }]);
+  };
+
+  const handleCloseCreateTypeSelectModal = () => {
+    setIsCreateTypeSelectOpen(false);
+  };
+
+  const handleCreateTypeSelect = (type: 'company' | 'individual') => {
+    setActiveCreateTab(type);
+    setIsCreateTypeSelectOpen(false);
+    setIsCreateModalOpen(true);
   };
 
   const handleViewCustomer = async (customer: Customer) => {
@@ -512,8 +531,8 @@ const CustomerListPage: React.FC = () => {
     }
   };
 
-  // Form fields for Business
-  const companyFields: FormField[] = [
+  // Form fields for Business (Create)
+  const companyCreateFields: FormField[] = [
     {
       name: 'companyName',
       label: 'Business Name',
@@ -535,7 +554,7 @@ const CustomerListPage: React.FC = () => {
       type: 'textarea',
       placeholder: 'Enter full business address',
       required: true,
-      rows: 3,
+      rows: 2,
     },
     {
       name: 'contactPerson',
@@ -550,7 +569,7 @@ const CustomerListPage: React.FC = () => {
       type: 'phone',
       placeholder: 'Enter contact number',
       required: true,
-      validation: validatePhoneNumber,
+      validation: validateLocalPhoneNumber,
     },
     {
       name: 'email',
@@ -560,6 +579,11 @@ const CustomerListPage: React.FC = () => {
       required: true,
       validation: validateEmail,
     },
+  ];
+
+  // Form fields for Business (Update)
+  const companyUpdateFields: FormField[] = [
+    ...companyCreateFields,
     {
       name: 'status',
       label: 'Status',
@@ -573,8 +597,8 @@ const CustomerListPage: React.FC = () => {
     },
   ];
 
-  // Form fields for Customer
-  const individualFields: FormField[] = [
+  // Form fields for Customer (Create)
+  const individualCreateFields: FormField[] = [
     {
       name: 'fullName',
       label: 'Full Name',
@@ -596,7 +620,7 @@ const CustomerListPage: React.FC = () => {
       type: 'textarea',
       placeholder: 'Enter full address',
       required: true,
-      rows: 3,
+      rows: 2,
     },
     {
       name: 'phone',
@@ -604,7 +628,7 @@ const CustomerListPage: React.FC = () => {
       type: 'phone',
       placeholder: 'Enter contact number',
       required: true,
-      validation: validatePhoneNumber,
+      validation: validateLocalPhoneNumber,
     },
     {
       name: 'email',
@@ -614,6 +638,11 @@ const CustomerListPage: React.FC = () => {
       required: true,
       validation: validateEmail,
     },
+  ];
+
+  // Form fields for Customer (Update)
+  const individualUpdateFields: FormField[] = [
+    ...individualCreateFields,
     {
       name: 'status',
       label: 'Status',
@@ -697,7 +726,7 @@ const CustomerListPage: React.FC = () => {
         billingPostalCode: addressParts.postalCode,
         billingCountry: addressParts.country,
         vatRegistrationNumber: data.vatTin || null,
-        status: mapFrontendStatusToApi(data.status),
+        status: 'ACTIVE' as ApiCustomerStatus,
         ...(locationsPayload.length > 0 && { locations: locationsPayload }),
       };
 
@@ -737,7 +766,7 @@ const CustomerListPage: React.FC = () => {
         billingRegion: addressParts.region,
         billingPostalCode: addressParts.postalCode,
         billingCountry: addressParts.country,
-        status: mapFrontendStatusToApi(data.status),
+        status: 'ACTIVE' as ApiCustomerStatus,
       };
 
       const result = await createCustomer(payload);
@@ -968,6 +997,41 @@ const CustomerListPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Factory Locations (Business only) */}
+          {customerInfo.type === 'Business' && (selectedCustomerDetails.locations?.length ?? 0) > 0 && (
+            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
+                Factory Locations
+              </h4>
+              <div className="space-y-3 text-sm">
+                {selectedCustomerDetails.locations!.map((loc, index) => (
+                  <div
+                    key={loc.id ?? index}
+                    className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-3 border-b last:border-b-0 border-dashed border-gray-200 dark:border-slate-600/60 pb-2 last:pb-0"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900 dark:text-white">
+                          {loc.name || `Location ${index + 1}`}
+                        </span>
+                        {Object.prototype.hasOwnProperty.call(loc as any, 'isDefault') && (loc as any).isDefault && (
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      {loc.addressLine1 && (
+                        <div className="text-gray-600 dark:text-gray-300 mt-1">
+                          {loc.addressLine1}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Credit Status */}
           <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
@@ -1185,13 +1249,55 @@ const CustomerListPage: React.FC = () => {
       </main>
 
       {/* Create Customer Modal */}
+      {isCreateTypeSelectOpen && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Create
+              </h2>
+              <Tooltip content="Close">
+                <button
+                  onClick={handleCloseCreateTypeSelectModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </Tooltip>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Select what you want to create.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleCreateTypeSelect('individual')}
+                  className="px-4 py-3 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                >
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">Customer</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Individual customer</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCreateTypeSelect('company')}
+                  className="px-4 py-3 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                >
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">Business</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Garment factory / business</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {isCreateModalOpen && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Create Customer
+                {activeCreateTab === 'company' ? 'Create Business' : 'Create Customer'}
               </h2>
               <Tooltip content="Close">
                 <button
@@ -1203,50 +1309,25 @@ const CustomerListPage: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Tabs */}
-            <div className="border-b border-gray-200 dark:border-slate-700 px-6">
-              <div className="flex space-x-4">
-                <Tooltip content="Business">
-                  <button
-                    onClick={() => setActiveCreateTab('company')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                      activeCreateTab === 'company'
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    Business
-                  </button>
-                </Tooltip>
-                <Tooltip content="Customer">
-                  <button
-                    onClick={() => setActiveCreateTab('individual')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                      activeCreateTab === 'individual'
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    Customer
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-
             {/* Modal Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               {activeCreateTab === 'company' ? (
                 <>
+                  <div className="mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Business Details
+                    </h3>
+                  </div>
                   <CreateForm
                     ref={createFormRef}
-                    title="Business Details"
-                    fields={companyFields}
+                    fields={companyCreateFields}
                     onSubmit={handleCompanySubmit}
                     onClear={handleClear}
                     submitButtonLabel="Save"
                     clearButtonLabel="Clear"
                     loading={isSubmitting}
                     enableDynamicSpecs={false}
+                    density="compact"
                     hideFooterActions
                     formId="create-customer-form-company"
                     className="shadow-none border-0 p-0"
@@ -1278,7 +1359,7 @@ const CustomerListPage: React.FC = () => {
                                 return next;
                               })
                             }
-                            className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
                           />
                         </div>
                         <div className="flex gap-2 items-end">
@@ -1297,7 +1378,7 @@ const CustomerListPage: React.FC = () => {
                                   return next;
                                 })
                               }
-                              className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
                             />
                           </div>
                           <button
@@ -1307,7 +1388,7 @@ const CustomerListPage: React.FC = () => {
                                 prev.length > 1 ? prev.filter((_, i) => i !== index) : [{ name: '', address: '' }]
                               )
                             }
-                            className="shrink-0 p-3 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            className="shrink-0 p-2.5 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                             aria-label="Remove location"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1328,20 +1409,27 @@ const CustomerListPage: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <CreateForm
-                  ref={createFormRef}
-                  title="Customer Details"
-                  fields={individualFields}
-                  onSubmit={handleIndividualSubmit}
-                  onClear={handleClear}
-                  submitButtonLabel="Save"
-                  clearButtonLabel="Clear"
-                  loading={isSubmitting}
-                  enableDynamicSpecs={false}
-                  hideFooterActions
-                  formId="create-customer-form-individual"
-                  className="shadow-none border-0 p-0"
-                />
+                <>
+                  <div className="mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Customer Details
+                    </h3>
+                  </div>
+                  <CreateForm
+                    ref={createFormRef}
+                    fields={individualCreateFields}
+                    onSubmit={handleIndividualSubmit}
+                    onClear={handleClear}
+                    submitButtonLabel="Save"
+                    clearButtonLabel="Clear"
+                    loading={isSubmitting}
+                    enableDynamicSpecs={false}
+                    density="compact"
+                    hideFooterActions
+                    formId="create-customer-form-individual"
+                    className="shadow-none border-0 p-0"
+                  />
+                </>
               )}
               <div className="mt-6 pt-6 border-t border-gray-200 dark:border-slate-700">
                 <div className="flex justify-end space-x-4 mt-6">
@@ -1400,7 +1488,7 @@ const CustomerListPage: React.FC = () => {
                 <>
                   <UpdateForm
                     title="Update Business Details"
-                    fields={companyFields}
+                    fields={companyUpdateFields}
                     onSubmit={handleCompanyUpdate}
                     onClear={handleClear}
                     submitButtonLabel="Update"
@@ -1488,7 +1576,7 @@ const CustomerListPage: React.FC = () => {
               ) : (
                 <UpdateForm
                   title="Update Customer Details"
-                  fields={individualFields}
+                  fields={individualUpdateFields}
                   onSubmit={handleIndividualUpdate}
                   onClear={handleClear}
                   submitButtonLabel="Update"

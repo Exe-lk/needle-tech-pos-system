@@ -49,6 +49,8 @@ export interface FormProps {
   loading?: boolean;
   initialData?: Record<string, any>;
   enableDynamicSpecs?: boolean; // optional: for product specs / extra fields
+  /** UI density. Default keeps existing spacing. */
+  density?: 'comfortable' | 'compact';
   /** When true, footer Clear/Submit buttons are not rendered (e.g. for custom placement below extra sections) */
   hideFooterActions?: boolean;
   /** Optional form id for external submit buttons via form="id" */
@@ -85,6 +87,7 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
   loading = false,
   initialData = {},
   enableDynamicSpecs = false,
+  density = 'comfortable',
   hideFooterActions = false,
   formId,
 }, ref) => {
@@ -368,7 +371,9 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
 
   const renderField = (field: FormField) => {
     const hasError = !!errors[field.name];
-    const baseInputClasses = `w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 transition-colors duration-200 ${
+    const spacingClasses =
+      density === 'compact' ? 'px-3 py-2 text-sm' : 'px-4 py-3';
+    const baseInputClasses = `w-full ${spacingClasses} border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 transition-colors duration-200 ${
       hasError ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-slate-600'
     } ${
       field.disabled
@@ -636,17 +641,23 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
   const regularFields = filteredFields.filter((field) => field.type !== 'file' && field.type !== 'file-multiple');
   const fileFields = filteredFields.filter((field) => field.type === 'file' || field.type === 'file-multiple');
 
+  const containerPadding = density === 'compact' ? 'p-4 sm:p-5' : 'p-8';
+  const titleMargin = density === 'compact' ? 'mb-4' : 'mb-8';
+  const gridGap = density === 'compact' ? 'gap-4 mb-6' : 'gap-6 mb-8';
+  const labelMargin = density === 'compact' ? 'mb-1.5' : 'mb-2';
+  const errorTextMargin = density === 'compact' ? 'mt-1.5 text-xs' : 'mt-2 text-sm';
+
   return (
-    <div className={`bg-white dark:bg-slate-800 rounded-lg p-8 shadow-lg ${className}`}>
+    <div className={`bg-white dark:bg-slate-800 rounded-lg ${containerPadding} shadow-lg ${className}`}>
       {title && (
-        <div className="mb-8">
+        <div className={titleMargin}>
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">{title}</h2>
         </div>
       )}
 
       <form id={formId} onSubmit={handleSubmit}>
         {/* Base fields */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGap}`}>
           {regularFields.map((field) => (
             <div
               key={field.name}
@@ -654,7 +665,7 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
                 field.className || ''
               }`}
             >
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className={`block text-sm font-medium text-gray-700 dark:text-gray-300 ${labelMargin}`}>
                 {field.label}
                 {field.required && (
                   <span className="text-red-500 dark:text-red-400 ml-1">*</span>
@@ -664,7 +675,7 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
               {renderField(field)}
 
               {errors[field.name] && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                <p className={`${errorTextMargin} text-red-600 dark:text-red-400`}>
                   {errors[field.name]}
                 </p>
               )}
