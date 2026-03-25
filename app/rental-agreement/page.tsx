@@ -2168,12 +2168,15 @@ const RentalAgreementPage: React.FC = () => {
     );
 
     return (
-      <div className="bg-white p-6 sm:p-8 max-w-[210mm] mx-auto print:p-8 print:overflow-visible" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div
+        className="bg-white dark:!bg-white text-black dark:!text-black p-6 sm:p-8 max-w-[210mm] mx-auto print:p-0 print:max-w-none print:overflow-visible"
+        style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+      >
         <LetterheadDocument
           documentTitle="HIRING MACHINE AGREEMENT"
           footerStyle="simple"
           footerContent={signatureBlock}
-          className="print:p-0"
+          className="print:p-0 dark:!bg-white dark:!text-black"
         >
           {mainContent}
         </LetterheadDocument>
@@ -2400,23 +2403,47 @@ const RentalAgreementPage: React.FC = () => {
             {renderRentalAgreementDocument(agreementInfo)}
           </div>
         </div>
-
-        <div className="hidden print:block print:bg-white print:overflow-visible">
-          {renderRentalAgreementDocument(agreementInfo)}
-        </div>
       </div>
     );
   };
 
   return (
     <>
+      <style jsx global>{`
+        @media print {
+          @page {
+            margin: 0;
+          }
+          html,
+          body {
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* Force light-mode rendering for agreement print in dark UI */
+          #rental-agreement-print {
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          #rental-agreement-print,
+          #rental-agreement-print * {
+            color: #111827 !important;
+          }
+        }
+      `}</style>
+
       {/* Print-only rental agreement document - normal flow so signature block and footer print (no fixed clipping) */}
       {selectedAgreement && rentalDetail && (
         <div
           id="rental-agreement-print"
           className="hidden print:block print:bg-white print:z-[9999] print:overflow-visible"
+          style={{ printColorAdjust: 'exact' } as React.CSSProperties}
         >
-          {renderRentalAgreementDocument(rentalDetail)}
+          <div className="p-8 max-w-[210mm] mx-auto">
+            {renderRentalAgreementDocument(rentalDetail)}
+          </div>
         </div>
       )}
 
