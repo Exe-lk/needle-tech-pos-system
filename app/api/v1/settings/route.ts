@@ -17,7 +17,7 @@ import { Decimal } from '@prisma/client/runtime/client';
  *       200:
  *         description: Settings retrieved successfully
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     let settings = await prisma.settings.findUnique({
       where: { id: 'global' }
@@ -68,7 +68,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *               defaultVatRate:
  *                 type: number
  */
-export const PUT = withAuthAndRole(['ADMIN'], async (request: NextRequest) => {
+export const PUT = withAuthAndRole(['ADMIN', 'Operational_Officer'], async (request: NextRequest) => {
     try {
     const body = await request.json();
       const { companyName, companyAddress, currency, defaultVatRate, ...otherFields } = body;

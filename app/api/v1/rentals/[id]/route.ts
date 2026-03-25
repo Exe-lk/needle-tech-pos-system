@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 import { Decimal } from '@prisma/client/runtime/client';
 import { getReturnedMachineIdsForRental } from '@/lib/rental-returns';
 
-export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -88,7 +88,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'MANAGER', 'OPERATOR'
   }
 });
 
-export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'Stock_Keeper'], async (
+export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'Stock_Keeper'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -269,7 +269,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'Stock_Ke
   }
 });
 
-export const DELETE = withAuthAndRole(['SUPER_ADMIN','ADMIN'], async (
+export const DELETE = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }

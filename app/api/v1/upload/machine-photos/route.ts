@@ -41,7 +41,7 @@ import prisma from '@/lib/prisma';
  *                 type: boolean
  *                 default: true
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR'], async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { machineId, photos, append = true } = body;

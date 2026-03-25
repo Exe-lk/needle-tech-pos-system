@@ -40,7 +40,7 @@ import prisma from '@/lib/prisma';
  *       404:
  *         description: Machine not found
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER', 'Stock_Keeper'], async (request: NextRequest, auth: AuthUser) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER', 'Stock_Keeper'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { machineId, printCount = 1, notes } = body;
@@ -196,7 +196,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATO
  *       200:
  *         description: QR print logs retrieved successfully
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'Stock_Keeper'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'Stock_Keeper'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);

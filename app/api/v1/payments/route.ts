@@ -14,7 +14,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -69,7 +69,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['ADMIN', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
+export const POST = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { customerId, totalAmount, currency = 'USD', paymentMethod, referenceNumber, paidAt, notes, receiptNumber } = body;

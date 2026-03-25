@@ -13,7 +13,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'Stock_Keeper'], async (request: NextRequest, auth: AuthUser) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'Stock_Keeper'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { transactions } = body;
