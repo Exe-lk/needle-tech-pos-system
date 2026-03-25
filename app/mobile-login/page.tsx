@@ -7,12 +7,34 @@ import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { AUTH_ACCESS_TOKEN_KEY, AUTH_REFRESH_TOKEN_KEY, AUTH_USER_KEY } from '@/lib/auth-constants';
 
 const MOBILE_ROUTES_PRIORITY = ['/gatepass-qr-page', '/machine-assign-page', '/return-qr-page'] as const;
+const STOCKKEEPER_MOBILE_HUB = '/stockkeeper-mobileui';
+const GATEPASS_QR_ROUTE = '/gatepass-qr-page';
 
 type PermissionsResponse = {
   permissions: string[];
   accessibleRoutes: string[];
   user?: { role?: { name?: string } };
 };
+
+function normalizeRoleName(name: string | undefined): string {
+  return (name ?? '').trim().toLowerCase().replace(/_/g, ' ');
+}
+
+function isStockkeeperRole(name: string | undefined): boolean {
+  return normalizeRoleName(name).includes('stockkeeper');
+}
+
+function isSecurityOfficerRole(name: string | undefined): boolean {
+  const n = normalizeRoleName(name);
+  return n.includes('security') && n.includes('officer');
+}
+
+function hasStockkeeperMobileAccess(accessibleRoutes: string[]): boolean {
+  return (
+    accessibleRoutes.includes('/machine-assign-page') ||
+    accessibleRoutes.includes('/return-qr-page')
+  );
+}
 
 export default function MobileLoginPage() {
   const router = useRouter();
@@ -27,6 +49,19 @@ export default function MobileLoginPage() {
       if (accessibleRoutes.includes(r)) return r;
     }
     return null;
+  };
+
+  const resolvePostLoginMobileRoute = (
+    roleName: string | undefined,
+    accessibleRoutes: string[],
+  ): string | null => {
+    if (isSecurityOfficerRole(roleName) && accessibleRoutes.includes(GATEPASS_QR_ROUTE)) {
+      return GATEPASS_QR_ROUTE;
+    }
+    if (isStockkeeperRole(roleName) && hasStockkeeperMobileAccess(accessibleRoutes)) {
+      return STOCKKEEPER_MOBILE_HUB;
+    }
+    return pickDefaultMobileRoute(accessibleRoutes);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -81,10 +116,12 @@ export default function MobileLoginPage() {
         return;
       }
 
-      const defaultRoute = pickDefaultMobileRoute(permJson.data.accessibleRoutes || []);
+      const accessibleRoutes = permJson.data.accessibleRoutes || [];
+      const roleName = permJson.data.user?.role?.name || user?.role?.name;
+      const defaultRoute = resolvePostLoginMobileRoute(roleName, accessibleRoutes);
       if (!defaultRoute) {
-        const roleName = permJson.data.user?.role?.name || user?.role?.name || 'Unknown';
-        setError(`Access denied. The role "${roleName}" does not have access to any mobile features.`);
+        const displayRole = roleName || 'Unknown';
+        setError(`Access denied. The role "${displayRole}" does not have access to any mobile features.`);
         return;
       }
 
@@ -97,7 +134,6 @@ export default function MobileLoginPage() {
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
       }
 
-      // Redirect to role-specific default route
       router.push(defaultRoute);
     } catch (err) {
       console.error('Login error:', err);
