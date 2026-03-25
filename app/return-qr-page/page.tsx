@@ -392,23 +392,7 @@ const ReturnQRPage: React.FC = () => {
   };
 
   const handleBack = () => {
-    if (step === 1) {
-      router.push('/returns');
-      return;
-    }
-    if (view === 'scan' || view === 'details') {
-      setView('menu');
-      setShowMachinePopup(false);
-      if (view === 'scan') {
-        machines.forEach((m) => m.photoPreviews?.forEach((p) => URL.revokeObjectURL(p)));
-        setMachines([]);
-        setReturnCountLimit(null);
-        setCurrentMachineIndex(null);
-      }
-      return;
-    }
-    setStep(1);
-    setView('menu');
+    router.push('/stockkeeper-mobileui');
   };
 
   // -------------------------------------------------------------------------
@@ -935,10 +919,10 @@ const ReturnQRPage: React.FC = () => {
             <button
               type="button"
               onClick={handleBack}
-              className="p-2 mr-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-slate-100"
-              aria-label="Go back"
+              className="p-1.5 mr-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-slate-100 shrink-0"
+              aria-label="Back to stockkeeper home"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </button>
             <div className="min-w-0">
               <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -1031,10 +1015,10 @@ const ReturnQRPage: React.FC = () => {
             <button
               type="button"
               onClick={handleBack}
-              className="p-2 mr-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-slate-100"
-              aria-label="Go back"
+              className="p-1.5 mr-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-slate-100 shrink-0"
+              aria-label="Back to stockkeeper home"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </button>
             <div className="min-w-0">
               <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -1151,10 +1135,10 @@ const ReturnQRPage: React.FC = () => {
           <button
             type="button"
             onClick={handleBack}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-white"
-            aria-label="Go back to menu"
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-white shrink-0"
+            aria-label="Back to stockkeeper home"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
           <div className="flex-1 text-center">
             <h1 className="text-lg font-bold text-gray-900 dark:text-white">Agreement details</h1>
@@ -1346,10 +1330,10 @@ const ReturnQRPage: React.FC = () => {
           <button
             type="button"
             onClick={handleBack}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-white"
-            aria-label="Back to menu"
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-900 rounded-lg transition-colors text-gray-700 dark:text-white shrink-0"
+            aria-label="Back to stockkeeper home"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
           <div className="flex-1 text-center">
             <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Scan machine QR</h1>

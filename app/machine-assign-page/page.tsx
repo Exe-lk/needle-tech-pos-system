@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { authFetch } from '@/lib/auth-client';
 import {
@@ -247,6 +248,7 @@ function getUpdateInitialData(agreement: RentalAgreement | null): Record<string,
 type ViewMode = 'menu' | 'details' | 'scan';
 
 const MachineAssignPage: React.FC = () => {
+  const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -422,14 +424,8 @@ const MachineAssignPage: React.FC = () => {
     }
   };
 
-  const handleBackToStep1 = () => {
-    setStep(1);
-    setAgreementNumberInput('');
-    setLookupError(null);
-    setSelectedAgreement(null);
-    setMachinesForAgreement([]);
-    setActiveScanCategoryIndex(null);
-    setViewMode('menu');
+  const handleBackToStockkeeper = () => {
+    router.push('/stockkeeper-mobileui');
   };
 
   const handleCloseUpdate = () => {
@@ -625,20 +621,30 @@ const MachineAssignPage: React.FC = () => {
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/50 px-4 py-4">
           <div className="max-w-md mx-auto flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Scan className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                Machine Assignment
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                Enter the rental agreement number to continue
-              </p>
+            <div className="flex items-start min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={handleBackToStockkeeper}
+                className="p-1.5 mr-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white shrink-0 mt-0.5"
+                aria-label="Back to stockkeeper home"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Scan className="w-6 h-6 text-blue-600 dark:text-blue-400 shrink-0" />
+                  Machine Assignment
+                </h1>
+                <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                  Enter the rental agreement number to continue
+                </p>
+              </div>
             </div>
             {mounted && (
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors shrink-0"
                 aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
               >
                 {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -745,11 +751,11 @@ const MachineAssignPage: React.FC = () => {
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
             type="button"
-            onClick={handleBackToStep1}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white"
-            aria-label="Change agreement"
+            onClick={handleBackToStockkeeper}
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white shrink-0"
+            aria-label="Back to stockkeeper home"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
           <div className="flex-1 text-center">
             <h1 className="text-lg font-bold text-gray-900 dark:text-white">Machine Assignment</h1>
@@ -895,8 +901,9 @@ const MachineAssignPage: React.FC = () => {
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
             type="button"
-            onClick={() => setViewMode('menu')}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 text-xs text-gray-700 dark:text-slate-200"
+            onClick={handleBackToStockkeeper}
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 text-xs text-gray-700 dark:text-slate-200 shrink-0"
+            aria-label="Back to stockkeeper home"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
@@ -1104,11 +1111,11 @@ const MachineAssignPage: React.FC = () => {
       <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
         <button
           type="button"
-          onClick={() => setViewMode('menu')}
-          className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white"
-          aria-label="Back to actions"
+          onClick={handleBackToStockkeeper}
+          className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-700 dark:text-white shrink-0"
+          aria-label="Back to stockkeeper home"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex-1 text-center">
           <h1 className="text-lg font-bold text-gray-900 dark:text-white">Scan inventory</h1>
