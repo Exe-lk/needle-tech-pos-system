@@ -12,7 +12,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], async (
+export const GET = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }
@@ -63,7 +63,7 @@ export const GET = withAuthAndRole(['ADMIN', 'MANAGER', 'OPERATOR', 'USER'], asy
  *     security:
  *       - bearerAuth: []
  */
-export const PATCH = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+export const PATCH = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }

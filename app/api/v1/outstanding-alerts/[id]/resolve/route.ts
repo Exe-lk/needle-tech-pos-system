@@ -12,7 +12,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const PATCH = withAuthAndRole(['ADMIN', 'MANAGER'], async (
+export const PATCH = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER'], async (
   request: NextRequest,
   auth,
   { params }: { params: Promise<{ id: string }> }

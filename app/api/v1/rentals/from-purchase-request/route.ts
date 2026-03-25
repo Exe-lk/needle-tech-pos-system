@@ -14,7 +14,7 @@ import { Decimal } from '@prisma/client/runtime/client';
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER'], async (request: NextRequest, context: any) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, context: any) => {
   try {
     const body = await request.json();
     const {

@@ -9,7 +9,7 @@ import prisma from '@/lib/prisma';
  * Used by the inventory page view modal and QR codes so displayed/encoded values match the DB.
  */
 export const GET = withAuthAndRole(
-  ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER', 'Stock_Keeper'],
+  ['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER', 'Stock_Keeper'],
   async (request: NextRequest) => {
     try {
       const searchParams = request.nextUrl.searchParams;

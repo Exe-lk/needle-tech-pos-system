@@ -13,7 +13,7 @@ import prisma from '@/lib/prisma';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER', 'Security_Officer'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER', 'Security_Officer'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const gatePassNumber = searchParams.get('number');

@@ -40,7 +40,7 @@ import prisma from '@/lib/prisma';
  *         schema: { type: string, enum: [asc, desc] }
  */
 export const GET = withAuthAndRole(
-  ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'USER'],
+  ['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'],
   async (
     request: NextRequest,
     _auth,
