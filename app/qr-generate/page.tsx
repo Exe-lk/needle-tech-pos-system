@@ -210,7 +210,7 @@ const QRGeneratePage: React.FC = () => {
     });
   };
 
-  const getZPLForMachine = (serialNumber: string, boxNumber: string): string => {
+  const getZPLForMachine = (serialNumber: string, boxNumber: string, quantity = 1): string => {
     const qrData = JSON.stringify({ serialNumber, boxNo: boxNumber });
     return `^XA
 ^CI27
@@ -232,6 +232,8 @@ const QRGeneratePage: React.FC = () => {
 ^FO250,225^A0N,22,22^FDB/N:^FS
 ^FO250,255^A0N,28,28^FD${boxNumber}^FS
 
+^PQ${quantity},0,1,N
+
 ^XZ`;
   };
 
@@ -252,41 +254,18 @@ const QRGeneratePage: React.FC = () => {
     setIsPrinting(true);
 
     try {
-      const zplString = getZPLForMachine(m.serialNumber, m.boxNumber);
-
       if (isBrowserPrintLoaded && selectedDevice && typeof selectedDevice.send === 'function') {
-        // Send to Zebra printer
-        let sent = 0;
-        const sendNext = () => {
-          if (sent >= count) {
-            // Log the print after all copies are sent
-            logQRPrint(m.id, count);
-            setIsPrinting(false);
-            return;
-          }
-          selectedDevice.send(zplString, undefined, (err: string) => {
-            if (err) {
-              console.error('Print error:', err);
-              setIsPrinting(false);
-              Swal.fire({
-                title: 'Print Error',
-                text: `Failed to print: ${err}`,
-                icon: 'error',
-                confirmButtonColor: '#2563eb',
-              });
-              return;
-            }
-            sent += 1;
-            if (sent < count) {
-              sendNext();
-            } else {
-              // Log the print after all copies are sent
-              logQRPrint(m.id, count);
-              setIsPrinting(false);
-            }
-          });
-        };
-        sendNext();
+        // Send one ZPL job with explicit print quantity to avoid dropped/blank copies.
+        const zplString = getZPLForMachine(m.serialNumber, m.boxNumber, count);
+        await new Promise<void>((resolve, reject) => {
+          selectedDevice.send(
+            zplString,
+            () => resolve(),
+            (err: string) => reject(new Error(err || 'Unknown printer error'))
+          );
+        });
+        await logQRPrint(m.id, count);
+        setIsPrinting(false);
         return;
       }
 
