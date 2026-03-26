@@ -874,7 +874,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
         );
     };
 
-    const validateForm = (): boolean => {
+    const getPurchaseOrderValidationErrors = (): Record<string, string> => {
         const errors: Record<string, string> = {};
 
         if (!selectedCustomerId) errors.selectedCustomerId = 'Customer is required';
@@ -897,12 +897,62 @@ const CreatePurchaseRequestPage: React.FC = () => {
             }
         });
 
-        setFormErrors(errors);
-        return Object.keys(errors).length === 0;
+        return errors;
+    };
+
+    /** Same order as validation + visual layout (customer → dates → machines left-to-right). */
+    const getFirstPurchaseOrderErrorKey = (errors: Record<string, string>): string | null => {
+        const keys: string[] = ['selectedCustomerId', 'startDate', 'endDate'];
+        for (let i = 0; i < machines.length; i++) {
+            keys.push(
+                `machine_brand_${i}`,
+                `machine_model_${i}`,
+                `machine_type_${i}`,
+                `machine_quantity_${i}`,
+                `machine_monthlyRentalFee_${i}`
+            );
+        }
+        for (const k of keys) {
+            if (errors[k]) return k;
+        }
+        return Object.keys(errors)[0] ?? null;
+    };
+
+    const focusFirstPurchaseOrderError = (errors: Record<string, string>) => {
+        const firstKey = getFirstPurchaseOrderErrorKey(errors);
+        if (!firstKey) return;
+
+        const container = document.querySelector<HTMLElement>(
+            `[data-po-field-key="${CSS.escape(firstKey)}"]`
+        );
+        if (!container) return;
+
+        container.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+
+        window.setTimeout(() => {
+            const input = container.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+                'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+            );
+            try {
+                if (input) {
+                    input.focus({ preventScroll: true } as FocusOptions);
+                    if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+                        input.select?.();
+                    }
+                } else {
+                    container.focus({ preventScroll: true } as FocusOptions);
+                }
+            } catch {
+                // best-effort only
+            }
+        }, 50);
     };
 
     const handleSubmitPurchaseRequest = async () => {
-        if (!validateForm()) {
+        const errors = getPurchaseOrderValidationErrors();
+        setFormErrors(errors);
+        if (Object.keys(errors).length > 0) {
+            window.requestAnimationFrame(() => focusFirstPurchaseOrderError(errors));
             return;
         }
 
@@ -1260,7 +1310,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     </div>
 
                                 {/* Customer Selection */}
-                                <div>
+                                <div
+                                    data-po-field-key="selectedCustomerId"
+                                    tabIndex={-1}
+                                    className="outline-none rounded-lg"
+                                >
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Customer <span className="text-red-500">*</span>
                                     </label>
@@ -1298,7 +1352,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
                                 {/* Renting period – Start Date & End Date */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
+                                    <div
+                                        data-po-field-key="startDate"
+                                        tabIndex={-1}
+                                        className="outline-none rounded-lg"
+                                    >
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                             Start Date <span className="text-red-500">*</span>
                                         </label>
@@ -1314,7 +1372,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                             </p>
                                         )}
                                     </div>
-                                    <div>
+                                    <div
+                                        data-po-field-key="endDate"
+                                        tabIndex={-1}
+                                        className="outline-none rounded-lg"
+                                    >
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                             End Date <span className="text-red-500">*</span>
                                         </label>
@@ -1466,7 +1528,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                     </label>
                                                 </div>
                                                 {/* Row 2: Inputs (always on same baseline) */}
-                                                <div className="min-w-0 flex flex-col">
+                                                <div
+                                                    className="min-w-0 flex flex-col outline-none rounded-lg"
+                                                    data-po-field-key={`machine_brand_${index}`}
+                                                    tabIndex={-1}
+                                                >
                                                     <SearchableSelect
                                                         value={machine.brand}
                                                         onChange={(value) => handleMachineChange(machine.id, 'brand', value)}
@@ -1476,7 +1542,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         error={formErrors[`machine_brand_${index}`]}
                                                     />
                                                 </div>
-                                                <div className="min-w-0 flex flex-col">
+                                                <div
+                                                    className="min-w-0 flex flex-col outline-none rounded-lg"
+                                                    data-po-field-key={`machine_model_${index}`}
+                                                    tabIndex={-1}
+                                                >
                                                     <SearchableSelect
                                                         value={machine.model}
                                                         onChange={(value) => handleMachineChange(machine.id, 'model', value)}
@@ -1486,7 +1556,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         error={formErrors[`machine_model_${index}`]}
                                                     />
                                                 </div>
-                                                <div className="min-w-0 flex flex-col">
+                                                <div
+                                                    className="min-w-0 flex flex-col outline-none rounded-lg"
+                                                    data-po-field-key={`machine_type_${index}`}
+                                                    tabIndex={-1}
+                                                >
                                                     <SearchableSelect
                                                         value={machine.type}
                                                         onChange={(value) => handleMachineChange(machine.id, 'type', value)}
@@ -1496,7 +1570,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         error={formErrors[`machine_type_${index}`]}
                                                     />
                                                 </div>
-                                                <div className="min-w-0 flex flex-col">
+                                                <div
+                                                    className="min-w-0 flex flex-col outline-none rounded-lg"
+                                                    data-po-field-key={`machine_quantity_${index}`}
+                                                    tabIndex={-1}
+                                                >
                                                     <input
                                                         type="number"
                                                         min="1"
@@ -1542,7 +1620,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                         </p>
                                                     )}
                                                 </div>
-                                                <div className="min-w-0 flex flex-col">
+                                                <div
+                                                    className="min-w-0 flex flex-col outline-none rounded-lg"
+                                                    data-po-field-key={`machine_monthlyRentalFee_${index}`}
+                                                    tabIndex={-1}
+                                                >
                                                     <input
                                                         type="number"
                                                         min="0"
