@@ -608,8 +608,6 @@ const GatePassPage: React.FC = () => {
       motorBoxNo: '',
     }));
   });
-  const [issuedBy, setIssuedBy] = useState('');
-  const [receivedBy, setReceivedBy] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const handleCreateGatePass = () => {
@@ -630,8 +628,6 @@ const GatePassPage: React.FC = () => {
         motorBoxNo: '',
       }))
     );
-    setIssuedBy('');
-    setReceivedBy('');
     setFormErrors({});
   };
 
@@ -652,8 +648,6 @@ const GatePassPage: React.FC = () => {
         motorBoxNo: '',
       }))
     );
-    setIssuedBy('');
-    setReceivedBy('');
     setFormErrors({});
   };
 
@@ -800,7 +794,7 @@ const GatePassPage: React.FC = () => {
         driverName: driverName.trim(),
         vehicleNumber: vehicleNumber.trim(),
         departureTime: new Date(dateOfIssue).toISOString(),
-        notes: `Issued by: ${issuedBy || 'System'}, Received by: ${receivedBy || 'N/A'}`,
+        notes: `Received by: N/A`,
       };
 
       const createdGatePass = await createGatePass(payload);
@@ -1221,7 +1215,7 @@ const GatePassPage: React.FC = () => {
   const renderGatePassLetterheadBody = (gatePass: GatePass) => (
     <>
       {/* Top row: left = FROM/TO/Vehicle/Driver, right = Gatepass/Date/Returnable/Entry */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
         <div className="space-y-3 sm:space-y-4">
           <div>
             <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">FROM:</div>
@@ -1241,7 +1235,7 @@ const GatePassPage: React.FC = () => {
             <div className="text-xs sm:text-sm text-gray-900 dark:text-slate-100 print:text-gray-900 font-medium break-words">{gatePass.driverName}</div>
           </div>
         </div>
-        <div className="space-y-3 sm:space-y-4 md:text-right">
+        <div className="space-y-3 sm:space-y-4 md:text-right print:text-right">
           <div>
             <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Gatepass:</div>
             <div className="text-base sm:text-lg text-gray-900 dark:text-slate-100 print:text-gray-900 font-bold break-words">{gatePass.gatepassNo}</div>
@@ -1293,7 +1287,7 @@ const GatePassPage: React.FC = () => {
 
   /** Signatures row for LetterheadDocument footerContent */
   const renderGatePassSignatures = (gatePass: GatePass) => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
       <div>
         <div className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800 pb-1 min-h-[36px] mb-1 flex items-end">
           {gatePass.issuedBy && (
@@ -1316,7 +1310,7 @@ const GatePassPage: React.FC = () => {
 
   /** Full gatepass on letterhead - for both screen preview and print. Footer: address, telephone, fax, email only. */
   const renderGatePassOnLetterhead = (gatePass: GatePass) => (
-    <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 dark:border-slate-600 rounded-lg print:shadow-none print:border-0 print:rounded-none print:bg-white print:p-8 print:max-w-none">
+    <div className="bg-white dark:bg-slate-800 w-full p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 dark:border-slate-600 rounded-lg print:shadow-none print:border-0 print:rounded-none print:bg-white print:w-[210mm] print:max-w-[210mm] print:p-8">
       <LetterheadDocument
         documentTitle="GATEPASS"
         footerStyle="simple"
@@ -1373,22 +1367,43 @@ const GatePassPage: React.FC = () => {
 
   return (
     <>
+      {/* Force LIGHT styles for Gatepass print output (even if app is in dark mode).
+          We scope this strictly to the gatepass print area to avoid impacting other pages. */}
+      <style jsx global>{`
+        @media print {
+          html.dark #gatepass-print-area,
+          html.dark #gatepass-print-area * {
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
+
+          /* Keep borders visible in print */
+          html.dark #gatepass-print-area table,
+          html.dark #gatepass-print-area th,
+          html.dark #gatepass-print-area td,
+          html.dark #gatepass-print-area thead tr,
+          html.dark #gatepass-print-area tbody tr,
+          html.dark #gatepass-print-area div,
+          html.dark #gatepass-print-area section {
+            border-color: #1f2937 !important; /* gray-800 */
+          }
+
+          /* Ensure the print renderer doesn't try to preserve dark backgrounds */
+          #gatepass-print-area {
+            -webkit-print-color-adjust: economy;
+            print-color-adjust: economy;
+            color-scheme: light;
+          }
+        }
+      `}</style>
+
       {/* Print-only gate pass on letterhead - hidden on screen, visible when printing; normal flow so footer prints */}
       {selectedGatePass && (
         <div
           id="gatepass-print-area"
           className="hidden print:block print:bg-white print:min-h-0"
-          style={{ printColorAdjust: 'exact' } as React.CSSProperties}
         >
-          <div className="p-8 max-w-[210mm] mx-auto">
-            <LetterheadDocument
-              documentTitle="GATEPASS"
-              footerStyle="simple"
-              footerContent={renderGatePassSignatures(selectedGatePass)}
-            >
-              {renderGatePassLetterheadBody(selectedGatePass)}
-            </LetterheadDocument>
-          </div>
+          {renderGatePassOnLetterhead(selectedGatePass)}
         </div>
       )}
 
@@ -1467,24 +1482,12 @@ const GatePassPage: React.FC = () => {
                     footerContent={
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
                         <div>
-                          <input
-                            type="text"
-                            value={issuedBy}
-                            onChange={(e) => setIssuedBy(e.target.value)}
-                            placeholder="Name"
-                            className="w-full border-0 border-b border-gray-800 dark:border-slate-400 bg-transparent py-1 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-0"
-                          />
+                          <div className="w-full border-0 border-b border-gray-800 dark:border-slate-400 bg-transparent py-1 text-sm text-gray-900 dark:text-white min-h-[28px]" />
                           <div className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 mt-1">Issued By</div>
                         </div>
                         <div className="hidden md:block" />
                         <div>
-                          <input
-                            type="text"
-                            value={receivedBy}
-                            onChange={(e) => setReceivedBy(e.target.value)}
-                            placeholder="Name"
-                            className="w-full border-0 border-b border-gray-800 dark:border-slate-400 bg-transparent py-1 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-0"
-                          />
+                          <div className="w-full border-0 border-b border-gray-800 dark:border-slate-400 bg-transparent py-1 text-sm text-gray-900 dark:text-white min-h-[28px]" />
                           <div className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 mt-1">Received By</div>
                         </div>
                       </div>

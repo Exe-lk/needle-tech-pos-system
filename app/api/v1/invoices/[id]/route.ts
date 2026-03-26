@@ -13,7 +13,19 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
     
     const invoice = await prisma.invoice.findUnique({
       where: { id },
-      include: { customer: true, rental: true }
+      include: {
+        customer: true,
+        rental: {
+          include: {
+            purchaseOrder: {
+              select: {
+                id: true,
+                requestNumber: true,
+              },
+            },
+          },
+        },
+      },
     });
     
     if (!invoice) {
@@ -47,7 +59,19 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
         ...(body.status && { status: body.status }),
         ...(body.paymentStatus && { paymentStatus: body.paymentStatus }),
       },
-      include: { customer: true, rental: true }
+      include: {
+        customer: true,
+        rental: {
+          include: {
+            purchaseOrder: {
+              select: {
+                id: true,
+                requestNumber: true,
+              },
+            },
+          },
+        },
+      },
     });
     
     return successResponse(updatedInvoice, 'Invoice updated successfully');

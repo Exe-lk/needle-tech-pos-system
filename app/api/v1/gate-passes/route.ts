@@ -50,7 +50,6 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
           }
         },
         customer: true,
-        issuedBy: true,
         machines: {
           include: {
             machine: {
@@ -201,7 +200,6 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer
           }
         },
         customer: true,
-        issuedBy: true,
         machines: {
           include: {
             machine: {

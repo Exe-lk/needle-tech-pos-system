@@ -20,7 +20,6 @@ export const GET = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER', '
           }
         },
         customer: true,
-        issuedBy: true,
         machines: {
           include: {
             machine: {
@@ -76,7 +75,6 @@ export const PUT = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER'], 
           }
         },
         customer: true,
-        issuedBy: true,
         machines: {
           include: {
             machine: {
