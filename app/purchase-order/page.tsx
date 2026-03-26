@@ -33,6 +33,8 @@ interface PurchaseRequest {
 
 interface MachineRequestItem {
     id: string;
+    // Optional underlying inventory/machine id, may differ from line id for newly added machines.
+    machineId?: string;
     brand: string;
     model: string;
     type: string;
@@ -44,6 +46,20 @@ interface MachineRequestItem {
     pendingQuantity?: number;
     expectedAvailabilityDate?: string;
 }
+
+/** Values for `<input type="date">` must be `YYYY-MM-DD`; ISO datetime strings show as empty in many browsers. */
+const toDateInputValue = (value: string | Date | null | undefined): string => {
+    if (value == null || value === '') return '';
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        const ymd = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (ymd) return ymd[1];
+        const d = new Date(trimmed);
+        return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    }
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+};
 
 const getEarliestExpectedAvailabilityDate = (request: PurchaseRequest): string | null => {
     if (!request.machines || request.machines.length === 0) return null;
@@ -140,6 +156,9 @@ const PurchaseOrderPage: React.FC = () => {
     const [updateForm, setUpdateForm] = useState<{ status: PurchaseRequestStatus; startDate: string; endDate: string; machines: MachineRequestItem[]; notes: string }>({ status: 'Pending', startDate: '', endDate: '', machines: [], notes: '' });
     const [updateFormErrors, setUpdateFormErrors] = useState<Record<string, string>>({});
     const [isUpdateSubmitting, setIsUpdateSubmitting] = useState(false);
+    // All machines available for this customer, used to add new machine lines in the update modal.
+    const [allMachinesForCustomer, setAllMachinesForCustomer] = useState<MachineRequestItem[]>([]);
+    const [isLoadingMachines, setIsLoadingMachines] = useState(false);
 
     const fetchPurchaseOrders = useCallback(async () => {
         setFetchError(null);
@@ -247,9 +266,47 @@ const PurchaseOrderPage: React.FC = () => {
         setRentalFormErrors({});
     };
 
+    const fetchMachinesForCustomer = useCallback(async (customerId: string | number) => {
+        setIsLoadingMachines(true);
+        try {
+            const params = new URLSearchParams({ customerId: String(customerId) });
+            const response = await authFetch(`${API_BASE_URL}/machines?${params.toString()}`, {
+                method: 'GET',
+                credentials: 'include',
+            });
+            const json = await response.json();
+            if (!response.ok) {
+                throw new Error(json?.message || 'Failed to load machines');
+            }
+            const list = (json?.data?.items || json?.data || []) as any[];
+            const normalized: MachineRequestItem[] = Array.isArray(list)
+                ? list.map((m) => ({
+                    id: String(m.id),
+                    machineId: m.machineId ? String(m.machineId) : String(m.id),
+                    brand: m.brand || '',
+                    model: m.model || '',
+                    type: m.type || m.machineType || '',
+                    quantity: m.quantity ?? 0,
+                    availableStock: m.availableStock ?? m.stock ?? 0,
+                    unitPrice: m.unitPrice ?? m.monthlyRentalFee ?? 0,
+                    totalPrice: 0,
+                    rentedQuantity: m.rentedQuantity ?? 0,
+                    pendingQuantity: m.pendingQuantity ?? 0,
+                    expectedAvailabilityDate: m.expectedAvailabilityDate ?? undefined,
+                }))
+                : [];
+            setAllMachinesForCustomer(normalized);
+        } catch (error) {
+            console.error('Error loading machines for customer', error);
+            setAllMachinesForCustomer([]);
+        } finally {
+            setIsLoadingMachines(false);
+        }
+    }, []);
+
     const handleUpdateRequest = (request: PurchaseRequest) => {
-        const startDateStr = request.startDate ? (typeof request.startDate === 'string' ? request.startDate : new Date(request.startDate).toISOString().split('T')[0]) : '';
-        const endDateStr = request.endDate ? (typeof request.endDate === 'string' ? request.endDate : new Date(request.endDate).toISOString().split('T')[0]) : '';
+        const startDateStr = toDateInputValue(request.startDate ?? null);
+        const endDateStr = toDateInputValue(request.endDate ?? null);
         setSelectedRequest(request);
         setUpdateForm({
             status: request.status,
@@ -260,6 +317,9 @@ const PurchaseOrderPage: React.FC = () => {
         });
         setUpdateFormErrors({});
         setIsUpdateModalOpen(true);
+        if (request.customerId) {
+            fetchMachinesForCustomer(request.customerId);
+        }
     };
 
     const handleCloseUpdateModal = () => {
@@ -287,6 +347,32 @@ const PurchaseOrderPage: React.FC = () => {
         });
     };
 
+    const handleRemoveMachineFromUpdate = (machineId: string) => {
+        setUpdateForm(prev => ({
+            ...prev,
+            machines: prev.machines.filter(m => m.id !== machineId),
+        }));
+    };
+
+    const handleAddMachineToUpdate = (machineId: string) => {
+        setUpdateForm(prev => {
+            // Avoid duplicates by id
+            if (prev.machines.some(m => m.id === machineId)) return prev;
+            const source = allMachinesForCustomer.find(m => m.id === machineId || m.machineId === machineId);
+            if (!source) return prev;
+            const quantity = 1;
+            const unitPrice = source.unitPrice || 0;
+            const newMachine: MachineRequestItem = {
+                ...source,
+                id: String(source.id),
+                machineId: source.machineId ?? String(source.id),
+                quantity,
+                totalPrice: unitPrice * quantity,
+            };
+            return { ...prev, machines: [...prev.machines, newMachine] };
+        });
+    };
+
     const validateUpdateForm = (): boolean => {
         const errors: Record<string, string> = {};
         if (!updateForm.startDate) errors.startDate = 'Start date is required';
@@ -309,7 +395,7 @@ const PurchaseOrderPage: React.FC = () => {
         try {
             const machinesPayload = updateForm.machines.map(m => ({
                 id: m.id,
-                machineId: m.id,
+                machineId: m.machineId ?? m.id,
                 brand: m.brand,
                 model: m.model,
                 type: m.type,
@@ -418,9 +504,39 @@ const PurchaseOrderPage: React.FC = () => {
     };
 
     const actions: ActionButton[] = [
-        { label: '', icon: <Eye className="w-4 h-4" />, variant: 'secondary', onClick: handleViewRequest, tooltip: 'View Purchase Request', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600' },
-        { label: '', icon: <Pencil className="w-4 h-4" />, variant: 'secondary', onClick: handleUpdateRequest, tooltip: 'Update Purchase Order', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800/50 border border-amber-300 dark:border-amber-700' },
-        { label: '', icon: <FileText className="w-4 h-4" />, variant: 'primary', onClick: (row: PurchaseRequest) => handleCreateRentalAgreement(row), tooltip: 'Create Hiring Machine Agreement (only when machines are available)', className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500', shouldShow: (row: PurchaseRequest) => hasAvailableMachinesForRental(row) },
+        {
+            label: '',
+            icon: <Eye className="w-4 h-4" />,
+            variant: 'secondary',
+            onClick: handleViewRequest,
+            tooltip: 'View Purchase Request',
+            className:
+                'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+        },
+        {
+            label: '',
+            icon: <Pencil className="w-4 h-4" />,
+            variant: 'secondary',
+            onClick: handleUpdateRequest,
+            tooltip: 'Update Purchase Order',
+            className:
+                'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800/50 border border-amber-300 dark:border-amber-700',
+            // Only allow updating when status is Pending or Partially Fulfilled
+            shouldShow: (row: PurchaseRequest) => {
+                const normalized = String(row.status).toUpperCase().replace(/\s/g, '_');
+                return normalized === 'PENDING' || normalized === 'PARTIALLY_FULFILLED';
+            },
+        },
+        {
+            label: '',
+            icon: <FileText className="w-4 h-4" />,
+            variant: 'primary',
+            onClick: (row: PurchaseRequest) => handleCreateRentalAgreement(row),
+            tooltip: 'Create Hiring Machine Agreement (only when machines are available)',
+            className:
+                'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
+            shouldShow: (row: PurchaseRequest) => hasAvailableMachinesForRental(row),
+        },
     ];
 
     const renderStatusBadge = (status: PurchaseRequestStatus) => {
@@ -631,7 +747,7 @@ const PurchaseOrderPage: React.FC = () => {
                                     </Tooltip>
                                     {['PENDING', 'APPROVED', 'ACTIVE', 'PARTIALLY_FULFILLED'].includes(String(selectedRequest.status).toUpperCase().replace(/\s/g, '_')) && availableMachinesForRental.length > 0 && (
                                         <Tooltip content="Create Hiring Machine Agreement">
-                                            <button onClick={() => handleCreateRentalAgreement(selectedRequest)} className="px-4 py-2 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-800 flex items-center space-x-2"><FileText className="w-4 h-4" /><span>Create Rental</span></button>
+                                            <button onClick={() => handleCreateRentalAgreement(selectedRequest)} className="px-4 py-2 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-800 flex items-center space-x-2"><FileText className="w-4 h-4" /><span>Create Hiring Machine Agreement</span></button>
                                         </Tooltip>
                                     )}
                                     <Tooltip content="Close">
@@ -856,12 +972,14 @@ const PurchaseOrderPage: React.FC = () => {
                                                         <th className="text-center px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Quantity</th>
                                                         <th className="text-right px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Unit Price (Rs.)</th>
                                                         <th className="text-right px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Total (Rs.)</th>
+                                                        <th className="text-center px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Actions</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-200 dark:divide-slate-600">
                                                     {updateForm.machines.map((m, idx) => {
                                                         const rented = m.rentedQuantity || 0;
                                                         const minQty = Math.max(0, rented);
+                                                        const isRemovable = rented === 0;
                                                         return (
                                                             <tr key={m.id} className="bg-white dark:bg-slate-800/50 hover:bg-gray-50 dark:hover:bg-slate-700/50">
                                                                 <td className="px-4 py-3 text-gray-900 dark:text-white">{m.brand} {m.model}</td>
@@ -875,6 +993,7 @@ const PurchaseOrderPage: React.FC = () => {
                                                                         className="w-20 px-2 py-1.5 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-center"
                                                                     />
                                                                     {rented > 0 && <span className="block text-xs text-amber-600 dark:text-amber-400 mt-0.5">min: {minQty} (rented)</span>}
+                                                                    {updateFormErrors[`machine_${idx}_qty`] && <span className="block text-xs text-red-500 mt-0.5">{updateFormErrors[`machine_${idx}_qty`]}</span>}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right">
                                                                     <input
@@ -887,15 +1006,60 @@ const PurchaseOrderPage: React.FC = () => {
                                                                     />
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">{(m.unitPrice * m.quantity).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => isRemovable && handleRemoveMachineFromUpdate(m.id)}
+                                                                        disabled={!isRemovable}
+                                                                        className={`inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-medium border transition-colors ${isRemovable ? 'text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-600/60 dark:hover:bg-red-900/30' : 'text-gray-400 border-gray-200 dark:text-gray-500 dark:border-slate-600 cursor-not-allowed'}`}
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                </td>
                                                             </tr>
                                                         );
                                                     })}
                                                 </tbody>
                                                 <tfoot className="bg-gray-50 dark:bg-slate-700/80 font-semibold">
                                                     <tr>
-                                                        <td colSpan={4} className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">Total Amount</td>
-                                                        <td className="px-4 py-3 text-right text-gray-900 dark:text-white">
-                                                            Rs. {updateForm.machines.reduce((sum, m) => sum + (m.unitPrice || 0) * (m.quantity || 0), 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        <td colSpan={3} className="px-4 py-3 text-left">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm text-gray-700 dark:text-gray-300">Add machine</span>
+                                                                <select
+                                                                    disabled={isLoadingMachines || allMachinesForCustomer.length === 0}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        if (!val) return;
+                                                                        handleAddMachineToUpdate(val);
+                                                                        e.target.value = '';
+                                                                    }}
+                                                                    defaultValue=""
+                                                                    className="w-full md:w-72 px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                                                >
+                                                                    <option value="" disabled>
+                                                                        {isLoadingMachines
+                                                                            ? 'Loading machines...'
+                                                                            : allMachinesForCustomer.length === 0
+                                                                                ? 'No additional machines available'
+                                                                                : 'Select machine to add'}
+                                                                    </option>
+                                                                    {allMachinesForCustomer
+                                                                        .filter((m) => !updateForm.machines.some((um) => um.id === m.id))
+                                                                        .map((m) => (
+                                                                            <option key={m.id} value={m.id}>
+                                                                                {m.brand} {m.model} ({m.type})
+                                                                            </option>
+                                                                        ))}
+                                                                </select>
+                                                            </div>
+                                                        </td>
+                                                        <td colSpan={2} className="px-4 py-3 text-right text-gray-900 dark:text-white">
+                                                            <div className="flex flex-col items-end">
+                                                                <span className="text-sm">Total Amount</span>
+                                                                <span className="text-lg font-bold">
+                                                                    Rs. {updateForm.machines.reduce((sum, m) => sum + (m.unitPrice || 0) * (m.quantity || 0), 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                </span>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 </tfoot>
