@@ -10,6 +10,7 @@ import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, History, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { authFetch } from '@/lib/auth-client';
+import { Swal } from '@/src/lib/swal';
 
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 
@@ -620,15 +621,27 @@ const MachineListPage: React.FC = () => {
       const result = await deleteMachine(selectedMachine.id.toString());
       
       if (result.success) {
-        alert(`Machine "${selectedMachine.brand} ${selectedMachine.model}" deleted successfully.`);
+        await Swal.fire({
+          icon: 'success',
+          title: 'Deleted',
+          text: `Machine "${selectedMachine.brand} ${selectedMachine.model}" deleted successfully.`,
+        });
         handleCloseDeleteModal();
         await loadMachines();
       } else {
-        alert(`Failed to delete machine: ${result.error}`);
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed to delete',
+          text: `Failed to delete machine: ${result.error}`,
+        });
       }
     } catch (error) {
       console.error('Error deleting machine:', error);
-      alert('Failed to delete machine. Please try again.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to delete',
+        text: 'Failed to delete machine. Please try again.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1156,15 +1169,27 @@ const MachineListPage: React.FC = () => {
       if (result.success) {
         const brandName = payload.brand || brands.find((b) => b.id === payload.brandId)?.name || '';
         const modelName = payload.model || models.find((m) => m.id === payload.modelId)?.name || '';
-        alert(`Machine "${brandName} ${modelName}" registered successfully.`);
+        await Swal.fire({
+          icon: 'success',
+          title: 'Registered',
+          text: `Machine "${brandName} ${modelName}" registered successfully.`,
+        });
         handleCloseCreateModal();
         await loadMachines();
       } else {
-        alert(`Failed to create machine: ${result.error}`);
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed to register',
+          text: `Failed to create machine: ${result.error}`,
+        });
       }
     } catch (error) {
       console.error('Error creating machine:', error);
-      alert('Failed to create machine. Please try again.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to register',
+        text: 'Failed to create machine. Please try again.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1190,15 +1215,27 @@ const MachineListPage: React.FC = () => {
       };
       const result = await createTool(payload);
       if (result.success) {
-        alert(`Tool "${payload.toolName}" registered successfully.`);
+        await Swal.fire({
+          icon: 'success',
+          title: 'Registered',
+          text: `Tool "${payload.toolName}" registered successfully.`,
+        });
         handleCloseCreateModal();
         await loadToolOptions(); // Refresh tool options for next time
       } else {
-        alert(`Failed to create tool: ${result.error}`);
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed to register',
+          text: `Failed to create tool: ${result.error}`,
+        });
       }
     } catch (error) {
       console.error('Error creating tool:', error);
-      alert('Failed to create tool. Please try again.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to register',
+        text: 'Failed to create tool. Please try again.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1240,15 +1277,27 @@ const MachineListPage: React.FC = () => {
       if (result.success) {
         const brandName = payload.brand || brands.find((b) => b.id === payload.brandId)?.name || '';
         const modelName = payload.model || models.find((m) => m.id === payload.modelId)?.name || '';
-        alert(`Machine "${brandName} ${modelName}" updated successfully.`);
+        await Swal.fire({
+          icon: 'success',
+          title: 'Updated',
+          text: `Machine "${brandName} ${modelName}" updated successfully.`,
+        });
         handleCloseUpdateModal();
         await loadMachines();
       } else {
-        alert(`Failed to update machine: ${result.error}`);
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed to update',
+          text: `Failed to update machine: ${result.error}`,
+        });
       }
     } catch (error) {
       console.error('Error updating machine:', error);
-      alert('Failed to update machine. Please try again.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to update',
+        text: 'Failed to update machine. Please try again.',
+      });
     } finally {
       setIsSubmitting(false);
     }

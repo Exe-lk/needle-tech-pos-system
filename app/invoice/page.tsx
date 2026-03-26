@@ -8,6 +8,7 @@ import UpdateForm from '@/src/components/form-popup/update';
 import { Eye, Pencil, X, Plus, Download, FileText, Trash2, Printer, Calendar } from 'lucide-react';
 import { LetterheadDocument, LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
+import { Swal, toast } from '@/src/lib/swal';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
@@ -597,7 +598,12 @@ const InvoicePage: React.FC = () => {
       setInvoices(invoicesData);
     } catch (error) {
       console.error('Error loading initial data:', error);
-      alert('Failed to load data. Please refresh the page.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to load data',
+        text: 'Please refresh the page.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -829,12 +835,20 @@ const InvoicePage: React.FC = () => {
       
       if (newInvoice) {
         setInvoices([newInvoice, ...invoices]);
-        alert('Invoice created successfully.');
+        toast.fire({
+          icon: 'success',
+          title: 'Invoice created successfully',
+        });
         handleCloseCreateModal();
       }
     } catch (error: any) {
       console.error('Error creating invoice:', error);
-      alert(error.message || 'Failed to create invoice. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to create invoice',
+        text: error.message || 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -878,12 +892,20 @@ const InvoicePage: React.FC = () => {
       
       if (updatedInvoice) {
         setInvoices(invoices.map(inv => inv.id === selectedInvoice.id ? updatedInvoice : inv));
-        alert('Invoice status updated successfully.');
+        toast.fire({
+          icon: 'success',
+          title: 'Invoice status updated',
+        });
         handleCloseUpdateModal();
       }
     } catch (error: any) {
       console.error('Error updating invoice:', error);
-      alert(error.message || 'Failed to update invoice. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to update invoice',
+        text: error.message || 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1013,7 +1035,11 @@ const InvoicePage: React.FC = () => {
   /** Print selected months as one document: per-month calculations + final total (no API call). */
   const handlePrintMonthlyInvoices = () => {
     if (!selectedInvoice || selectedMonths.size === 0) {
-      alert('Please select at least one month to print.');
+      void Swal.fire({
+        icon: 'warning',
+        title: 'Select months',
+        text: 'Please select at least one month to print.',
+      });
       return;
     }
     const ordered = Array.from(selectedMonths).sort().map((i) => monthlyInvoicePreviews[i]);

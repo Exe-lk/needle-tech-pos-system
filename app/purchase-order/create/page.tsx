@@ -10,6 +10,7 @@ import { X, Plus, Trash2, ChevronDown, ChevronRight, Check, Package, AlertTriang
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 import { authFetch } from '@/lib/auth-client';
+import { Swal } from '@/src/lib/swal';
 
 const API_BASE_URL = '/api/v1';
 
@@ -1004,11 +1005,19 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 const msg = json?.message || (json?.data ? Object.values(json.data).flat().join(' ') : '') || 'Failed to create purchase order';
                 throw new Error(msg);
             }
-            alert('Purchase order created successfully.');
+            await Swal.fire({
+                icon: 'success',
+                title: 'Created',
+                text: 'Purchase order created successfully.',
+            });
             router.push('/purchase-order');
         } catch (error: any) {
             console.error('Error creating purchase request:', error);
-            alert(error?.message || 'Failed to create purchase request. Please try again.');
+            await Swal.fire({
+                icon: 'error',
+                title: 'Failed to create',
+                text: error?.message || 'Failed to create purchase request. Please try again.',
+            });
         } finally {
             setIsSubmitting(false);
         }
@@ -1170,10 +1179,18 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 await fetchCustomers();
                 setSelectedCustomerId(newCustomer.id);
             }
-            alert(`Business "${data.companyName}" registered successfully. Please confirm the customer is selected.`);
+            await Swal.fire({
+                icon: 'success',
+                title: 'Registered',
+                text: `Business "${data.companyName}" registered successfully. Please confirm the customer is selected.`,
+            });
             handleCloseRegisterModal();
         } catch (err: any) {
-            alert(err?.message || 'Failed to register business. Please try again.');
+            await Swal.fire({
+                icon: 'error',
+                title: 'Failed to register',
+                text: err?.message || 'Failed to register business. Please try again.',
+            });
         } finally {
             setIsSubmitting(false);
         }
@@ -1215,10 +1232,18 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 await fetchCustomers();
                 setSelectedCustomerId(newCustomer.id);
             }
-            alert(`Customer "${data.fullName}" registered successfully. Please confirm the customer is selected.`);
+            await Swal.fire({
+                icon: 'success',
+                title: 'Registered',
+                text: `Customer "${data.fullName}" registered successfully. Please confirm the customer is selected.`,
+            });
             handleCloseRegisterModal();
         } catch (err: any) {
-            alert(err?.message || 'Failed to register customer. Please try again.');
+            await Swal.fire({
+                icon: 'error',
+                title: 'Failed to register',
+                text: err?.message || 'Failed to register customer. Please try again.',
+            });
         } finally {
             setIsSubmitting(false);
         }

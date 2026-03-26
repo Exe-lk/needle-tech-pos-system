@@ -11,6 +11,7 @@ import type { FormField } from '@/src/components/form-popup/update';
 import { Eye, Clock, Pencil, X, QrCode, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { authFetch } from '@/lib/auth-client';
+import { Swal } from '@/src/lib/swal';
 
 const API_BASE = '/api/v1';
 
@@ -395,9 +396,11 @@ const InventoryManagementPage: React.FC = () => {
     const retired = Number(data.retiredStock) ?? 0;
     const sum = available + rented + maintenance + retired;
     if (sum !== selectedItem.totalStock) {
-      alert(
-        `Stock breakdown must equal total stock (${selectedItem.totalStock}). Current sum: ${sum}. Please ensure Available + Rented + Maintenance + Retired = ${selectedItem.totalStock}.`
-      );
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Invalid stock breakdown',
+        text: `Stock breakdown must equal total stock (${selectedItem.totalStock}). Current sum: ${sum}. Please ensure Available + Rented + Maintenance + Retired = ${selectedItem.totalStock}.`,
+      });
       return;
     }
     setIsSubmitting(true);

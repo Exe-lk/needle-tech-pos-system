@@ -625,18 +625,33 @@ const StockInPage: React.FC = () => {
   // Validate all models and machines
   const validateAll = (): boolean => {
     if (stockModels.length === 0) {
-      alert('Please add at least one machine model.');
+      Swal.fire({
+        icon: 'warning',
+        title: 'No machine models',
+        text: 'Please add at least one machine model.',
+        confirmButtonColor: '#f97316',
+      });
       return false;
     }
 
     for (const model of stockModels) {
       for (const machine of model.machines) {
         if (!machine.serialNumber) {
-          alert(`Please enter serial number for all machines in ${model.brand} ${model.model}.`);
+          Swal.fire({
+            icon: 'warning',
+            title: 'Serial numbers required',
+            text: `Please enter serial number for all machines in ${model.brand} ${model.model}.`,
+            confirmButtonColor: '#f97316',
+          });
           return false;
         }
         if (machine.errors?.serialNumber) {
-          alert(`Invalid serial number format for ${model.brand} ${model.model}.`);
+          Swal.fire({
+            icon: 'error',
+            title: 'Invalid serial number',
+            text: `Invalid serial number format for ${model.brand} ${model.model}.`,
+            confirmButtonColor: '#dc2626',
+          });
           return false;
         }
       }
@@ -681,7 +696,12 @@ const StockInPage: React.FC = () => {
 
       if (!res.ok) {
         const message = json?.message || json?.data?.transactions?.[0] || 'Failed to process stock in. Please try again.';
-        alert(typeof message === 'string' ? message : 'Failed to process stock in. Please try again.');
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to process stock in',
+          text: typeof message === 'string' ? message : 'Failed to process stock in. Please try again.',
+          confirmButtonColor: '#dc2626',
+        });
         return;
       }
 
@@ -690,7 +710,12 @@ const StockInPage: React.FC = () => {
       document.body.classList.add('qr-batch-printing');
     } catch (error: any) {
       console.error('Error processing stock in:', error);
-      alert(error?.message || 'Failed to process stock in. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to process stock in',
+        text: error?.message || 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }

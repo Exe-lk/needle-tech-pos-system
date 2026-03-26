@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "yarn-build-check-swal",
+			"type": "shell",
+			"command": "cd \"/Users/tharushasamarawickrama/Documents/Needltech /needle-tech-pos-system\" && yarn build",
+			"args": [],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		}
+	]
+}
