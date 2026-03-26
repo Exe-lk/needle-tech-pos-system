@@ -44,6 +44,7 @@ interface Invoice {
   customerName: string;
   customerAddress: string;
   vatTinNic: string;
+  purchaseOrderNumber?: string;
   invoiceDate: string;
   periodFrom: string;
   periodTo: string;
@@ -139,7 +140,13 @@ interface ApiInvoice {
   grandTotal: number;
   balance: number;
   customer?: ApiCustomer;
-  rental?: any;
+  rental?: {
+    id?: string;
+    purchaseOrder?: {
+      id: string;
+      requestNumber: string;
+    } | null;
+  } | null;
 }
 
 // Customer dropdown type
@@ -296,6 +303,7 @@ const fetchInvoices = async (): Promise<Invoice[]> => {
     return apiInvoices.map(invoice => {
       const customer = invoice.customer;
       const lineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
+      const purchaseOrderNumber = invoice.rental?.purchaseOrder?.requestNumber || '';
       
       return {
         id: invoice.id,
@@ -304,6 +312,7 @@ const fetchInvoices = async (): Promise<Invoice[]> => {
         customerName: customer?.name || 'Unknown Customer',
         customerAddress: customer ? buildCustomerAddress(customer) : '',
         vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
+        purchaseOrderNumber,
         invoiceDate: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
         periodFrom: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
         periodTo: invoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -354,6 +363,7 @@ const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
     const apiInvoice: ApiInvoice = data.data;
     const customer = apiInvoice.customer;
     const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
+    const purchaseOrderNumber = apiInvoice.rental?.purchaseOrder?.requestNumber || '';
 
     return {
       id: apiInvoice.id,
@@ -362,6 +372,7 @@ const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
       customerName: customer?.name || 'Unknown Customer',
       customerAddress: customer ? buildCustomerAddress(customer) : '',
       vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
+      purchaseOrderNumber,
       invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -411,6 +422,7 @@ const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoic
     const apiInvoice: ApiInvoice = data.data;
     const customer = apiInvoice.customer;
     const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
+    const purchaseOrderNumber = apiInvoice.rental?.purchaseOrder?.requestNumber || '';
 
     return {
       id: apiInvoice.id,
@@ -419,6 +431,7 @@ const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoic
       customerName: customer?.name || 'Unknown Customer',
       customerAddress: customer ? buildCustomerAddress(customer) : '',
       vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
+      purchaseOrderNumber,
       invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -1113,12 +1126,16 @@ const InvoicePage: React.FC = () => {
           {/* Row 2: Supplier's TIN (left) | Purchaser's TIN (right) - bordered boxes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
             <div>
-              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN</span>
-              <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] text-gray-900 dark:text-slate-100 print:text-gray-900">{company.tinNo}</div>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN : </span>
+              <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
+                {company.tinNo}
+              </div>
             </div>
             <div>
-              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN</span>
-              <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.vatTinNic || '—'}</div>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN : </span>
+              <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
+                {invoice.vatTinNic || '—'}
+              </div>
             </div>
           </div>
           {/* Row 3: Two bordered boxes - Supplier's Name & Address | Purchaser's Name & Address */}
@@ -1141,16 +1158,18 @@ const InvoicePage: React.FC = () => {
             </div>
           </div>
           {/* Row 4: Period From / To (left) | Purchase Order No (right) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3 items-start">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3 items-baseline">
+            <div className="flex flex-wrap items-baseline gap-x-1">
               <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Period From : </span>
               <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(invoice.periodFrom)}</span>
-              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 ml-1">To</span>
-              <span className="ml-1 text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(invoice.periodTo)}</span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">To</span>
+              <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(invoice.periodTo)}</span>
             </div>
-            <div>
-              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchase Order No</span>
-              <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] min-h-[1.5rem]"> </div>
+            <div className="flex items-baseline gap-1">
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchase Order No : </span>
+              <span className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 min-w-[8rem] min-h-[1.5rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900" aria-label="Purchase order number field">
+                {invoice.purchaseOrderNumber?.trim() ? invoice.purchaseOrderNumber : '\u00A0'}
+              </span>
             </div>
           </div>
 
@@ -1302,7 +1321,7 @@ const InvoicePage: React.FC = () => {
   const renderInvoiceWithLetterhead = (invoice: Invoice) => {
     const isVAT = invoice.invoiceType === 'VAT';
     return (
-      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 w-full max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:w-[210mm] print:max-w-[210mm] print:p-8 print:bg-white print:text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 w-full max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:w-[210mm] print:max-w-[210mm] print:p-8 print:bg-white print:text-black print:[&_*]:!text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
         <LetterheadDocument
           documentTitle={isVAT ? 'TAX INVOICE' : 'INVOICE'}
           footerStyle="full"
@@ -1332,7 +1351,7 @@ const InvoicePage: React.FC = () => {
     const fmt = (n: number) => `Rs.${n.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
 
     return (
-      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 w-full max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:w-[210mm] print:max-w-[210mm] print:p-8 print:bg-white print:text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 w-full max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:w-[210mm] print:max-w-[210mm] print:p-8 print:bg-white print:text-black print:[&_*]:!text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
         <LetterheadDocument
           documentTitle={isVAT ? 'TAX INVOICE' : 'INVOICE'}
           footerStyle="full"
@@ -1357,11 +1376,15 @@ const InvoicePage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
                 <div>
                   <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN</span>
-                  <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] text-gray-900 dark:text-slate-100 print:text-gray-900">{company.tinNo}</div>
+                  <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
+                    {company.tinNo}
+                  </div>
                 </div>
                 <div>
                   <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN</span>
-                  <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.vatTinNic || '—'}</div>
+                  <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
+                    {invoice.vatTinNic || '—'}
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
@@ -1382,16 +1405,18 @@ const InvoicePage: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3 items-start">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3 items-baseline">
+                <div className="flex flex-wrap items-baseline gap-x-1">
                   <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Period From : </span>
                   <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(periodFrom)}</span>
-                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 ml-1">To</span>
-                  <span className="ml-1 text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(periodTo)}</span>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">To</span>
+                  <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{dateStr(periodTo)}</span>
                 </div>
-                <div>
-                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchase Order No</span>
-                  <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-2 py-1 mt-0.5 min-w-[8rem] min-h-[1.5rem]"> </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchase Order No : </span>
+                  <span className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 min-w-[8rem] min-h-[1.5rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900" aria-label="Purchase order number field">
+                    {invoice.purchaseOrderNumber?.trim() ? invoice.purchaseOrderNumber : '\u00A0'}
+                  </span>
                 </div>
               </div>
 
@@ -2216,7 +2241,7 @@ const InvoicePage: React.FC = () => {
         {/* Create Invoice Modal — document-style layout matching printed TAX INVOICE */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/30 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-[210mm] max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-600">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-600">
               {/* Modal Header — minimal; title is inside letterhead */}
               <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create Invoice</h2>

@@ -1641,7 +1641,7 @@ const RentalAgreementPage: React.FC = () => {
       vehicleNumber: api.vehicleNumber ?? vehicleNumber,
       driverName: api.driverName ?? driverName,
       items,
-      issuedBy: api.issuedBy?.name ?? (issuedBy || 'System'),
+      issuedBy: '',
       receivedBy: '',
     };
   }
@@ -2229,7 +2229,7 @@ const RentalAgreementPage: React.FC = () => {
 
     return (
       <div
-        className="bg-white dark:!bg-white text-black dark:!text-black p-6 sm:p-8 max-w-[210mm] mx-auto print:p-0 print:max-w-none print:overflow-visible"
+        className="bg-white dark:!bg-white text-black dark:!text-black w-full p-6 sm:p-8 max-w-[210mm] mx-auto print:w-[210mm] print:max-w-[210mm] print:p-8 print:overflow-visible"
         style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
       >
         <LetterheadDocument
@@ -2501,9 +2501,7 @@ const RentalAgreementPage: React.FC = () => {
           className="hidden print:block print:bg-white print:z-[9999] print:overflow-visible"
           style={{ printColorAdjust: 'exact' } as React.CSSProperties}
         >
-          <div className="p-8 max-w-[210mm] mx-auto">
-            {renderRentalAgreementDocument(rentalDetail)}
-          </div>
+          {renderRentalAgreementDocument(rentalDetail)}
         </div>
       )}
 
@@ -2614,7 +2612,7 @@ const RentalAgreementPage: React.FC = () => {
         {/* Create Rental Agreement Modal - Document-style (matches print Hiring Machine Agreement) */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-slate-700 dark:border-slate-600" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-slate-700 dark:border-slate-600" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
               {/* Modal header bar - close only */}
               <div className="flex-shrink-0 flex items-center justify-end px-4 py-2 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80">
                 <button
@@ -3197,18 +3195,7 @@ const RentalAgreementPage: React.FC = () => {
                         </select>
                       </div>
 
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Issued By
-                        </label>
-                        <input
-                          type="text"
-                          value={issuedBy}
-                          onChange={(e) => setIssuedBy(e.target.value)}
-                          placeholder="Enter issuer name (optional)"
-                          className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                        />
-                      </div>
+                      
                     </div>
 
                     <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-slate-700">

@@ -61,7 +61,19 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
       skip,
       take: limit,
       orderBy: { [sortBy]: sortOrder_ },
-      include: { customer: true, rental: true }
+      include: {
+        customer: true,
+        rental: {
+          include: {
+            purchaseOrder: {
+              select: {
+                id: true,
+                requestNumber: true,
+              },
+            },
+          },
+        },
+      },
     });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
@@ -163,7 +175,19 @@ export const POST = withAuthAndRole(
         balance: grandTotal || 0,
         createdByUserId: userId,
       },
-      include: { customer: true, rental: true }
+      include: {
+        customer: true,
+        rental: {
+          include: {
+            purchaseOrder: {
+              select: {
+                id: true,
+                requestNumber: true,
+              },
+            },
+          },
+        },
+      },
     });
     
     return successResponse(newInvoice, 'Invoice created successfully', 201);

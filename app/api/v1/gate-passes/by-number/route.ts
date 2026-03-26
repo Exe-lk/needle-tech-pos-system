@@ -41,7 +41,6 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
           },
         },
         customer: true,
-        issuedBy: true,
         machines: {
           include: {
             machine: {
@@ -82,7 +81,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       vehicleNumber: gatePass.vehicleNumber || '',
       driverName: gatePass.driverName || '',
       items,
-      issuedBy: gatePass.issuedBy?.fullName || 'System',
+      issuedBy: '',
       receivedBy: gatePass.driverName || '',
     };
     

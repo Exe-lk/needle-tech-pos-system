@@ -1314,7 +1314,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                     </div>
 
                     {/* Form Card - Letterhead-style document (matches official PO / letterhead) */}
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden max-w-[210mm] mx-auto">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden w-full max-w-6xl mx-auto">
                         <LetterheadDocument documentTitle="PURCHASE ORDER" footerStyle="simple" className="p-6 sm:p-8">
                             <div className="min-h-[120mm] space-y-6 border-2 border-dashed border-gray-200 dark:border-slate-600 rounded-lg p-6 bg-gray-50/50 dark:bg-slate-800/30">
                                 {/* Customer Details Section */}
