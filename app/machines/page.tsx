@@ -1605,6 +1605,7 @@ const MachineListPage: React.FC = () => {
             itemsPerPage={10}
             searchable
             filterable
+            loading={isLoading}
             onCreateClick={handleCreateMachine}
             createButtonLabel="Register"
             emptyMessage={isLoading ? "Loading machines..." : "No machines found."}

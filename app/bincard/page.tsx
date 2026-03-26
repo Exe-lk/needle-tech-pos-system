@@ -461,7 +461,8 @@ const BincardPage: React.FC = () => {
             itemsPerPage={10}
             searchable
             filterable
-            emptyMessage="No bincard data found."
+            loading={summaryLoading}
+            emptyMessage={summaryLoading ? 'Loading bincard...' : 'No bincard data found.'}
           />
         </div>
       </main>
@@ -498,7 +499,8 @@ const BincardPage: React.FC = () => {
             itemsPerPage={20}
             searchable
             filterable
-            emptyMessage="No transaction entries found for this item."
+            loading={modalEntriesLoading}
+            emptyMessage={modalEntriesLoading ? 'Loading entries...' : 'No transaction entries found for this item.'}
             maxHeight="none"
             className="h-full"
           />

@@ -825,23 +825,18 @@ const InventoryManagementPage: React.FC = () => {
               </button>
             </div>
           )}
-          {inventoryLoading ? (
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-12 text-center">
-              <p className="text-gray-600 dark:text-gray-400">Loading inventory...</p>
-            </div>
-          ) : (
-            <Table
-              data={inventory}
-              columns={inventoryColumns}
-              actions={actions}
-              itemsPerPage={10}
-              searchable
-              filterable
-              onCreateClick={handleStockIn}
-              createButtonLabel="Stock In"
-              emptyMessage="No inventory items found. Add stock to get started."
-            />
-          )}
+          <Table
+            data={inventory}
+            columns={inventoryColumns}
+            actions={actions}
+            itemsPerPage={10}
+            searchable
+            filterable
+            loading={inventoryLoading}
+            onCreateClick={handleStockIn}
+            createButtonLabel="Stock In"
+            emptyMessage={inventoryLoading ? 'Loading inventory...' : 'No inventory items found. Add stock to get started.'}
+          />
         </div>
       </main>
 

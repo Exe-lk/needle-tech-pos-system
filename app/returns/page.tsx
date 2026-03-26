@@ -626,29 +626,23 @@ const ReturnsPage: React.FC = () => {
           </div>
 
           {/* Loading / Error */}
-          {loading && (
-            <div className="flex justify-center items-center py-12 text-gray-500 dark:text-gray-400">
-              Loading returns...
-            </div>
-          )}
           {error && !loading && (
             <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-red-700 dark:text-red-300 text-sm">
               {error}
             </div>
           )}
-          {!loading && (
-            <Table
-              data={returns}
-              columns={columns}
-              actions={actions}
-              itemsPerPage={10}
-              searchable
-              filterable
-              onCreateClick={handleCreateReturn}
-              createButtonLabel="Create Return"
-              emptyMessage="No returns found."
-            />
-          )}
+          <Table
+            data={returns}
+            columns={columns}
+            actions={actions}
+            itemsPerPage={10}
+            searchable
+            filterable
+            loading={loading}
+            onCreateClick={handleCreateReturn}
+            createButtonLabel="Create Return"
+            emptyMessage={loading ? 'Loading returns...' : 'No returns found.'}
+          />
         </div>
       </main>
 

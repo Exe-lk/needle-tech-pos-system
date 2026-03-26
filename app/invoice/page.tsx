@@ -2129,17 +2129,6 @@ const InvoicePage: React.FC = () => {
     );
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-100 dark:bg-slate-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-indigo-500"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading invoices...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       {/* Print-only: single invoice (View modal) — hidden on screen, visible when printing */}
@@ -2190,9 +2179,10 @@ const InvoicePage: React.FC = () => {
               itemsPerPage={10}
               searchable
               filterable
+              loading={isLoading}
               onCreateClick={handleCreateInvoice}
               createButtonLabel="Create Invoice"
-              emptyMessage="No invoices found."
+              emptyMessage={isLoading ? 'Loading invoices...' : 'No invoices found.'}
             />
           </div>
         </main>

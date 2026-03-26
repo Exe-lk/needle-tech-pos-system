@@ -2493,24 +2493,19 @@ const RentalAgreementPage: React.FC = () => {
                 </button>
               </div>
             )}
-            {loading ? (
-              <div className="flex items-center justify-center py-16 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700">
-                <Loader2 className="w-10 h-10 animate-spin text-blue-600 dark:text-indigo-400" />
-              </div>
-            ) : (
-              <Table
-                data={agreements}
-                columns={columns}
-                actions={actions}
-                itemsPerPage={10}
-                searchable
-                filterable
-                onCreateClick={handleCreateAgreement}
-                createButtonLabel="Create Hiring Machine Agreement"
-                getRowClassName={getRowClassName}
-                emptyMessage="No rental agreements found."
-              />
-            )}
+            <Table
+              data={agreements}
+              columns={columns}
+              actions={actions}
+              itemsPerPage={10}
+              searchable
+              filterable
+              loading={loading}
+              onCreateClick={handleCreateAgreement}
+              createButtonLabel="Create Hiring Machine Agreement"
+              getRowClassName={getRowClassName}
+              emptyMessage={loading ? 'Loading rental agreements...' : 'No rental agreements found.'}
+            />
           </div>
         </main>
 

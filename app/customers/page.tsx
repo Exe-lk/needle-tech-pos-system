@@ -1227,24 +1227,19 @@ const CustomerListPage: React.FC = () => {
           </div>
 
           {/* Customer table card */}
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500 dark:text-gray-400">Loading customers...</div>
-            </div>
-          ) : (
-            <Table
-              data={customers}
-              columns={columns}
-              actions={actions}
-              itemsPerPage={10}
-              searchable
-              filterable
-              onCreateClick={handleCreateCustomer}
-              createButtonLabel="Create Customer"
-              getRowClassName={getRowClassName}
-              emptyMessage="No customers found."
-            />
-          )}
+          <Table
+            data={customers}
+            columns={columns}
+            actions={actions}
+            itemsPerPage={10}
+            searchable
+            filterable
+            loading={isLoading}
+            onCreateClick={handleCreateCustomer}
+            createButtonLabel="Create Customer"
+            getRowClassName={getRowClassName}
+            emptyMessage={isLoading ? 'Loading customers...' : 'No customers found.'}
+          />
         </div>
       </main>
 
