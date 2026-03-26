@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Eye, EyeOff, Plus, Trash2, Upload, X, Image as ImageIcon, FileText } from 'lucide-react';
 import SearchableSelect from '@/src/components/common/searchable-select';
 
@@ -91,6 +91,7 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
   hideFooterActions = false,
   formId,
 }, ref) => {
+  const formRef = useRef<HTMLFormElement | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>(
     fields.reduce(
       (acc, field) => ({
@@ -158,6 +159,58 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
     }
 
     return null;
+  };
+
+  const focusAndScrollToField = (fieldKey: string) => {
+    const root = formRef.current;
+    if (!root) return;
+
+    const container = root.querySelector<HTMLElement>(`[data-field-key="${CSS.escape(fieldKey)}"]`);
+    if (!container) return;
+
+    // Scroll the container into view (accounts for long forms/modals)
+    container.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+
+    // Focus the most relevant focusable element inside
+    const focusable = container.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable) return;
+
+    // Some custom components need a tick after scrolling/layout.
+    window.setTimeout(() => {
+      try {
+        focusable.focus({ preventScroll: true } as any);
+        if (focusable instanceof HTMLInputElement || focusable instanceof HTMLTextAreaElement) {
+          focusable.select?.();
+        }
+      } catch {
+        // no-op: focusing is best-effort, never block submit flow
+      }
+    }, 50);
+  };
+
+  const getFirstErrorKeyInVisualOrder = (newErrors: Record<string, string>) => {
+    const errorKeys = new Set(Object.keys(newErrors));
+    if (errorKeys.size === 0) return null;
+
+    // 1) Base fields (regular then file fields) in the order provided by `fields`
+    for (const f of filteredFields) {
+      if (errorKeys.has(f.name)) return f.name;
+    }
+
+    // 2) Dynamic specs (name/value) in render order
+    if (enableDynamicSpecs) {
+      for (let i = 0; i < dynamicSpecs.length; i++) {
+        const nameKey = `spec_${i}_name`;
+        const valueKey = `spec_${i}_value`;
+        if (errorKeys.has(nameKey)) return nameKey;
+        if (errorKeys.has(valueKey)) return valueKey;
+      }
+    }
+
+    // 3) Fallback: first key
+    return Object.keys(newErrors)[0] ?? null;
   };
 
   const handleInputChange = (fieldName: string, value: any) => {
@@ -322,6 +375,12 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
       }
 
       onSubmit(submissionData);
+    } else {
+      const firstKey = getFirstErrorKeyInVisualOrder(newErrors);
+      if (firstKey) {
+        // Let React paint error UI, then scroll/focus.
+        window.requestAnimationFrame(() => focusAndScrollToField(firstKey));
+      }
     }
   };
 
@@ -655,12 +714,13 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
         </div>
       )}
 
-      <form id={formId} onSubmit={handleSubmit}>
+      <form ref={formRef} id={formId} onSubmit={handleSubmit}>
         {/* Base fields */}
         <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGap}`}>
           {regularFields.map((field) => (
             <div
               key={field.name}
+              data-field-key={field.name}
               className={`${field.type === 'textarea' ? 'md:col-span-2' : ''} ${
                 field.className || ''
               }`}
@@ -691,7 +751,7 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {fileFields.map((field) => (
-                <div key={field.name}>
+                <div key={field.name} data-field-key={field.name}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     {field.label}
                     {field.required && (
@@ -739,7 +799,7 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
                     key={spec.id}
                     className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-gray-50 dark:bg-slate-700/50"
                   >
-                    <div>
+                    <div data-field-key={`spec_${index}_name`}>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Spec Name
                       </label>
@@ -748,7 +808,9 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
                         value={spec.name}
                         onChange={(e) => updateSpec(spec.id, 'name', e.target.value)}
                         placeholder="e.g., RAM, Storage, Voltage"
-                        className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 transition-colors duration-200 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 transition-colors duration-200 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 ${
+                          errors[`spec_${index}_name`] ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-slate-600'
+                        }`}
                       />
                       {errors[`spec_${index}_name`] && (
                         <p className="mt-2 text-sm text-red-600 dark:text-red-400">
@@ -757,7 +819,7 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
                       )}
                     </div>
 
-                    <div className="relative">
+                    <div className="relative" data-field-key={`spec_${index}_value`}>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Spec Value
                       </label>
@@ -767,7 +829,9 @@ const Form = forwardRef<CreateFormRef, FormProps>(({
                           value={spec.value}
                           onChange={(e) => updateSpec(spec.id, 'value', e.target.value)}
                           placeholder="e.g., 16GB, 512GB, 230V"
-                          className="flex-1 px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 transition-colors duration-200 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                          className={`flex-1 px-4 py-3 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 transition-colors duration-200 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 ${
+                            errors[`spec_${index}_value`] ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-slate-600'
+                          }`}
                         />
                         {dynamicSpecs.length > 1 && (
                           <button

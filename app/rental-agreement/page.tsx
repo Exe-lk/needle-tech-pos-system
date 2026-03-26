@@ -1306,13 +1306,13 @@ const RentalAgreementPage: React.FC = () => {
     );
   };
 
-  const validateForm = (): boolean => {
+  const getCreateValidationErrors = (): Record<string, string> => {
     const errors: Record<string, string> = {};
 
     if (!customerId) errors.customerId = 'Customer is required';
     if (!startDate) errors.startDate = 'Start date is required';
     if (!endDate) errors.endDate = 'End date is required';
-    if (new Date(endDate) <= new Date(startDate)) {
+    if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
       errors.endDate = 'End date must be after start date';
     }
 
@@ -1328,18 +1328,78 @@ const RentalAgreementPage: React.FC = () => {
       if (addOn.quantity < 1) errors[`addon_quantity_${index}`] = 'Quantity must be at least 1';
     });
 
-    if (!signature) errors.signature = 'Signature is required';
+    if (!signature.trim()) errors.signature = 'Signature is required';
     if (!agreementDate) errors.agreementDate = 'Date is required';
     if (!customerIdNo.trim()) errors.customerIdNo = 'ID NO is required';
     if (!customerFullName.trim()) errors.customerFullName = 'Full Name is required';
     if (!customerSignatureDate) errors.customerSignatureDate = 'Customer signature date is required';
 
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    return errors;
+  };
+
+  const focusFirstCreateError = (errors: Record<string, string>) => {
+    const orderedKeys: string[] = [
+      'customerId',
+      'agreementDate',
+      'startDate',
+      'endDate',
+    ];
+
+    for (let i = 0; i < machines.length; i++) {
+      orderedKeys.push(`machine_brand_${i}`, `machine_model_${i}`, `machine_type_${i}`, `machine_quantity_${i}`);
+    }
+    for (let i = 0; i < addOns.length; i++) {
+      orderedKeys.push(`addon_id_${i}`, `addon_quantity_${i}`);
+    }
+
+    orderedKeys.push('signature', 'customerIdNo', 'customerFullName', 'customerSignatureDate');
+
+    const findFirstRenderableKey = () => {
+      for (const k of orderedKeys) {
+        if (!errors[k]) continue;
+        const el = document.querySelector<HTMLElement>(`[data-ra-field-key="${CSS.escape(k)}"]`);
+        if (el) return k;
+      }
+      // fallback: first error key that exists in DOM
+      for (const k of Object.keys(errors)) {
+        const el = document.querySelector<HTMLElement>(`[data-ra-field-key="${CSS.escape(k)}"]`);
+        if (el) return k;
+      }
+      return null;
+    };
+
+    const key = findFirstRenderableKey();
+    if (!key) return;
+
+    const container = document.querySelector<HTMLElement>(`[data-ra-field-key="${CSS.escape(key)}"]`);
+    if (!container) return;
+
+    container.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+
+    window.setTimeout(() => {
+      const input = container.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+        'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+      );
+      try {
+        if (input) {
+          input.focus({ preventScroll: true } as FocusOptions);
+          if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+            input.select?.();
+          }
+        } else {
+          container.focus({ preventScroll: true } as FocusOptions);
+        }
+      } catch {
+        // best-effort only
+      }
+    }, 50);
   };
 
   const handleSubmitCreate = async () => {
-    if (!validateForm()) {
+    const errors = getCreateValidationErrors();
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      window.requestAnimationFrame(() => focusFirstCreateError(errors));
       return;
     }
 
@@ -2588,7 +2648,7 @@ const RentalAgreementPage: React.FC = () => {
                   {/* Agreement details: Customer | Agreement No & Date of Issue */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                     <div className="space-y-3">
-                      <div>
+                      <div data-ra-field-key="customerId" tabIndex={-1} className="outline-none rounded-lg">
                         <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Customer: </span>
                         <div className="mt-1">
                           <SearchableSelect
@@ -2620,7 +2680,7 @@ const RentalAgreementPage: React.FC = () => {
                         <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Agreement: </span>
                         <span className="text-sm text-gray-900 dark:text-white">-{agreementNo || '—'}</span>
                       </div>
-                      <div>
+                      <div data-ra-field-key="agreementDate" tabIndex={-1} className="outline-none rounded-lg">
                         <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Date of Issue: </span>
                         <input
                           type="date"
@@ -2633,7 +2693,7 @@ const RentalAgreementPage: React.FC = () => {
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-left sm:text-right">
-                        <div>
+                        <div data-ra-field-key="startDate" tabIndex={-1} className="outline-none rounded-lg">
                           <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Start: </span>
                           <input
                             type="date"
@@ -2643,7 +2703,7 @@ const RentalAgreementPage: React.FC = () => {
                           />
                           {formErrors.startDate && <p className="text-xs text-red-600">{formErrors.startDate}</p>}
                         </div>
-                        <div>
+                        <div data-ra-field-key="endDate" tabIndex={-1} className="outline-none rounded-lg">
                           <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">End: </span>
                           <input
                             type="date"
@@ -2694,37 +2754,43 @@ const RentalAgreementPage: React.FC = () => {
                             <tr key={machine.id} className="bg-white dark:bg-slate-800">
                               <td className="border border-gray-800 dark:border-slate-600 px-2 py-1.5 align-top overflow-visible relative">
                                 <div className="flex flex-wrap gap-1">
-                                  <SearchableSelect
-                                    value={machine.brand}
-                                    onChange={(v) => handleMachineChange(machine.id, 'brand', v)}
-                                    options={brandOptions}
-                                    placeholder="Brand"
-                                    error={formErrors[`machine_brand_${index}`]}
-                                    className="min-w-[80px] flex-1"
-                                    dropdownClassName="z-[100]"
-                                    usePortal
-                                  />
-                                  <SearchableSelect
-                                    value={machine.model}
-                                    onChange={(v) => handleMachineChange(machine.id, 'model', v)}
-                                    options={getModelOptions(machine.brand)}
-                                    placeholder="Model"
-                                    disabled={!machine.brand}
-                                    error={formErrors[`machine_model_${index}`]}
-                                    className="min-w-[80px] flex-1"
-                                    dropdownClassName="z-[100]"
-                                    usePortal
-                                  />
-                                  <SearchableSelect
-                                    value={machine.type}
-                                    onChange={(v) => handleMachineChange(machine.id, 'type', v)}
-                                    options={typeOptions}
-                                    placeholder="Type"
-                                    error={formErrors[`machine_type_${index}`]}
-                                    className="min-w-[80px] flex-1"
-                                    dropdownClassName="z-[100]"
-                                    usePortal
-                                  />
+                                  <div data-ra-field-key={`machine_brand_${index}`} tabIndex={-1} className="outline-none rounded-lg min-w-[80px] flex-1">
+                                    <SearchableSelect
+                                      value={machine.brand}
+                                      onChange={(v) => handleMachineChange(machine.id, 'brand', v)}
+                                      options={brandOptions}
+                                      placeholder="Brand"
+                                      error={formErrors[`machine_brand_${index}`]}
+                                      className="w-full"
+                                      dropdownClassName="z-[100]"
+                                      usePortal
+                                    />
+                                  </div>
+                                  <div data-ra-field-key={`machine_model_${index}`} tabIndex={-1} className="outline-none rounded-lg min-w-[80px] flex-1">
+                                    <SearchableSelect
+                                      value={machine.model}
+                                      onChange={(v) => handleMachineChange(machine.id, 'model', v)}
+                                      options={getModelOptions(machine.brand)}
+                                      placeholder="Model"
+                                      disabled={!machine.brand}
+                                      error={formErrors[`machine_model_${index}`]}
+                                      className="w-full"
+                                      dropdownClassName="z-[100]"
+                                      usePortal
+                                    />
+                                  </div>
+                                  <div data-ra-field-key={`machine_type_${index}`} tabIndex={-1} className="outline-none rounded-lg min-w-[80px] flex-1">
+                                    <SearchableSelect
+                                      value={machine.type}
+                                      onChange={(v) => handleMachineChange(machine.id, 'type', v)}
+                                      options={typeOptions}
+                                      placeholder="Type"
+                                      error={formErrors[`machine_type_${index}`]}
+                                      className="w-full"
+                                      dropdownClassName="z-[100]"
+                                      usePortal
+                                    />
+                                  </div>
                                 </div>
                                 {getMachineDescription(machine) && (
                                   <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 font-medium">
@@ -2798,25 +2864,39 @@ const RentalAgreementPage: React.FC = () => {
                     </div>
                     <div className="p-4 space-y-3">
                       {addOns.length > 0 ? (
-                        addOns.map((addOn) => (
+                        addOns.map((addOn, index) => (
                           <div key={addOn.id} className="p-3 border border-gray-200 dark:border-slate-600 rounded bg-gray-50 dark:bg-slate-700/30 flex flex-wrap items-center gap-3">
-                            <select
-                              value={addOn.addOnId}
-                              onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
-                              className="px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                            >
-                              <option value="">Select add-on</option>
-                              {mockAddOns.map((ao) => (
-                                <option key={ao.id} value={ao.id}>{ao.name} - Rs. {ao.price.toLocaleString('en-LK')}</option>
-                              ))}
-                            </select>
-                            <input
-                              type="number"
-                              min="1"
-                              value={addOn.quantity}
-                              onChange={(e) => handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)}
-                              className="w-20 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                            />
+                            <div data-ra-field-key={`addon_id_${index}`} tabIndex={-1} className="outline-none rounded">
+                              <select
+                                value={addOn.addOnId}
+                                onChange={(e) => handleAddOnChange(addOn.id, 'addOnId', e.target.value)}
+                                className={`px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                  formErrors[`addon_id_${index}`] ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
+                                }`}
+                              >
+                                <option value="">Select add-on</option>
+                                {mockAddOns.map((ao) => (
+                                  <option key={ao.id} value={ao.id}>{ao.name} - Rs. {ao.price.toLocaleString('en-LK')}</option>
+                                ))}
+                              </select>
+                              {formErrors[`addon_id_${index}`] && (
+                                <p className="mt-0.5 text-xs text-red-600">{formErrors[`addon_id_${index}`]}</p>
+                              )}
+                            </div>
+                            <div data-ra-field-key={`addon_quantity_${index}`} tabIndex={-1} className="outline-none rounded">
+                              <input
+                                type="number"
+                                min="1"
+                                value={addOn.quantity}
+                                onChange={(e) => handleAddOnChange(addOn.id, 'quantity', parseInt(e.target.value) || 1)}
+                                className={`w-20 px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                                  formErrors[`addon_quantity_${index}`] ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
+                                }`}
+                              />
+                              {formErrors[`addon_quantity_${index}`] && (
+                                <p className="mt-0.5 text-xs text-red-600">{formErrors[`addon_quantity_${index}`]}</p>
+                              )}
+                            </div>
                             <button type="button" onClick={() => handleRemoveAddOn(addOn.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2848,7 +2928,7 @@ const RentalAgreementPage: React.FC = () => {
 
                   {/* Signature section - two columns (signature empty by default; only user-entered value shown/printed) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-                    <div>
+                    <div data-ra-field-key="signature" tabIndex={-1} className="outline-none rounded-lg">
                       <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Customer Signature</div>
                       <div className="text-sm text-gray-900 dark:text-white border-b border-gray-800 dark:border-slate-600 pb-2 min-h-[2rem] print:min-h-[2rem]">
                         {signature || ''}
@@ -2858,12 +2938,17 @@ const RentalAgreementPage: React.FC = () => {
                         value={signature}
                         onChange={(e) => setSignature(e.target.value)}
                         placeholder="Enter signature (leave blank for print)"
-                        className="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-slate-600 rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                        className={`mt-1 w-full px-2 py-1 border rounded text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${
+                          formErrors.signature ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
+                        }`}
                       />
+                      {formErrors.signature && (
+                        <p className="text-xs text-red-600 mt-0.5">{formErrors.signature}</p>
+                      )}
                       <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">(Agreed upon the terms & Conditions)</div>
                     </div>
                     <div className="space-y-2">
-                      <div>
+                      <div data-ra-field-key="customerIdNo" tabIndex={-1} className="outline-none rounded">
                         <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">ID NO: </span>
                         <input
                           type="text"
@@ -2874,7 +2959,7 @@ const RentalAgreementPage: React.FC = () => {
                         />
                         {formErrors.customerIdNo && <p className="text-xs text-red-600 mt-0.5">{formErrors.customerIdNo}</p>}
                       </div>
-                      <div>
+                      <div data-ra-field-key="customerFullName" tabIndex={-1} className="outline-none rounded">
                         <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Full Name: </span>
                         <input
                           type="text"
@@ -2885,7 +2970,7 @@ const RentalAgreementPage: React.FC = () => {
                         />
                         {formErrors.customerFullName && <p className="text-xs text-red-600 mt-0.5">{formErrors.customerFullName}</p>}
                       </div>
-                      <div>
+                      <div data-ra-field-key="customerSignatureDate" tabIndex={-1} className="outline-none rounded">
                         <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Date: </span>
                         <input
                           type="date"
