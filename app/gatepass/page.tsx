@@ -1378,6 +1378,7 @@ const GatePassPage: React.FC = () => {
                 itemsPerPage={10}
                 searchable
                 filterable
+                loading={isLoadingData}
                 onCreateClick={handleCreateGatePass}
                 createButtonLabel="Create Gate Pass"
                 emptyMessage={isLoadingData ? "Loading gate passes..." : "No gate passes found."}

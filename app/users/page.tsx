@@ -1172,13 +1172,7 @@ const UserManagementPage: React.FC = () => {
             </div>
           )}
 
-          {permissionsLoading || isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500 dark:text-gray-400">
-                {permissionsLoading ? 'Checking permissions...' : 'Loading users...'}
-              </div>
-            </div>
-          ) : !canViewUsers ? (
+          {!permissionsLoading && !isLoading && !canViewUsers ? (
             <div className="flex flex-col items-center justify-center py-16 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800/50">
               <Lock className="w-12 h-12 text-gray-400 dark:text-slate-500 mb-4" />
               <p className="text-lg font-medium text-gray-900 dark:text-white">Access denied</p>
@@ -1194,10 +1188,11 @@ const UserManagementPage: React.FC = () => {
               itemsPerPage={10}
               searchable
               filterable
+              loading={permissionsLoading || isLoading}
               onCreateClick={canShowCreateButton ? handleCreateUser : undefined}
               createButtonLabel="Create"
               getRowClassName={getRowClassName}
-              emptyMessage="No users found."
+              emptyMessage={permissionsLoading || isLoading ? 'Loading users...' : 'No users found.'}
             />
           )}
         </div>

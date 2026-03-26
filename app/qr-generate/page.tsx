@@ -584,33 +584,28 @@ const QRGeneratePage: React.FC = () => {
             </div>
           )}
 
-          {machineUnitsLoading ? (
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-12 text-center">
-              <p className="text-gray-600 dark:text-gray-400">Loading machines...</p>
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
+            <div className="p-6 border-b border-gray-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Inventory Details
+              </h3>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                All machines ({machineUnitsLoading ? '—' : machineUnits.length} total). Click Generate QR Code to preview and print, or view printing history.
+              </p>
             </div>
-          ) : (
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
-              <div className="p-6 border-b border-gray-200 dark:border-slate-700">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Inventory Details
-                </h3>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  All machines ({machineUnits.length} total). Click Generate QR Code to preview and print, or view printing history.
-                </p>
-              </div>
-              <div className="p-6">
-                <Table
-                  data={machineUnits}
-                  columns={tableColumns}
-                  actions={tableActions}
-                  itemsPerPage={10}
-                  searchable
-                  filterable
-                  emptyMessage="No machines found."
-                />
-              </div>
+            <div className="p-6">
+              <Table
+                data={machineUnits}
+                columns={tableColumns}
+                actions={tableActions}
+                itemsPerPage={10}
+                searchable
+                filterable
+                loading={machineUnitsLoading}
+                emptyMessage={machineUnitsLoading ? 'Loading machines...' : 'No machines found.'}
+              />
             </div>
-          )}
+          </div>
         </div>
       </main>
 

@@ -630,7 +630,7 @@ const PurchaseOrderPage: React.FC = () => {
                                         <button onClick={handlePrintPurchaseOrder} className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"><Printer className="w-4 h-4" /><span>Print</span></button>
                                     </Tooltip>
                                     {['PENDING', 'APPROVED', 'ACTIVE', 'PARTIALLY_FULFILLED'].includes(String(selectedRequest.status).toUpperCase().replace(/\s/g, '_')) && availableMachinesForRental.length > 0 && (
-                                        <Tooltip content="Create Rental Agreement">
+                                        <Tooltip content="Create Hiring Machine Agreement">
                                             <button onClick={() => handleCreateRentalAgreement(selectedRequest)} className="px-4 py-2 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-800 flex items-center space-x-2"><FileText className="w-4 h-4" /><span>Create Rental</span></button>
                                         </Tooltip>
                                     )}
@@ -779,8 +779,8 @@ const PurchaseOrderPage: React.FC = () => {
                                 <Tooltip content="Cancel">
                                     <button type="button" onClick={handleCloseRentalModal} disabled={isSubmitting} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
                                 </Tooltip>
-                                <Tooltip content="Create Rental Agreement">
-                                    <button type="button" onClick={handleSubmitRentalAgreement} disabled={isSubmitting} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? 'Creating...' : 'Create Rental Agreement'}</button>
+                                <Tooltip content="Create Hiring Machine Agreement">
+                                    <button type="button" onClick={handleSubmitRentalAgreement} disabled={isSubmitting} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? 'Creating...' : 'Create Hiring Machine Agreement'}</button>
                                 </Tooltip>
                             </div>
                         </div>

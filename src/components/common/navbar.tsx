@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, Menu, X } from 'lucide-react';
+import { Moon, Sun, Menu, X, UserRound } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
+import { AUTH_USER_KEY } from '@/lib/auth-constants';
 
 // ---- Match sidebar structure for titles ----
 type MenuChild = {
@@ -112,7 +113,9 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
   // Initialize theme state - check both localStorage and DOM
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [loggedUser, setLoggedUser] = useState<Record<string, any> | null>(null);
 
   // Only run on client after mount
   useEffect(() => {
@@ -159,6 +162,36 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
+  // Load logged-in user from localStorage (set at login)
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      const raw = localStorage.getItem(AUTH_USER_KEY);
+      if (!raw) {
+        setLoggedUser(null);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        setLoggedUser(parsed);
+      } else {
+        setLoggedUser(null);
+      }
+    } catch {
+      setLoggedUser(null);
+    }
+  }, [mounted]);
+
+  // Close profile panel with Escape
+  useEffect(() => {
+    if (!isProfileOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsProfileOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isProfileOpen]);
+
   // Toggle dark mode
   const toggleDarkMode = () => {
     const newDarkMode = !isDarkMode;
@@ -176,6 +209,53 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
   // Toggle mobile menu
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
+  const openProfile = () => {
+    setIsProfileOpen(true);
+  };
+
+  const getUserEmail = (u: Record<string, any> | null): string | null => {
+    if (!u) return null;
+    return (
+      u.email ??
+      u.user?.email ??
+      u.profile?.email ??
+      null
+    );
+  };
+
+  const getUserRole = (u: Record<string, any> | null): string | null => {
+    if (!u) return null;
+    return (
+      u.role?.name ??
+      u.role_name ??
+      u.user?.role?.name ??
+      u.profile?.role?.name ??
+      null
+    );
+  };
+
+  const getUserName = (u: Record<string, any> | null): string | null => {
+    if (!u) return null;
+    return (
+      u.name ??
+      u.full_name ??
+      u.fullName ??
+      u.username ??
+      u.user?.name ??
+      u.user?.full_name ??
+      u.user?.username ??
+      null
+    );
+  };
+
+  const getInitials = (nameOrEmail: string | null): string => {
+    const value = (nameOrEmail ?? '').trim();
+    if (!value) return 'U';
+    const parts = value.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return value.slice(0, 2).toUpperCase();
   };
 
   const currentPageTitle = activeChild || activeSection || 'Dashboard';
@@ -251,6 +331,13 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
           {/* Right side - Dark Mode Toggle */}
           <div className="flex items-center space-x-4">
             <button
+              onClick={openProfile}
+              className="group relative p-2.5 rounded-xl text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-indigo-400 transition-all duration-200 ease-in-out"
+              aria-label="Open profile"
+            >
+              <UserRound className="h-5 w-5 transition-transform duration-200 group-hover:scale-110 group-hover:text-blue-600 dark:group-hover:text-indigo-400" />
+            </button>
+            <button
               onClick={toggleDarkMode}
               className="group relative p-2.5 rounded-xl text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-indigo-400 transition-all duration-200 ease-in-out"
               aria-label="Toggle dark mode"
@@ -265,11 +352,94 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
         </div>
       </div>
 
+      {/* Profile side popup */}
+      {isProfileOpen && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="Close profile panel"
+            onClick={() => setIsProfileOpen(false)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="User profile"
+            className="absolute right-0 top-0 h-full w-[360px] max-w-[92vw] bg-white dark:bg-slate-950 border-l border-gray-200/80 dark:border-slate-800/80 shadow-2xl"
+          >
+            <div className="h-[70px] px-5 flex items-center justify-between border-b border-gray-200/80 dark:border-slate-800/80">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-sm">
+                  {getInitials(getUserName(loggedUser) || getUserEmail(loggedUser))}
+                </div>
+                <div className="flex flex-col leading-tight">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {getUserName(loggedUser) || 'User Profile'}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-slate-400">
+                    {getUserRole(loggedUser) || '—'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsProfileOpen(false)}
+                className="group relative p-2.5 rounded-xl text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-indigo-400 transition-all duration-200 ease-in-out"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="rounded-2xl border border-gray-200/70 dark:border-slate-800/70 bg-gradient-to-b from-white to-gray-50 dark:from-slate-950 dark:to-slate-900/40 p-4">
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 dark:text-slate-400">Email</div>
+                    <div className="mt-0.5 text-sm text-gray-900 dark:text-white break-all">
+                      {getUserEmail(loggedUser) || '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 dark:text-slate-400">Role</div>
+                    <div className="mt-0.5 text-sm text-gray-900 dark:text-white">
+                      {getUserRole(loggedUser) || '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 dark:text-slate-400">User ID</div>
+                    <div className="mt-0.5 text-sm text-gray-900 dark:text-white break-all">
+                      {(loggedUser as any)?.id ?? (loggedUser as any)?.user_id ?? (loggedUser as any)?.user?.id ?? '—'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {!loggedUser && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                  No user details found in this browser session. Please sign in again if this is unexpected.
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
+
       {/* Mobile menu dropdown */}
       {isMobileMenuOpen && (
         <div className="lg:hidden bg-gradient-to-b from-white to-[#F6F9FF] dark:from-slate-900 dark:to-slate-950 border-t border-gray-200/80 dark:border-slate-800/80 shadow-xl backdrop-blur-sm">
           <div className="px-4 py-3 space-y-3">
             <div className="pt-2">
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  openProfile();
+                }}
+                className="group relative flex items-center w-full px-3 py-2.5 text-base font-medium text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/50 hover:shadow-sm rounded-xl transition-all duration-200 ease-in-out"
+              >
+                <UserRound className="h-5 w-5 mr-3 transition-transform duration-200 group-hover:scale-110 group-hover:text-blue-600 dark:group-hover:text-indigo-400" />
+                Profile
+              </button>
               <button
                 onClick={toggleDarkMode}
                 className="group relative flex items-center w-full px-3 py-2.5 text-base font-medium text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/50 hover:shadow-sm rounded-xl transition-all duration-200 ease-in-out"
