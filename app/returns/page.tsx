@@ -8,6 +8,7 @@ import { Eye, X, Pencil, Package, FileText, Building2, MapPin, Camera, DollarSig
 import Tooltip from '@/src/components/common/tooltip';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '@/lib/auth-client';
+import { Swal, toast } from '@/src/lib/swal';
 
 type ReturnType = 'Standard' | 'Damage' | 'Missing' | 'Exchange';
 type ReturnStatus = 'Pending' | 'Completed' | 'Under Review';
@@ -391,7 +392,12 @@ const ReturnsPage: React.FC = () => {
       const json = await res.json();
 
       if (!res.ok) {
-        alert(json?.message ?? 'Failed to update return. Please try again.');
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to update return',
+          text: json?.message ?? 'Please try again.',
+          confirmButtonColor: '#dc2626',
+        });
         return;
       }
 
@@ -412,11 +418,19 @@ const ReturnsPage: React.FC = () => {
           prev.map((ret) => (ret.id === selectedReturn.id ? updatedReturn : ret)),
         );
       }
-      alert('Return updated successfully.');
+      toast.fire({
+        icon: 'success',
+        title: 'Return updated successfully',
+      });
       handleCloseUpdateModal();
     } catch (err: any) {
       console.error('Error updating return:', err);
-      alert(err?.message ?? 'Failed to update return. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to update return',
+        text: err?.message ?? 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }

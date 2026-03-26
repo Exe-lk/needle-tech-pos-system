@@ -12,6 +12,7 @@ import Tooltip from '@/src/components/common/tooltip';
 import { validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 import { authFetch, clearAuth, redirectToLogin } from '@/lib/auth-client';
 import { FEATURES } from '@/lib/permissions';
+import { Swal, toast } from '@/src/lib/swal';
 
 // ============================================================================
 // CONSTANTS & CONFIGURATION
@@ -671,7 +672,10 @@ const UserManagementPage: React.FC = () => {
       });
 
       if (result.success) {
-        alert(`Role "${name}" created successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `Role "${name}" created successfully.`,
+        });
         handleCloseCreateModal();
         await loadRoles();
       } else {
@@ -714,7 +718,10 @@ const UserManagementPage: React.FC = () => {
       const result = await createUser(payload);
       
       if (result.success) {
-        alert(`User "${data.username}" created successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `User "${data.username}" created successfully.`,
+        });
         handleCloseCreateModal();
         await loadUsers();
       } else {
@@ -803,7 +810,10 @@ const UserManagementPage: React.FC = () => {
       const result = await updateUser(selectedUser.id, payload);
       
       if (result.success) {
-        alert(`User "${selectedUser.username}" updated successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `User "${selectedUser.username}" updated successfully.`,
+        });
         handleCloseUpdateModal();
         await loadUsers();
       } else {
@@ -840,7 +850,10 @@ const UserManagementPage: React.FC = () => {
       const result = await deleteUser(selectedUser.id);
       
       if (result.success) {
-        alert(`User "${selectedUser.username}" deleted successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `User "${selectedUser.username}" deleted successfully.`,
+        });
         handleCloseDeleteModal();
         await loadUsers();
       } else {

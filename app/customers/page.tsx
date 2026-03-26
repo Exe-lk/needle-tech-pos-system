@@ -11,6 +11,7 @@ import { Eye, Pencil, Trash2, X, Plus } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail } from '@/src/utils/validation';
 import { authFetch, clearAuth, redirectToLogin } from '@/lib/auth-client';
+import { Swal, toast } from '@/src/lib/swal';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
@@ -517,15 +518,28 @@ const CustomerListPage: React.FC = () => {
       const result = await deleteCustomer(selectedCustomer.id);
       
       if (result.success) {
-        alert(`Customer "${selectedCustomer.name}" deleted successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `Customer "${selectedCustomer.name}" deleted successfully.`,
+        });
         handleCloseDeleteModal();
         await loadCustomers(); // Refresh the list
       } else {
-        alert(`Failed to delete customer: ${result.error}`);
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to delete customer',
+          text: result.error || 'Please try again.',
+          confirmButtonColor: '#dc2626',
+        });
       }
     } catch (error) {
       console.error('Error deleting customer:', error);
-      alert('Failed to delete customer. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to delete customer',
+        text: 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -733,15 +747,28 @@ const CustomerListPage: React.FC = () => {
       const result = await createCustomer(payload);
       
       if (result.success) {
-        alert(`Business "${data.companyName}" created successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `Business "${data.companyName}" created successfully.`,
+        });
         handleCloseCreateModal();
         await loadCustomers(); // Refresh the list
       } else {
-        alert(`Failed to create business: ${result.error}`);
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to create business',
+          text: result.error || 'Please try again.',
+          confirmButtonColor: '#dc2626',
+        });
       }
     } catch (error) {
       console.error('Error creating business:', error);
-      alert('Failed to create business. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to create business',
+        text: 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -772,15 +799,28 @@ const CustomerListPage: React.FC = () => {
       const result = await createCustomer(payload);
       
       if (result.success) {
-        alert(`Customer "${data.fullName}" created successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `Customer "${data.fullName}" created successfully.`,
+        });
         handleCloseCreateModal();
         await loadCustomers(); // Refresh the list
       } else {
-        alert(`Failed to create customer: ${result.error}`);
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to create customer',
+          text: result.error || 'Please try again.',
+          confirmButtonColor: '#dc2626',
+        });
       }
     } catch (error) {
       console.error('Error creating customer:', error);
-      alert('Failed to create customer. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to create customer',
+        text: 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -816,15 +856,28 @@ const CustomerListPage: React.FC = () => {
       const result = await updateCustomer(selectedCustomer.id, payload);
       
       if (result.success) {
-        alert(`Business "${data.companyName}" updated successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `Business "${data.companyName}" updated successfully.`,
+        });
         handleCloseUpdateModal();
         await loadCustomers(); // Refresh the list
       } else {
-        alert(`Failed to update business: ${result.error}`);
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to update business',
+          text: result.error || 'Please try again.',
+          confirmButtonColor: '#dc2626',
+        });
       }
     } catch (error) {
       console.error('Error updating business:', error);
-      alert('Failed to update business. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to update business',
+        text: 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -854,15 +907,28 @@ const CustomerListPage: React.FC = () => {
       const result = await updateCustomer(selectedCustomer.id, payload);
       
       if (result.success) {
-        alert(`Customer "${data.fullName}" updated successfully.`);
+        toast.fire({
+          icon: 'success',
+          title: `Customer "${data.fullName}" updated successfully.`,
+        });
         handleCloseUpdateModal();
         await loadCustomers(); // Refresh the list
       } else {
-        alert(`Failed to update customer: ${result.error}`);
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to update customer',
+          text: result.error || 'Please try again.',
+          confirmButtonColor: '#dc2626',
+        });
       }
     } catch (error) {
       console.error('Error updating customer:', error);
-      alert('Failed to update customer. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to update customer',
+        text: 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }

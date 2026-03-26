@@ -20,6 +20,7 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { Swal } from '@/src/lib/swal';
 
 type ReturnCondition = 'Good' | 'Standard' | 'Damage' | 'Missing' | 'Exchange';
 
@@ -569,16 +570,24 @@ const ReturnsCreatePage: React.FC = () => {
 
     for (const m of machines) {
       if (!m.returnType) {
-        alert(`Please set return type for machine ${m.serialNumber}.`);
+        Swal.fire({
+          icon: 'warning',
+          title: 'Missing return type',
+          text: `Please set return type for machine ${m.serialNumber}.`,
+          confirmButtonColor: '#f97316',
+        });
         return;
       }
       if (
         (m.returnType === 'Damage' || m.returnType === 'Missing') &&
         (!m.damageNote?.trim() || !m.photos?.length)
       ) {
-        alert(
-          `For ${m.serialNumber} (${m.returnType}): please add a note and at least one photo.`
-        );
+        Swal.fire({
+          icon: 'warning',
+          title: 'Details required',
+          text: `For ${m.serialNumber} (${m.returnType}): please add a note and at least one photo.`,
+          confirmButtonColor: '#f97316',
+        });
         return;
       }
     }
@@ -609,12 +618,22 @@ const ReturnsCreatePage: React.FC = () => {
       };
       console.log('Return payload:', payload);
       await new Promise((r) => setTimeout(r, 800));
-      alert(`Return ${payload.returnNumber} created successfully.`);
+      Swal.fire({
+        icon: 'success',
+        title: 'Return created',
+        text: `Return ${payload.returnNumber} created successfully.`,
+        confirmButtonColor: '#16a34a',
+      });
       resetAll();
       router.push('/returns');
     } catch (e) {
       console.error(e);
-      alert('Failed to create return. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to create return',
+        text: 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }

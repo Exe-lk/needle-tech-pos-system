@@ -7,6 +7,7 @@ import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, Pencil } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { authFetch } from '@/lib/auth-client';
+import { Swal, toast } from '@/src/lib/swal';
 
 type AlertType = 'Payment Overdue' | 'High Balance' | 'Credit Limit Exceeded' | 'Agreement Expiring';
 type AlertSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
@@ -251,11 +252,19 @@ const OutstandingAlertsPage: React.FC = () => {
 
       await fetchAlerts();
       handleCloseUpdateModal();
-      alert('Alert status updated successfully.');
+      toast.fire({
+        icon: 'success',
+        title: 'Alert status updated successfully',
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update alert. Please try again.';
       console.error('Error updating alert:', err);
-      alert(message);
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to update alert',
+        text: message,
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }

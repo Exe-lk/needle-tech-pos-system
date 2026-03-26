@@ -9,6 +9,7 @@ import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer, Pencil } from
 import Tooltip from '@/src/components/common/tooltip';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
+import { Swal, toast } from '@/src/lib/swal';
 
 const API_BASE_URL = '/api/v1';
 
@@ -224,13 +225,23 @@ const PurchaseOrderPage: React.FC = () => {
 
     const handleCreateRentalAgreement = (request: PurchaseRequest) => {
         if (!hasAvailableMachinesForRental(request)) {
-            alert('No machines available for rental from this purchase order. You can only create a rental agreement when at least one machine line has available stock.');
+            Swal.fire({
+                icon: 'info',
+                title: 'No available machines',
+                text: 'You can only create a rental agreement when at least one machine line has available stock.',
+                confirmButtonColor: '#2563eb',
+            });
             return;
         }
         const poStart = request.startDate ? (typeof request.startDate === 'string' ? request.startDate : new Date(request.startDate).toISOString().split('T')[0]) : '';
         const poEnd = request.endDate ? (typeof request.endDate === 'string' ? request.endDate : new Date(request.endDate).toISOString().split('T')[0]) : null;
         if (!poStart) {
-            alert('This purchase order has no start date. Please edit the purchase order to set the start date before creating a hiring agreement.');
+            Swal.fire({
+                icon: 'warning',
+                title: 'Start date required',
+                text: 'Please edit this purchase order and set a start date before creating a hiring agreement.',
+                confirmButtonColor: '#f97316',
+            });
             return;
         }
         setSelectedRequest(request);
@@ -429,9 +440,18 @@ const PurchaseOrderPage: React.FC = () => {
             }
             handleCloseUpdateModal();
             fetchPurchaseOrders();
+            toast.fire({
+                icon: 'success',
+                title: 'Purchase order updated',
+            });
         } catch (error: any) {
             console.error('Error updating purchase order:', error);
-            alert(error?.message || 'Failed to update purchase order. Please try again.');
+            Swal.fire({
+                icon: 'error',
+                title: 'Failed to update purchase order',
+                text: error?.message || 'Please try again.',
+                confirmButtonColor: '#dc2626',
+            });
         } finally {
             setIsUpdateSubmitting(false);
         }
@@ -492,12 +512,26 @@ const PurchaseOrderPage: React.FC = () => {
                 const msg = json?.message || (json?.data ? Object.values(json.data).flat().join(' ') : '') || 'Failed to create rental agreement';
                 throw new Error(msg);
             }
-            alert(`Rental agreement created successfully. Agreement: ${json?.data?.agreementNo ?? 'N/A'}. It is in Pending status—assign machines on the Rental Agreement or Machine Assignment page, then create a gate pass and get it approved by security to activate and update inventory.`);
+            Swal.fire({
+                icon: 'success',
+                title: 'Rental agreement created',
+                html: `
+                    Agreement: <strong>${json?.data?.agreementNo ?? 'N/A'}</strong><br/>
+                    It is in <strong>Pending</strong> status—assign machines on the Rental Agreement or Machine Assignment page,
+                    then create a gate pass and get it approved by security to activate and update inventory.
+                `,
+                confirmButtonColor: '#16a34a',
+            });
             handleCloseRentalModal();
             fetchPurchaseOrders();
         } catch (error: any) {
             console.error('Error creating rental agreement:', error);
-            alert(error?.message || 'Failed to create rental agreement. Please try again.');
+            Swal.fire({
+                icon: 'error',
+                title: 'Failed to create rental agreement',
+                text: error?.message || 'Please try again.',
+                confirmButtonColor: '#dc2626',
+            });
         } finally {
             setIsSubmitting(false);
         }

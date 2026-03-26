@@ -21,6 +21,7 @@ import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
+import { Swal, toast } from '@/src/lib/swal';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
@@ -526,7 +527,12 @@ const GatePassPage: React.FC = () => {
       setRentalAgreements(rentalsData);
     } catch (error) {
       console.error('Error loading initial data:', error);
-      alert('Failed to load data. Please refresh the page.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to load data',
+        text: 'Please refresh the page.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsLoadingData(false);
     }
@@ -764,7 +770,12 @@ const GatePassPage: React.FC = () => {
       const rental = rentalAgreements.find((r) => r.id === agreementReference);
       
       if (!rental) {
-        alert('Selected rental agreement not found');
+        Swal.fire({
+          icon: 'error',
+          title: 'Rental not found',
+          text: 'Selected rental agreement not found.',
+          confirmButtonColor: '#dc2626',
+        });
         setIsSubmitting(false);
         return;
       }
@@ -773,7 +784,12 @@ const GatePassPage: React.FC = () => {
       const validItems = items.filter((item) => item.description.trim() !== '');
 
       if (validItems.length < MIN_ITEMS) {
-        alert(`At least ${MIN_ITEMS} items are required`);
+        Swal.fire({
+          icon: 'warning',
+          title: 'Not enough items',
+          text: `At least ${MIN_ITEMS} items are required`,
+          confirmButtonColor: '#f97316',
+        });
         setIsSubmitting(false);
         return;
       }
@@ -790,7 +806,12 @@ const GatePassPage: React.FC = () => {
       const createdGatePass = await createGatePass(payload);
       
       if (createdGatePass) {
-        alert(`Gate Pass ${createdGatePass.gatepassNo} created successfully!`);
+        Swal.fire({
+          icon: 'success',
+          title: 'Gate pass created',
+          text: `Gate Pass ${createdGatePass.gatepassNo} created successfully!`,
+          confirmButtonColor: '#16a34a',
+        });
         // Reload gate passes
         const updatedGatePasses = await fetchGatePasses();
         setGatePasses(updatedGatePasses);
@@ -798,7 +819,12 @@ const GatePassPage: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error creating gate pass:', error);
-      alert(error.message || 'Failed to create gate pass. Please try again.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to create gate pass',
+        text: error.message || 'Please try again.',
+        confirmButtonColor: '#dc2626',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1006,7 +1032,11 @@ const GatePassPage: React.FC = () => {
   const handleApproveGatePass = async () => {
     if (!securityGatePass) return;
     if (!canApprove) {
-      alert('Cannot approve: Please ensure all serial numbers are matched and there are no failed scans.');
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Cannot approve',
+        text: 'Please ensure all serial numbers are matched and there are no failed scans.',
+      });
       return;
     }
 
@@ -1017,9 +1047,11 @@ const GatePassPage: React.FC = () => {
         status: 'DEPARTED',
       });
 
-      alert(
-        `Gate Pass ${securityGatePass.gatepassNo} approved by Security Officer and marked as DEPARTED.`
-      );
+      await Swal.fire({
+        icon: 'success',
+        title: 'Approved',
+        text: `Gate Pass ${securityGatePass.gatepassNo} approved by Security Officer and marked as DEPARTED.`,
+      });
       
       // Reload gate passes
       const updatedGatePasses = await fetchGatePasses();
@@ -1028,7 +1060,11 @@ const GatePassPage: React.FC = () => {
       handleCloseSecurityModal();
     } catch (error: any) {
       console.error('Error approving gate pass:', error);
-      alert(error.message || 'Failed to approve gate pass. Please try again.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to approve',
+        text: error.message || 'Failed to approve gate pass. Please try again.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1092,7 +1128,11 @@ const GatePassPage: React.FC = () => {
 
       await updateGatePass(selectedGatePass.id, payload);
       
-      alert(`Gate Pass "${selectedGatePass.gatepassNo}" updated successfully!`);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Updated',
+        text: `Gate Pass "${selectedGatePass.gatepassNo}" updated successfully!`,
+      });
       
       // Reload gate passes
       const updatedGatePasses = await fetchGatePasses();
@@ -1101,7 +1141,11 @@ const GatePassPage: React.FC = () => {
       handleCloseUpdateModal();
     } catch (error: any) {
       console.error('Error updating gate pass:', error);
-      alert(error.message || 'Failed to update gate pass. Please try again.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to update',
+        text: error.message || 'Failed to update gate pass. Please try again.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1114,14 +1158,22 @@ const GatePassPage: React.FC = () => {
 
     try {
       await deleteGatePass(gatePass.id);
-      alert(`Gate Pass "${gatePass.gatepassNo}" deleted successfully!`);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted',
+        text: `Gate Pass "${gatePass.gatepassNo}" deleted successfully!`,
+      });
       
       // Reload gate passes
       const updatedGatePasses = await fetchGatePasses();
       setGatePasses(updatedGatePasses);
     } catch (error: any) {
       console.error('Error deleting gate pass:', error);
-      alert(error.message || 'Failed to delete gate pass. Please try again.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to delete',
+        text: error.message || 'Failed to delete gate pass. Please try again.',
+      });
     }
   };
 
