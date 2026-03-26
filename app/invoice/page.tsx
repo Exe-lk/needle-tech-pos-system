@@ -1302,7 +1302,7 @@ const InvoicePage: React.FC = () => {
   const renderInvoiceWithLetterhead = (invoice: Invoice) => {
     const isVAT = invoice.invoiceType === 'VAT';
     return (
-      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:p-8 print:bg-white print:text-black print:max-w-none" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 w-full max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:w-[210mm] print:max-w-[210mm] print:p-8 print:bg-white print:text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
         <LetterheadDocument
           documentTitle={isVAT ? 'TAX INVOICE' : 'INVOICE'}
           footerStyle="full"
@@ -1332,7 +1332,7 @@ const InvoicePage: React.FC = () => {
     const fmt = (n: number) => `Rs.${n.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
 
     return (
-      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:p-8 print:bg-white print:text-black print:max-w-none" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 w-full max-w-[210mm] mx-auto p-4 sm:p-6 md:p-8 print:w-[210mm] print:max-w-[210mm] print:p-8 print:bg-white print:text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
         <LetterheadDocument
           documentTitle={isVAT ? 'TAX INVOICE' : 'INVOICE'}
           footerStyle="full"
