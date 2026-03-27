@@ -131,14 +131,28 @@ const formatAddress = (customer: ApiCustomer, type: 'billing' | 'shipping' = 'bi
 };
 
 const parseAddress = (address: string) => {
-  const parts = address.split(',').map(p => p.trim());
+  const parts = address
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  // Preserve explicit country from existing formatted values like "..., Sri Lanka"
+  // without duplicating it on subsequent updates.
+  let country = '';
+  if (parts.length >= 6) {
+    country = parts[5];
+  } else if (parts.length > 1 && /^sri\s*lanka$/i.test(parts[parts.length - 1])) {
+    country = 'Sri Lanka';
+    parts.pop();
+  }
+
   return {
     line1: parts[0] || '',
     line2: parts[1] || '',
     city: parts[2] || '',
     region: parts[3] || '',
     postalCode: parts[4] || '',
-    country: parts[5] || 'Sri Lanka',
+    country,
   };
 };
 
