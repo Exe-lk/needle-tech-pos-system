@@ -7,6 +7,7 @@ import { authFetch } from '@/lib/auth-client';
 import {
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   RotateCcw,
   Trash2,
   Zap,
@@ -62,6 +63,12 @@ interface MachineForAgreement {
   typeName?: string;
   scannedAt?: string;
   categoryIndex?: number;
+}
+
+interface PendingAgreementOption {
+  id: string;
+  agreementNo: string;
+  customerName: string;
 }
 
 // API response from GET /api/v1/rentals/by-number
@@ -246,6 +253,7 @@ function getUpdateInitialData(agreement: RentalAgreement | null): Record<string,
 // ---------------------------------------------------------------------------
 
 type ViewMode = 'menu' | 'details' | 'scan';
+type NonScanViewMode = Exclude<ViewMode, 'scan'>;
 
 const MachineAssignPage: React.FC = () => {
   const router = useRouter();
@@ -257,6 +265,11 @@ const MachineAssignPage: React.FC = () => {
   const [agreementNumberInput, setAgreementNumberInput] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [pendingAgreements, setPendingAgreements] = useState<PendingAgreementOption[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [pendingError, setPendingError] = useState<string | null>(null);
+  const [showAgreementDropdown, setShowAgreementDropdown] = useState(false);
+  const agreementDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Selected agreement + overall state (from API)
   const [selectedAgreement, setSelectedAgreement] = useState<RentalAgreement | null>(null);
@@ -270,10 +283,24 @@ const MachineAssignPage: React.FC = () => {
 
   // Step 2 sub-view (menu / details / scan)
   const [viewMode, setViewMode] = useState<ViewMode>('menu');
+  const previousStep2ViewRef = useRef<NonScanViewMode>('menu');
 
   useEffect(() => {
     activeScanCategoryIndexRef.current = activeScanCategoryIndex;
   }, [activeScanCategoryIndex]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!agreementDropdownRef.current) return;
+      if (!agreementDropdownRef.current.contains(event.target as Node)) {
+        setShowAgreementDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -288,6 +315,46 @@ const MachineAssignPage: React.FC = () => {
       setIsDarkMode(false);
     }
   }, []);
+
+  useEffect(() => {
+    const fetchPendingAgreements = async () => {
+      setPendingLoading(true);
+      setPendingError(null);
+      try {
+        const res = await authFetch('/api/v1/rentals?status=PENDING&limit=1000');
+        const json = await res.json();
+        if (!res.ok) {
+          setPendingError(json?.message ?? 'Failed to load pending agreements.');
+          setPendingAgreements([]);
+          return;
+        }
+        const items = Array.isArray(json?.data?.items) ? json.data.items : [];
+        const options: PendingAgreementOption[] = items
+          .map((item: { id?: string; agreementNumber?: string; customer?: { name?: string } }) => ({
+            id: item.id ?? '',
+            agreementNo: item.agreementNumber ?? '',
+            customerName: item.customer?.name ?? '',
+          }))
+          .filter((item: PendingAgreementOption) => item.agreementNo.trim().length > 0);
+        setPendingAgreements(options);
+      } catch {
+        setPendingError('Network error while loading pending agreements.');
+        setPendingAgreements([]);
+      } finally {
+        setPendingLoading(false);
+      }
+    };
+    void fetchPendingAgreements();
+  }, []);
+
+  const filteredPendingAgreements = pendingAgreements.filter((item) => {
+    const keyword = agreementNumberInput.trim().toLowerCase();
+    if (!keyword) return true;
+    return (
+      item.agreementNo.toLowerCase().includes(keyword) ||
+      item.customerName.toLowerCase().includes(keyword)
+    );
+  });
 
   const toggleTheme = () => {
     const nextDark = !isDarkMode;
@@ -425,6 +492,26 @@ const MachineAssignPage: React.FC = () => {
   };
 
   const handleBackToStockkeeper = () => {
+    // Navigate within the current flow first (previous popup/view).
+    if (step === 2) {
+      if (viewMode === 'scan') {
+        setActiveScanCategoryIndex(null);
+        setViewMode(previousStep2ViewRef.current);
+        return;
+      }
+      if (viewMode === 'details') {
+        setViewMode('menu');
+        return;
+      }
+      setStep(1);
+      setViewMode('menu');
+      setSelectedAgreement(null);
+      setMachinesForAgreement([]);
+      setActiveScanCategoryIndex(null);
+      return;
+    }
+
+    // Top-level fallback from first screen.
     router.push('/stockkeeper-mobileui');
   };
 
@@ -434,6 +521,8 @@ const MachineAssignPage: React.FC = () => {
     setActiveScanCategoryIndex(null);
     setStep(1);
     setAgreementNumberInput('');
+    setLookupError(null);
+    setShowAgreementDropdown(false);
     setViewMode('menu');
   };
 
@@ -660,20 +749,69 @@ const MachineAssignPage: React.FC = () => {
               <label htmlFor="agreement-input" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Agreement Number
               </label>
-              <input
-                id="agreement-input"
-                type="text"
-                autoComplete="off"
-                value={agreementNumberInput}
-                onChange={(e) => {
-                  setAgreementNumberInput(e.target.value);
-                  setLookupError(null);
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleContinueFromStep1()}
-                placeholder="e.g. RA24010006"
-                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
-                autoFocus
-              />
+              <div ref={agreementDropdownRef} className="relative">
+                <input
+                  id="agreement-input"
+                  type="text"
+                  autoComplete="off"
+                  value={agreementNumberInput}
+                  onChange={(e) => {
+                    setAgreementNumberInput(e.target.value);
+                    setLookupError(null);
+                    setShowAgreementDropdown(true);
+                  }}
+                  onFocus={() => setShowAgreementDropdown(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setShowAgreementDropdown(false);
+                    }
+                    if (e.key === 'Enter') {
+                      void handleContinueFromStep1();
+                    }
+                  }}
+                  placeholder={pendingLoading ? 'Loading pending agreements...' : 'Search pending agreement number'}
+                  className="w-full min-h-[52px] pr-12 px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAgreementDropdown((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 px-3 text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
+                  aria-label="Toggle pending agreement list"
+                >
+                  <ChevronDown className={`w-5 h-5 transition-transform ${showAgreementDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showAgreementDropdown && (
+                  <div className="absolute z-20 mt-2 w-full max-h-64 overflow-y-auto rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg">
+                    {pendingLoading ? (
+                      <p className="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">Loading pending agreements...</p>
+                    ) : pendingError ? (
+                      <p className="px-4 py-3 text-sm text-red-600 dark:text-red-400">{pendingError}</p>
+                    ) : filteredPendingAgreements.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">No matching pending agreements.</p>
+                    ) : (
+                      filteredPendingAgreements.map((item) => (
+                        <button
+                          key={item.id || item.agreementNo}
+                          type="button"
+                          onClick={() => {
+                            setAgreementNumberInput(item.agreementNo);
+                            setLookupError(null);
+                            setShowAgreementDropdown(false);
+                          }}
+                          className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-slate-800/80 border-b last:border-b-0 border-gray-100 dark:border-slate-800"
+                        >
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">{item.agreementNo}</p>
+                          <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                            {item.customerName || 'Customer name unavailable'}
+                          </p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
               {lookupError && (
                 <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2" role="alert">
                   <span className="w-1.5 h-1.5 bg-red-500 dark:bg-red-400 rounded-full"></span>
@@ -681,7 +819,7 @@ const MachineAssignPage: React.FC = () => {
                 </p>
               )}
               <p className="text-xs text-gray-500 dark:text-slate-500">
-                Enter the rental agreement number (e.g. RA24010006)
+                Search and select a pending rental agreement number, then continue.
               </p>
               <button
                 type="button"
@@ -736,6 +874,7 @@ const MachineAssignPage: React.FC = () => {
       alert('All planned machines are already scanned for this agreement.');
       return;
     }
+    previousStep2ViewRef.current = viewMode === 'details' ? 'details' : 'menu';
     setViewMode('scan');
     handleOpenQRScanner(currentCategoryIndex);
   };

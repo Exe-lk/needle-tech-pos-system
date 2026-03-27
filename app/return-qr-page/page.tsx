@@ -6,6 +6,7 @@ import QRScannerComponent from '@/src/components/qr-scanner';
 import {
   ArrowLeft,
   Camera,
+  ChevronDown,
   CheckCircle2,
   FileText,
   ImagePlus,
@@ -66,6 +67,12 @@ interface MachineReturnState extends RentalAgreementMachine {
   damageNote?: string;
   photos?: File[];
   photoPreviews?: string[];
+}
+
+interface ActiveAgreementOption {
+  id: string;
+  agreementNo: string;
+  customerName: string;
 }
 
 
@@ -234,6 +241,7 @@ function mapRentalByNumberToAgreement(data: RentalByNumberApiData): RentalAgreem
 type ScanResultType = 'success' | 'failed' | 'duplicate';
 type Step = 1 | 2;
 type Step2View = 'menu' | 'details' | 'scan';
+type NonScanStep2View = Exclude<Step2View, 'scan'>;
 
 const ReturnQRPage: React.FC = () => {
   const router = useRouter();
@@ -241,10 +249,16 @@ const ReturnQRPage: React.FC = () => {
   // Flow
   const [step, setStep] = useState<Step>(1);
   const [view, setView] = useState<Step2View>('menu'); // only used when step === 2
+  const previousStep2ViewRef = useRef<NonScanStep2View>('menu');
 
   const [agreementNumberInput, setAgreementNumberInput] = useState('');
   const [agreementError, setAgreementError] = useState<string | null>(null);
   const [agreementLoading, setAgreementLoading] = useState(false);
+  const [activeAgreements, setActiveAgreements] = useState<ActiveAgreementOption[]>([]);
+  const [activeAgreementsLoading, setActiveAgreementsLoading] = useState(false);
+  const [activeAgreementsError, setActiveAgreementsError] = useState<string | null>(null);
+  const [showAgreementDropdown, setShowAgreementDropdown] = useState(false);
+  const agreementDropdownRef = useRef<HTMLDivElement | null>(null);
   const [selectedAgreement, setSelectedAgreement] = useState<RentalAgreement | null>(null);
 
   // Theme (light / dark) – same pattern as gatepass-qr-page
@@ -324,6 +338,60 @@ const ReturnQRPage: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const fetchActiveAgreements = async () => {
+      setActiveAgreementsLoading(true);
+      setActiveAgreementsError(null);
+      try {
+        const res = await authFetch(`${API_BASE}/rentals?status=ACTIVE&limit=1000`);
+        const json = await res.json();
+        if (!res.ok) {
+          setActiveAgreementsError(json?.message ?? 'Failed to load active agreements.');
+          setActiveAgreements([]);
+          return;
+        }
+        const items = Array.isArray(json?.data?.items) ? json.data.items : [];
+        const options: ActiveAgreementOption[] = items
+          .map((item: { id?: string; agreementNumber?: string; customer?: { name?: string } }) => ({
+            id: item.id ?? '',
+            agreementNo: item.agreementNumber ?? '',
+            customerName: item.customer?.name ?? '',
+          }))
+          .filter((item: ActiveAgreementOption) => item.agreementNo.trim().length > 0);
+        setActiveAgreements(options);
+      } catch {
+        setActiveAgreementsError('Network error while loading active agreements.');
+        setActiveAgreements([]);
+      } finally {
+        setActiveAgreementsLoading(false);
+      }
+    };
+    void fetchActiveAgreements();
+  }, []);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!agreementDropdownRef.current) return;
+      if (!agreementDropdownRef.current.contains(event.target as Node)) {
+        setShowAgreementDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, []);
+
+  const filteredActiveAgreements = useMemo(() => {
+    const keyword = agreementNumberInput.trim().toLowerCase();
+    if (!keyword) return activeAgreements;
+    return activeAgreements.filter(
+      (item) =>
+        item.agreementNo.toLowerCase().includes(keyword) ||
+        item.customerName.toLowerCase().includes(keyword)
+    );
+  }, [activeAgreements, agreementNumberInput]);
+
   // Fetch recent inventory transactions when on details view (GET /api/v1/inventory/transactions)
   useEffect(() => {
     if (step !== 2 || view !== 'details') {
@@ -378,6 +446,7 @@ const ReturnQRPage: React.FC = () => {
     setView('menu');
     setAgreementNumberInput('');
     setAgreementError(null);
+    setShowAgreementDropdown(false);
     setAgreementLoading(false);
     setSelectedAgreement(null);
     setMachines([]);
@@ -392,6 +461,34 @@ const ReturnQRPage: React.FC = () => {
   };
 
   const handleBack = () => {
+    // Close machine popup first (deepest level in this flow).
+    if (showMachinePopup) {
+      setShowMachinePopup(false);
+      setCurrentMachineIndex(null);
+      restartScannerSoon();
+      return;
+    }
+
+    // Step 2 in-page back navigation.
+    if (step === 2) {
+      if (view === 'scan') {
+        setView(previousStep2ViewRef.current);
+        return;
+      }
+      if (view === 'details') {
+        setView('menu');
+        return;
+      }
+      setStep(1);
+      setView('menu');
+      setSelectedAgreement(null);
+      setMachines([]);
+      setReturnCountLimit(null);
+      setCurrentMachineIndex(null);
+      return;
+    }
+
+    // Top-level fallback from first screen.
     router.push('/stockkeeper-mobileui');
   };
 
@@ -956,26 +1053,78 @@ const ReturnQRPage: React.FC = () => {
               >
                 Rental agreement number
               </label>
-              <input
-                id="agreement-input"
-                type="text"
-                autoComplete="off"
-                value={agreementNumberInput}
-                onChange={(e) => {
-                  setAgreementNumberInput(e.target.value);
-                  setAgreementError(null);
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleFindAgreement()}
-                placeholder="e.g. AGR-2024-001"
-                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-800/80 text-gray-900 dark:text-slate-50 border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
-                autoFocus
-              />
+              <div ref={agreementDropdownRef} className="relative">
+                <input
+                  id="agreement-input"
+                  type="text"
+                  autoComplete="off"
+                  value={agreementNumberInput}
+                  onChange={(e) => {
+                    setAgreementNumberInput(e.target.value);
+                    setAgreementError(null);
+                    setShowAgreementDropdown(true);
+                  }}
+                  onFocus={() => setShowAgreementDropdown(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setShowAgreementDropdown(false);
+                    }
+                    if (e.key === 'Enter') {
+                      void handleFindAgreement();
+                    }
+                  }}
+                  placeholder={activeAgreementsLoading ? 'Loading active agreements...' : 'Search active agreement number'}
+                  className="w-full min-h-[52px] pr-12 px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-800/80 text-gray-900 dark:text-slate-50 border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAgreementDropdown((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 px-3 text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
+                  aria-label="Toggle active agreement list"
+                >
+                  <ChevronDown className={`w-5 h-5 transition-transform ${showAgreementDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showAgreementDropdown && (
+                  <div className="absolute z-20 mt-2 w-full max-h-64 overflow-y-auto rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg">
+                    {activeAgreementsLoading ? (
+                      <p className="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">Loading active agreements...</p>
+                    ) : activeAgreementsError ? (
+                      <p className="px-4 py-3 text-sm text-red-600 dark:text-red-400">{activeAgreementsError}</p>
+                    ) : filteredActiveAgreements.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">No matching active agreements.</p>
+                    ) : (
+                      filteredActiveAgreements.map((item) => (
+                        <button
+                          key={item.id || item.agreementNo}
+                          type="button"
+                          onClick={() => {
+                            setAgreementNumberInput(item.agreementNo);
+                            setAgreementError(null);
+                            setShowAgreementDropdown(false);
+                          }}
+                          className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-slate-800/80 border-b last:border-b-0 border-gray-100 dark:border-slate-800"
+                        >
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">{item.agreementNo}</p>
+                          <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                            {item.customerName || 'Customer name unavailable'}
+                          </p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
               {agreementError && (
                 <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2" role="alert">
                   <span className="w-1.5 h-1.5 bg-red-500 dark:bg-red-400 rounded-full" />
                   {agreementError}
                 </p>
               )}
+              <p className="text-xs text-gray-500 dark:text-slate-400">
+                Search and select an active rental agreement number, then find agreement.
+              </p>
 
               <button
                 type="button"
@@ -1100,6 +1249,7 @@ const ReturnQRPage: React.FC = () => {
                         totalInAgreement,
                         Math.max(1, Math.floor(Number(result.value)))
                       );
+                      previousStep2ViewRef.current = 'menu';
                       setReturnCountLimit(count);
                       setMachines([]);
                       setCurrentMachineIndex(null);
