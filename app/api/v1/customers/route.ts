@@ -162,6 +162,11 @@ export const POST = withAuthAndPermission(['customers:create', 'management:*', '
       locations = [],
     } = body;
 
+    const resolvedVatRegistrationNumber =
+      type === 'INDIVIDUAL'
+        ? (body.nicNumber ?? vatRegistrationNumber ?? null)
+        : (vatRegistrationNumber ?? null);
+
     if (!code || !type || !name) {
       return validationErrorResponse('Missing required fields', {
         code: !code ? ['Code is required'] : [],
@@ -194,7 +199,7 @@ export const POST = withAuthAndPermission(['customers:create', 'management:*', '
         billingRegion: billingRegion ?? null,
         billingPostalCode: billingPostalCode ?? null,
         billingCountry: billingCountry ?? null,
-        vatRegistrationNumber: vatRegistrationNumber ?? null,
+        vatRegistrationNumber: resolvedVatRegistrationNumber,
         status: status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
         locations:
           Array.isArray(locations) && locations.length > 0
