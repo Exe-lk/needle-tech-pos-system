@@ -1,0 +1,213 @@
+================================================================================
+  NEEDLE TECH POS — PRINTER CONFIGURATION GUIDE (FIELD & OFFICE)
+  Documents: Invoice | Gate Pass | Rental Agreement | Purchase Order
+================================================================================
+
+Purpose
+-------
+This guide explains how printing works in the web app and how to configure
+browsers, operating systems, and printers so staff can print reliably. Anyone
+following these steps should be able to set up or fix print issues without
+reading source code.
+
+
+--------------------------------------------------------------------------------
+1. HOW PRINTING WORKS IN THESE FOUR PAGES (IMPORTANT)
+--------------------------------------------------------------------------------
+
+All four pages use the SAME core mechanism:
+
+  • The app calls the browser’s standard print command (window.print()).
+  • The operating system opens the normal print dialog (Chrome / Edge / Safari).
+  • You choose the physical printer, paper size, scale, and margins THERE.
+
+There is NO in-app “printer dropdown” like on the QR Code Generate page (which
+uses Zebra Browser Print + label printers). These four screens are designed for
+A4-style documents: tax invoices, quotations, gate passes, and hiring agreements.
+
+Printer type: Use a laser or inkjet printer (or “Save as PDF”) with A4 paper.
+Label / thermal printers are not what these layouts target.
+
+
+--------------------------------------------------------------------------------
+2. UNIVERSAL SETTINGS (APPLY TO ALL FOUR PAGES)
+--------------------------------------------------------------------------------
+
+2.1 Before printing
+  • Use a supported browser: Google Chrome or Microsoft Edge recommended.
+  • Keep the invoice / PO / agreement / gate pass VIEW modal open until you
+    click Print (the app hides the main UI when printing and shows only the
+    document in print preview).
+
+2.2 In the print dialog (every time, or save as defaults)
+  • Destination: Select the correct office printer (or “Save as PDF” to test).
+  • Paper size: A4 (210 × 297 mm). The layouts assume ~210 mm content width.
+  • Orientation: Portrait.
+  • Scale: 100%. Avoid “Fit to page” unless content is clipped; scaling often
+    shrinks tables and misaligns borders.
+  • Margins: Default or Minimum. If the driver adds large margins, content may
+    wrap oddly—reduce margins in the dialog or in printer preferences.
+  • Background graphics: ON if logos, borders, or shaded table headers look
+    missing (Chrome: “More settings” → Background graphics).
+
+2.3 Operating system
+  • Install the manufacturer’s latest driver for the printer (USB or network).
+  • Set the correct default printer if users always print to the same device:
+    Windows: Settings → Printers & scanners → Manage → Set as default.
+    macOS: System Settings → Printers & Scanners → Default printer.
+
+2.4 Dark mode
+  • The app may be in dark mode. Print CSS forces light output for these
+    documents, but if preview still looks wrong, switch the browser or site to
+    light theme temporarily and retry.
+
+2.5 Quick test
+  • Use Print → Preview first. You should see ONLY the formal document (no
+    sidebar, no table listing). If you see the wrong document or a blank page,
+    see section 5 (Troubleshooting).
+
+
+--------------------------------------------------------------------------------
+3. PAGE-BY-PAGE INSTRUCTIONS
+--------------------------------------------------------------------------------
+
+3.1 INVOICE (/invoice — Invoice & Payments)
+
+  How to open print
+    • Open an invoice: row action “View Invoice”.
+    • In the modal header, click “Print”.
+
+  What gets printed
+    • Single invoice with letterhead (“TAX INVOICE” or “INVOICE”), VAT or
+      non-VAT layout, tables, totals, bank details, signature lines.
+    • Layout width is capped at 210 mm for paper alignment.
+
+  Extra feature: Print Monthly Invoices
+    • Row action “Print Monthly Invoices” (calendar icon) opens a modal.
+    • Select one or more months, then confirm print.
+    • The app builds a multi-page document and triggers print automatically
+      after a short delay. Wait for the print dialog; do not close the modal
+      until printing has started if the workflow requires it.
+
+  Notes
+    • If preview is blank, ensure an invoice is still selected (View was opened)
+      and try again from the View modal.
+
+
+3.2 GATE PASS (/gatepass — Gate Pass)
+
+  How to open print
+    • Open a gate pass (view/details) and click “Print” (or equivalent print
+      control on the gate pass view).
+
+  What gets printed
+    • Letterhead document: FROM / TO / vehicle / driver, gate pass number,
+      date, returnable, entry, item table (description, status, serial, motor/box),
+      issued/received lines.
+
+  Notes
+    • Print preview should show the gate pass letterhead only. If borders are
+      faint, enable “Background graphics” in the print dialog.
+
+
+3.3 RENTAL AGREEMENT (/rental-agreement — Hiring Machine Agreement)
+
+  How to open print — Agreement
+    • Open agreement details (View). The agreement must be Active (machines
+      assigned and agreement activated); otherwise Print is disabled.
+    • Click “Print” in the modal.
+
+  What gets printed (agreement)
+    • “HIRING MACHINE AGREEMENT” letterhead, customer and machine table, terms,
+      signature block. Content is rendered in a print-only area so the modal
+      chrome does not appear on paper.
+
+  How to open print — Gate pass (from this page)
+    • If a gate pass was generated from the rental flow, a separate Print for
+      gate pass uses the same browser print dialog.
+
+  Notes
+    • Do not print agreement and gate pass at the same time unless you intend
+      to: both can appear in one print job if both sections are active. For a
+      clean single document, complete one print job before opening the other
+      flow, or use preview to confirm only the needed pages are included.
+
+
+3.4 PURCHASE ORDER (/purchase-order — lists purchase requests / quotations)
+
+  How to open print
+    • Open “Purchase Order Details” (View on a row).
+    • Click “Print” in the modal header.
+
+  What gets printed
+    • Document titled “QUOTATION” on letterhead: request number, customer,
+      dates, status, machine line table (brand, model, type, qty, prices),
+      total, optional associated rental agreement IDs.
+
+  Notes
+    • The on-screen details view in the modal is hidden when printing; the
+      printable version is a dedicated full-page layout. Use preview to verify.
+
+
+--------------------------------------------------------------------------------
+4. DIFFERENCE VS QR CODE GENERATE PAGE (REFERENCE ONLY)
+--------------------------------------------------------------------------------
+
+The QR Code Generate page can send ZPL to a Zebra label printer via
+“Browser Print” and a printer dropdown. The four pages in THIS guide do NOT
+use that integration. Fixing “printer configuration” here means:
+
+  • Browser print dialog + correct A4 printer + driver settings,
+
+NOT installing Zebra Browser Print for these documents (unless you add new
+features in code later).
+
+
+--------------------------------------------------------------------------------
+5. TROUBLESHOOTING CHECKLIST
+--------------------------------------------------------------------------------
+
+Problem: Print preview is blank or shows only a blank page
+  • Ensure you clicked Print from the correct modal with data loaded.
+  • For Invoice: an invoice must be selected; for PO, a request must be open.
+  • For Rental Agreement: status Active and details loaded; refresh and retry.
+
+Problem: Wrong printer or nothing prints
+  • Check Windows/macOS default printer and USB/network connection.
+  • Print a test page from OS printer settings.
+  • In the browser dialog, explicitly pick the printer (do not rely on “Save
+    to PDF” by mistake).
+
+Problem: Content cut off at bottom or sides
+  • Set scale to 100%; reduce driver margins; try “Minimum” margins in dialog.
+  • Multi-page invoices: allow multiple sheets; do not force “fit to one page”.
+
+Problem: Tables or borders missing / gray text invisible
+  • Enable “Print background graphics” in the browser print dialog.
+  • Update printer driver; try another browser.
+
+Problem: Colors wrong (dark background on paper)
+  • Use Print Preview; if still wrong, use light theme or Chrome/Edge.
+
+Problem: Monthly invoice print does nothing
+  • Select at least one month in the monthly modal before confirming print.
+  • Wait a moment for the automatic print dialog after confirming.
+
+
+--------------------------------------------------------------------------------
+6. FIELD VISIT QUICK CHECKLIST (STAFF)
+--------------------------------------------------------------------------------
+
+  [ ] Chrome or Edge installed and updated
+  [ ] Office printer: driver installed, test page OK from OS
+  [ ] Default printer set (if site uses one shared printer)
+  [ ] A4 paper loaded; portrait orientation
+  [ ] Test: Invoice View → Print → Preview shows single invoice letterhead only
+  [ ] Test: Purchase Order View → Print → QUOTATION layout OK
+  [ ] Test: Gate pass View → Print → letterhead + table OK
+  [ ] Test: Rental agreement (Active) → Print → agreement OK
+  [ ] Document “Background graphics” if logos/borders missing
+
+================================================================================
+  End of guide. Update this file if the app adds new print flows or dialogs.
+================================================================================

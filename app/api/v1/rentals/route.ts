@@ -78,7 +78,7 @@ function applyActiveMachinesAndTotals(rental: any, returnedIds: Set<string>): an
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER','Stock_Keeper'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);

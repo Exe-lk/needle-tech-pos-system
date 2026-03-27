@@ -17,16 +17,30 @@ type PermissionsResponse = {
 };
 
 function normalizeRoleName(name: string | undefined): string {
-  return (name ?? '').trim().toLowerCase().replace(/_/g, ' ');
+  return (name ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
 }
 
 function isStockkeeperRole(name: string | undefined): boolean {
-  return normalizeRoleName(name).includes('stockkeeper');
+  const n = normalizeRoleName(name);
+  return n.includes('stockkeeper') || (n.includes('stock') && n.includes('keeper'));
 }
 
 function isSecurityOfficerRole(name: string | undefined): boolean {
   const n = normalizeRoleName(name);
   return n.includes('security') && n.includes('officer');
+}
+
+function isAdminRole(name: string | undefined): boolean {
+  const n = normalizeRoleName(name);
+  return n === 'admin' || n === 'super admin';
+}
+
+function isAllowedMobileRole(name: string | undefined): boolean {
+  return isAdminRole(name) || isStockkeeperRole(name) || isSecurityOfficerRole(name);
 }
 
 function hasStockkeeperMobileAccess(accessibleRoutes: string[]): boolean {
@@ -55,11 +69,11 @@ export default function MobileLoginPage() {
     roleName: string | undefined,
     accessibleRoutes: string[],
   ): string | null => {
-    if (isSecurityOfficerRole(roleName) && accessibleRoutes.includes(GATEPASS_QR_ROUTE)) {
-      return GATEPASS_QR_ROUTE;
+    if (isSecurityOfficerRole(roleName)) {
+      return accessibleRoutes.includes(GATEPASS_QR_ROUTE) ? GATEPASS_QR_ROUTE : null;
     }
-    if (isStockkeeperRole(roleName) && hasStockkeeperMobileAccess(accessibleRoutes)) {
-      return STOCKKEEPER_MOBILE_HUB;
+    if (isStockkeeperRole(roleName)) {
+      return hasStockkeeperMobileAccess(accessibleRoutes) ? STOCKKEEPER_MOBILE_HUB : null;
     }
     return pickDefaultMobileRoute(accessibleRoutes);
   };
@@ -118,6 +132,10 @@ export default function MobileLoginPage() {
 
       const accessibleRoutes = permJson.data.accessibleRoutes || [];
       const roleName = permJson.data.user?.role?.name || user?.role?.name;
+      if (!isAllowedMobileRole(roleName)) {
+        setError('Access denied. Only Admin, Security Officer, and Stock Keeper can use mobile login.');
+        return;
+      }
       const defaultRoute = resolvePostLoginMobileRoute(roleName, accessibleRoutes);
       if (!defaultRoute) {
         const displayRole = roleName || 'Unknown';
