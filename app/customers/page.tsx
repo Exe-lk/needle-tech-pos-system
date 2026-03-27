@@ -689,7 +689,7 @@ const CustomerListPage: React.FC = () => {
     } else {
       return {
         fullName: selectedCustomerDetails.name,
-        nicNumber: '', // NIC is not stored separately in the schema
+        nicNumber: selectedCustomerDetails.vatRegistrationNumber || '',
         address: address,
         phone: selectedCustomerDetails.phones[0] || '',
         email: selectedCustomerDetails.emails[0] || '',
@@ -793,6 +793,7 @@ const CustomerListPage: React.FC = () => {
         billingRegion: addressParts.region,
         billingPostalCode: addressParts.postalCode,
         billingCountry: addressParts.country,
+        vatRegistrationNumber: data.nicNumber || null,
         status: 'ACTIVE' as ApiCustomerStatus,
       };
 
@@ -901,6 +902,7 @@ const CustomerListPage: React.FC = () => {
         billingRegion: addressParts.region,
         billingPostalCode: addressParts.postalCode,
         billingCountry: addressParts.country,
+        vatRegistrationNumber: data.nicNumber || null,
         status: mapFrontendStatusToApi(data.status),
       };
 
@@ -988,8 +990,8 @@ const CustomerListPage: React.FC = () => {
       id: selectedCustomerDetails.id,
       name: selectedCustomerDetails.name,
       type: mapApiTypeToFrontend(selectedCustomerDetails.type),
-      vatTin: selectedCustomerDetails.vatRegistrationNumber,
-      nicNumber: undefined, // Not stored separately in schema
+      vatTin: selectedCustomerDetails.type === 'GARMENT_FACTORY' ? selectedCustomerDetails.vatRegistrationNumber : undefined,
+      nicNumber: selectedCustomerDetails.type === 'INDIVIDUAL' ? selectedCustomerDetails.vatRegistrationNumber : undefined,
       address: formatAddress(selectedCustomerDetails, 'billing'),
       phone: selectedCustomerDetails.phones[0] || 'N/A',
       email: selectedCustomerDetails.emails[0] || 'N/A',
@@ -1031,6 +1033,14 @@ const CustomerListPage: React.FC = () => {
                   <span className="text-gray-500 dark:text-gray-400">VAT/TIN:</span>
                   <span className="ml-2 text-gray-900 dark:text-white font-medium">
                     {customerInfo.vatTin}
+                  </span>
+                </div>
+              )}
+              {customerInfo.nicNumber && (
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">NIC Number:</span>
+                  <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                    {customerInfo.nicNumber}
                   </span>
                 </div>
               )}

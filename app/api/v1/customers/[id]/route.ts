@@ -58,6 +58,11 @@ export const PUT = withAuthAndPermission(['customers:update', 'management:*', '*
     if (!existingCustomer) {
       return notFoundResponse('Customer not found');
     }
+
+    const effectiveType = body.type || existingCustomer.type;
+    const resolvedVatRegistrationNumber = effectiveType === 'INDIVIDUAL'
+      ? (body.nicNumber ?? body.vatRegistrationNumber)
+      : body.vatRegistrationNumber;
     
     const updateData: any = {
       ...(body.name != null && { name: body.name }),
@@ -77,7 +82,7 @@ export const PUT = withAuthAndPermission(['customers:update', 'management:*', '*
       ...(body.shippingRegion != null && { shippingRegion: body.shippingRegion }),
       ...(body.shippingPostalCode != null && { shippingPostalCode: body.shippingPostalCode }),
       ...(body.shippingCountry != null && { shippingCountry: body.shippingCountry }),
-      ...(body.vatRegistrationNumber != null && { vatRegistrationNumber: body.vatRegistrationNumber }),
+      ...(resolvedVatRegistrationNumber != null && { vatRegistrationNumber: resolvedVatRegistrationNumber }),
       ...(body.status && { status: body.status }),
     };
 
