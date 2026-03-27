@@ -2094,7 +2094,7 @@ const RentalAgreementPage: React.FC = () => {
         month: '2-digit',
         day: '2-digit',
       })
-      : 'N/A';
+      : '';
 
     const mainContent = (
       <>
@@ -2213,11 +2213,11 @@ const RentalAgreementPage: React.FC = () => {
         <div className="space-y-2">
           <div>
             <span className="text-sm font-semibold text-gray-700">ID NO: </span>
-            <span className="text-sm text-gray-900">{agreementInfo.customerIdNo || 'N/A'}</span>
+            <span className="text-sm text-gray-900">{agreementInfo.customerIdNo ?? ''}</span>
           </div>
           <div>
             <span className="text-sm font-semibold text-gray-700">Full Name: </span>
-            <span className="text-sm text-gray-900">{agreementInfo.customerFullName || 'N/A'}</span>
+            <span className="text-sm text-gray-900">{agreementInfo.customerFullName ?? ''}</span>
           </div>
           <div>
             <span className="text-sm font-semibold text-gray-700">Date: </span>

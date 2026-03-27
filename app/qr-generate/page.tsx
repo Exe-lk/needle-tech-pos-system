@@ -607,26 +607,33 @@ const QRGeneratePage: React.FC = () => {
             <div className="p-6 space-y-4">
               <div
                 ref={qrCodeRef}
-                className="mx-auto w-[464px] min-h-[320px] border-2 border-black bg-white dark:bg-slate-900 flex flex-col overflow-hidden rounded"
+                className="mx-auto w-[464px] min-h-[320px] border-2 border-black bg-white flex flex-col overflow-hidden rounded"
+                style={{ colorScheme: 'light', forcedColorAdjust: 'none' }}
               >
-                <div className="border-b-2 border-black py-2 text-center font-bold text-lg text-gray-900 dark:text-white">
+                <div className="border-b-2 border-black py-2 text-center font-bold text-lg text-gray-900">
                   Needle Technologies
                 </div>
                 <div className="flex flex-1 p-4 gap-6">
-                  <div className="flex items-center justify-center shrink-0 p-2 bg-white dark:bg-slate-800 rounded">
+                  {/* Always light QR area: dark theme + forced-colors can invert SVG fills and break camera scanning */}
+                  <div
+                    className="flex items-center justify-center shrink-0 p-3 rounded-md bg-white border border-neutral-200 shadow-sm"
+                    style={{ colorScheme: 'light', forcedColorAdjust: 'none' }}
+                  >
                     <QRCodeSVG
                       value={getQRCodePayload(selectedMachineForQR)}
                       size={180}
                       level="H"
+                      fgColor="#000000"
+                      bgColor="#FFFFFF"
                     />
                   </div>
-                  <div className="flex flex-col justify-center gap-6 text-gray-900 dark:text-white">
+                  <div className="flex flex-col justify-center gap-6 text-gray-900">
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Serial Number:</p>
+                      <p className="text-sm text-gray-600">Serial Number:</p>
                       <p className="text-xl font-bold mt-0.5">{selectedMachineForQR.serialNumber}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Box Number:</p>
+                      <p className="text-sm text-gray-600">Box Number:</p>
                       <p className="text-xl font-bold mt-0.5">{selectedMachineForQR.boxNumber}</p>
                     </div>
                   </div>
