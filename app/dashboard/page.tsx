@@ -230,6 +230,7 @@ const AnalyticsPage: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<'6M' | '12M' | 'YTD'>('6M');
   const [isExporting, setIsExporting] = useState(false);
   const [detailPopup, setDetailPopup] = useState<{ title: string; content: React.ReactNode } | null>(null);
+  const [showMoreInsights, setShowMoreInsights] = useState(false);
 
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
@@ -767,8 +768,8 @@ const AnalyticsPage: React.FC = () => {
   // Revenue trend line chart (SVG)
   const RevenueLineChart: React.FC<{ data: MonthlyRevenue[] }> = ({ data }) => {
     const width = 400;
-    const height = 200;
-    const padding = { top: 20, right: 20, bottom: 30, left: 50 };
+    const height = 120;
+    const padding = { top: 14, right: 16, bottom: 24, left: 44 };
     const innerWidth = width - padding.left - padding.right;
     const innerHeight = height - padding.top - padding.bottom;
     const maxVal = Math.max(...data.map((d) => d.totalRevenue));
@@ -777,8 +778,8 @@ const AnalyticsPage: React.FC = () => {
     const scaleX = (i: number) => padding.left + (i / (data.length - 1 || 1)) * innerWidth;
     const points = data.map((d, i) => `${scaleX(i)},${scaleY(d.totalRevenue)}`).join(' ');
     return (
-      <div className="w-full overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-48 min-h-[180px]" preserveAspectRatio="xMidYMid meet">
+      <div className="w-full h-full overflow-x-auto">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
           <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="currentColor" strokeWidth="1" className="text-gray-300 dark:text-slate-600" />
           <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="currentColor" strokeWidth="1" className="text-gray-300 dark:text-slate-600" />
           {data.map((d, i) => (
@@ -865,7 +866,7 @@ const AnalyticsPage: React.FC = () => {
       {/* Main content area */}
       <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
         }`}>
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="max-w-screen-2xl mx-auto space-y-6">
           {/* Page header */}
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
@@ -873,7 +874,7 @@ const AnalyticsPage: React.FC = () => {
                 Analytics Dashboard
               </h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Comprehensive insights into revenue, machine utilization, damages, and idle machines.
+                Key KPIs and operational signals. Use “More insights” for deeper breakdowns.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -959,6 +960,13 @@ const AnalyticsPage: React.FC = () => {
                   YTD
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowMoreInsights((v) => !v)}
+                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                {showMoreInsights ? 'Hide insights' : 'More insights'}
+              </button>
             </div>
           </div>
 
@@ -1188,8 +1196,8 @@ const AnalyticsPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Small KPI cards (click for popup) */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* Small KPI cards (reduced set) */}
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
             <button
               type="button"
               onClick={() =>
@@ -1272,105 +1280,12 @@ const AnalyticsPage: React.FC = () => {
                 <FileCheck className="w-8 h-8 text-green-500 dark:text-green-400 opacity-80 group-hover:opacity-100" />
               </div>
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                setDetailPopup({
-                  title: 'Outstanding Alerts',
-                  content: (
-                    <div className="space-y-3">
-                      <p className="text-gray-600 dark:text-gray-400">Alerts include payment overdue, high balance, agreement expiring, and credit limit exceeded.</p>
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{MOCK_ALERTS_COUNT}</div>
-                      <ul className="space-y-1 text-sm">
-                        {mockAlertsByType.map((a, i) => (
-                          <li key={i} className="flex justify-between">
-                            <span>{a.type}</span>
-                            <span className="font-medium">{a.count}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ),
-                })
-              }
-              className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 text-left hover:border-red-400 dark:hover:border-red-500 hover:shadow transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Alerts</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{MOCK_ALERTS_COUNT}</p>
-                </div>
-                <Bell className="w-8 h-8 text-red-500 dark:text-red-400 opacity-80 group-hover:opacity-100" />
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setDetailPopup({
-                  title: 'Gatepass Volume',
-                  content: (
-                    <div className="space-y-3">
-                      <p className="text-gray-600 dark:text-gray-400">IN = returns; OUT = dispatches. Balance indicates net machine movement.</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {mockGatepassVolume.map((g, i) => (
-                          <div key={i} className="bg-gray-50 dark:bg-slate-800 rounded-lg p-3 text-center">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{g.label}</p>
-                            <p className="text-xl font-bold text-gray-900 dark:text-white">{g.count}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ),
-                })
-              }
-              className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 text-left hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Gatepass</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">IN {mockGatepassVolume[1].count} / OUT {mockGatepassVolume[0].count}</p>
-                </div>
-                <Truck className="w-8 h-8 text-indigo-500 dark:text-indigo-400 opacity-80 group-hover:opacity-100" />
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setDetailPopup({
-                  title: 'Top Brand by Revenue',
-                  content: (
-                    <div className="space-y-3">
-                      <p className="text-gray-600 dark:text-gray-400">Revenue attributed to machine brands (rental income by brand).</p>
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{MOCK_TOP_BRAND}</div>
-                      <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">Rs. {(MOCK_TOP_BRAND_REVENUE / 1000000).toFixed(2)}M</p>
-                      <ul className="space-y-1 text-sm">
-                        {mockRevenueByBrand.slice(0, 5).map((b, i) => (
-                          <li key={i} className="flex justify-between">
-                            <span>{b.brand}</span>
-                            <span>Rs. {(b.revenue / 1000).toFixed(0)}k ({b.percentage}%)</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ),
-                })
-              }
-              className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 p-4 text-left hover:border-violet-400 dark:hover:border-violet-500 hover:shadow transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Top Brand</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{MOCK_TOP_BRAND}</p>
-                </div>
-                <Award className="w-8 h-8 text-violet-500 dark:text-violet-400 opacity-80 group-hover:opacity-100" />
-              </div>
-            </button>
           </div>
 
-          {/* Revenue Trend & Donuts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-4">
+          {/* Core visuals (optimized for larger screens; reduced scroll) */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-4 flex flex-col xl:h-[260px]">
+              <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Revenue Trend</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Total revenue over time</p>
@@ -1379,175 +1294,175 @@ const AnalyticsPage: React.FC = () => {
                   <LineChart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
-              <RevenueLineChart data={monthlyRevenueForCharts} />
-            </div>
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Rental Status</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Agreements by status</p>
-                </div>
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <PieChart className="w-5 h-5 text-green-600 dark:text-green-400" />
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-4">
-                <DonutChart items={mockRentalStatusDistribution.map(({ percentage, color }) => ({ percentage, color }))} size={140} />
-                <div className="flex-1 space-y-2 min-w-0">
-                  {mockRentalStatusDistribution.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-gray-700 dark:text-gray-300">{item.status}</span>
-                      </span>
-                      <span className="font-medium text-gray-900 dark:text-white">{item.count} ({item.percentage}%)</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="flex-1 min-h-0">
+                <RevenueLineChart data={monthlyRevenueForCharts} />
               </div>
             </div>
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-4 flex flex-col xl:h-[260px]">
+              <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Revenue by Brand</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Share of revenue</p>
-                </div>
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                  <BarChart3 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-4">
-                <DonutChart items={mockRevenueByBrand.map(({ percentage, color }) => ({ percentage, color }))} size={140} />
-                <div className="flex-1 space-y-2 min-w-0">
-                  {mockRevenueByBrand.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-gray-700 dark:text-gray-300">{item.brand}</span>
-                      </span>
-                      <span className="font-medium text-gray-900 dark:text-white">Rs. {(item.revenue / 1000).toFixed(0)}k</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Outstanding Aging & Alerts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Outstanding by Aging</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Amount and count by bucket</p>
-                </div>
-              </div>
-              <OutstandingAgingChart data={mockOutstandingAging} />
-            </div>
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Alerts by Type</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Outstanding alerts breakdown</p>
-                </div>
-                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                  <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                </div>
-              </div>
-              <div className="space-y-3">
-                {mockAlertsByType.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                      <span className="font-medium text-gray-900 dark:text-white">{item.type}</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">({item.severity})</span>
-                    </div>
-                    <span className="font-bold text-gray-900 dark:text-white">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Main Analytics Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Monthly Revenue Chart */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Monthly Revenue (VAT vs Non-VAT)
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Revenue breakdown by invoice type
-                  </p>
-                </div>
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <LineChart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-              </div>
-              <BarChart data={monthlyRevenueForCharts} />
-            </div>
-
-            {/* Top 5 Machine Models by Utilization */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Top 5 Machine Models by Utilization
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Most utilized machines by rental frequency
-                  </p>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machine Utilization</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Top models by utilization</p>
                 </div>
                 <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
                   <PieChart className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 </div>
               </div>
-              <UtilizationBarChart data={mockMachineUtilization} />
-            </div>
-
-            {/* Damage Frequency by Model */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Damage Frequency by Model
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Damage incidents and repair costs by machine model
-                  </p>
-                </div>
-                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                  <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                </div>
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                <UtilizationBarChart data={mockMachineUtilization} />
               </div>
-              <DamageFrequencyChart data={mockDamageFrequency} />
             </div>
+          </div>
 
-            {/* Idle Machines Report (clickable cards → popup) */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Idle Machines Report
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Machines not currently rented or in maintenance · Click for full details
-                  </p>
-                </div>
+          {/* Idle machines (compact preview; full list via modal) */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Idle Machines</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                  Top idle machines · Click “View all” for full list
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
                 <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
                   <Package className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDetailPopup({
+                      title: 'Idle Machines Report – Full List',
+                      content: (
+                        <div className="space-y-3">
+                          {mockIdleMachines.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                              <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                              <p>No idle machines found</p>
+                            </div>
+                          ) : (
+                            mockIdleMachines.map((machine) => (
+                              <button
+                                key={machine.id}
+                                type="button"
+                                onClick={() =>
+                                  setDetailPopup({
+                                    title: `${machine.brand} ${machine.model} – Full Details`,
+                                    content: (
+                                      <div className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                          <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Barcode</p>
+                                            <p className="font-mono text-gray-900 dark:text-white text-xs break-all">{machine.barcode}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Serial</p>
+                                            <p className="font-mono text-gray-900 dark:text-white">{machine.serialNumber}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Brand / Model</p>
+                                            <p className="font-medium text-gray-900 dark:text-white">{machine.brand} {machine.model}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Type</p>
+                                            <p className="text-gray-900 dark:text-white">{machine.type}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Status</p>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${machine.status === 'Available' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : machine.status === 'Maintenance' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'}`}>
+                                              {machine.status}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Days Idle</p>
+                                            <p className="font-semibold text-gray-900 dark:text-white">{machine.daysIdle} days</p>
+                                          </div>
+                                          <div className="col-span-2">
+                                            <p className="text-gray-500 dark:text-gray-400">Last Rental Date</p>
+                                            <p className="text-gray-900 dark:text-white">
+                                              {machine.lastRentalDate ? new Date(machine.lastRentalDate).toLocaleDateString('en-LK') : 'Never'}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ),
+                                  })
+                                }
+                                className="w-full border border-gray-200 dark:border-slate-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-slate-800 hover:border-orange-400 dark:hover:border-orange-500 transition-all text-left cursor-pointer group"
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <h4 className="font-medium text-gray-900 dark:text-white">
+                                        {machine.brand} {machine.model}
+                                      </h4>
+                                      <span
+                                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${machine.status === 'Available'
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                            : machine.status === 'Maintenance'
+                                              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                                              : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
+                                          }`}
+                                      >
+                                        {machine.status}
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                      <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Serial:</span>
+                                        <span className="ml-2 text-gray-900 dark:text-white font-mono text-xs">
+                                          {machine.serialNumber}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Type:</span>
+                                        <span className="ml-2 text-gray-900 dark:text-white">
+                                          {machine.type}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Days Idle:</span>
+                                        <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                                          {machine.daysIdle} days
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Last Rental:</span>
+                                        <span className="ml-2 text-gray-900 dark:text-white">
+                                          {machine.lastRentalDate
+                                            ? new Date(machine.lastRentalDate).toLocaleDateString('en-LK')
+                                            : 'Never'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-500 flex-shrink-0 ml-2" />
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      ),
+                    })
+                  }
+                  className="px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                >
+                  View all
+                </button>
               </div>
-              <div className="space-y-3">
-                {mockIdleMachines.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No idle machines found</p>
-                  </div>
-                ) : (
-                  mockIdleMachines.map((machine) => (
+            </div>
+
+            {mockIdleMachines.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No idle machines found</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {mockIdleMachines
+                  .slice()
+                  .sort((a, b) => b.daysIdle - a.daysIdle)
+                  .slice(0, 3)
+                  .map((machine) => (
                     <button
                       key={machine.id}
                       type="button"
@@ -1594,65 +1509,29 @@ const AnalyticsPage: React.FC = () => {
                           ),
                         })
                       }
-                      className="w-full border border-gray-200 dark:border-slate-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-slate-800 hover:border-orange-400 dark:hover:border-orange-500 transition-all text-left cursor-pointer group"
+                      className="w-full border border-gray-200 dark:border-slate-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-slate-800 hover:border-orange-400 dark:hover:border-orange-500 transition-all text-left cursor-pointer"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h4 className="font-medium text-gray-900 dark:text-white">
-                              {machine.brand} {machine.model}
-                            </h4>
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${machine.status === 'Available'
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                                  : machine.status === 'Maintenance'
-                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                                    : 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200'
-                                }`}
-                            >
-                              {machine.status}
-                            </span>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-gray-900 dark:text-white truncate">
+                            {machine.brand} {machine.model}
                           </div>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <span className="text-gray-500 dark:text-gray-400">Serial:</span>
-                              <span className="ml-2 text-gray-900 dark:text-white font-mono text-xs">
-                                {machine.serialNumber}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500 dark:text-gray-400">Type:</span>
-                              <span className="ml-2 text-gray-900 dark:text-white">
-                                {machine.type}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500 dark:text-gray-400">Days Idle:</span>
-                              <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                                {machine.daysIdle} days
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500 dark:text-gray-400">Last Rental:</span>
-                              <span className="ml-2 text-gray-900 dark:text-white">
-                                {machine.lastRentalDate
-                                  ? new Date(machine.lastRentalDate).toLocaleDateString('en-LK')
-                                  : 'Never'}
-                              </span>
-                            </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {machine.daysIdle} days idle · {machine.status}
                           </div>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-500 flex-shrink-0 ml-2" />
+                        <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
                       </div>
                     </button>
-                  ))
-                )}
+                  ))}
               </div>
-            </div>
+            )}
           </div>
 
           {/* Additional Insights */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {showMoreInsights && (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* VAT vs Non-VAT Summary */}
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -1724,6 +1603,128 @@ const AnalyticsPage: React.FC = () => {
               </div>
             </div>
           </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Monthly Revenue (VAT vs Non-VAT)
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Revenue breakdown by invoice type
+                      </p>
+                    </div>
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <LineChart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                  </div>
+                  <BarChart data={monthlyRevenueForCharts} />
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Damage Frequency by Model
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Damage incidents and repair costs by machine model
+                      </p>
+                    </div>
+                    <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                      <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                    </div>
+                  </div>
+                  <DamageFrequencyChart data={mockDamageFrequency} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Outstanding by Aging</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Amount and count by bucket</p>
+                    </div>
+                  </div>
+                  <OutstandingAgingChart data={mockOutstandingAging} />
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Alerts by Type</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Outstanding alerts breakdown</p>
+                    </div>
+                    <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                      <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {mockAlertsByType.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                          <span className="font-medium text-gray-900 dark:text-white">{item.type}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">({item.severity})</span>
+                        </div>
+                        <span className="font-bold text-gray-900 dark:text-white">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Rental Status</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Agreements by status</p>
+                    </div>
+                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                      <PieChart className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <DonutChart items={mockRentalStatusDistribution.map(({ percentage, color }) => ({ percentage, color }))} size={140} />
+                    <div className="flex-1 space-y-2 min-w-0">
+                      {mockRentalStatusDistribution.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                            <span className="text-gray-700 dark:text-gray-300">{item.status}</span>
+                          </span>
+                          <span className="font-medium text-gray-900 dark:text-white">{item.count} ({item.percentage}%)</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Revenue by Brand</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Share of revenue</p>
+                    </div>
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                      <BarChart3 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <DonutChart items={mockRevenueByBrand.map(({ percentage, color }) => ({ percentage, color }))} size={140} />
+                    <div className="flex-1 space-y-2 min-w-0">
+                      {mockRevenueByBrand.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                            <span className="text-gray-700 dark:text-gray-300">{item.brand}</span>
+                          </span>
+                          <span className="font-medium text-gray-900 dark:text-white">Rs. {(item.revenue / 1000).toFixed(0)}k</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </main>
     </div>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer, Pencil } from 'lucide-react';
+import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer, Pencil, Plus, Minus } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
@@ -886,7 +886,44 @@ const PurchaseOrderPage: React.FC = () => {
                                                                 <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Rs.</span>
-                                                                        <input type="number" min="0" step="0.01" value={currentPrice} onChange={(e) => handleUnitPriceChange(machine.id, parseFloat(e.target.value) || 0)} disabled={!included} className="w-24 sm:w-28 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed" />
+                                                                        <div className="relative inline-block">
+                                                                            <input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                step="0.01"
+                                                                                value={currentPrice}
+                                                                                onChange={(e) => handleUnitPriceChange(machine.id, parseFloat(e.target.value) || 0)}
+                                                                                disabled={!included}
+                                                                                className="w-24 sm:w-28 px-3 py-2 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Decrease unit price"
+                                                                                onClick={() => {
+                                                                                    const next = Math.max(
+                                                                                        0,
+                                                                                        Number(((Number(currentPrice) || 0) - 0.01).toFixed(2))
+                                                                                    );
+                                                                                    handleUnitPriceChange(machine.id, next);
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                <Minus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Increase unit price"
+                                                                                onClick={() => {
+                                                                                    const next = Number(((Number(currentPrice) || 0) + 0.01).toFixed(2));
+                                                                                    handleUnitPriceChange(machine.id, next);
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                <Plus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
                                                                         {isPriceModified && included && (
                                                                             <Tooltip content="Reset to original price">
                                                                                 <button type="button" onClick={() => setModifiedUnitPrices(prev => { const u = { ...prev }; delete u[machine.id]; return u; })} className="text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap">Reset</button>
@@ -895,7 +932,44 @@ const PurchaseOrderPage: React.FC = () => {
                                                                     </div>
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Qty</span>
-                                                                        <input type="number" min="0" max={machine.canRent} value={qty} onChange={(e) => { const val = Math.max(0, Math.min(parseInt(e.target.value) || 0, machine.canRent)); setSelectedMachinesForRental({ ...selectedMachinesForRental, [machine.id]: val }); }} disabled={!included} className="w-16 sm:w-20 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed" />
+                                                                        <div className="relative inline-block">
+                                                                            <input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                max={machine.canRent}
+                                                                                value={qty}
+                                                                                onChange={(e) => {
+                                                                                    const val = Math.max(0, Math.min(parseInt(e.target.value) || 0, machine.canRent));
+                                                                                    setSelectedMachinesForRental({ ...selectedMachinesForRental, [machine.id]: val });
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="w-16 sm:w-20 px-3 py-2 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Decrease quantity"
+                                                                                onClick={() => {
+                                                                                    const next = Math.max(0, Math.min((Number(qty) || 0) - 1, machine.canRent));
+                                                                                    setSelectedMachinesForRental({ ...selectedMachinesForRental, [machine.id]: next });
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                <Minus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Increase quantity"
+                                                                                onClick={() => {
+                                                                                    const next = Math.max(0, Math.min((Number(qty) || 0) + 1, machine.canRent));
+                                                                                    setSelectedMachinesForRental({ ...selectedMachinesForRental, [machine.id]: next });
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                <Plus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
                                                                         <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">/ {machine.canRent}</span>
                                                                     </div>
                                                                     <div className="flex items-center gap-1 sm:min-w-[120px]">
@@ -1029,25 +1103,82 @@ const PurchaseOrderPage: React.FC = () => {
                                                                 <td className="px-4 py-3 text-gray-900 dark:text-white">{m.brand} {m.model}</td>
                                                                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{m.type}</td>
                                                                 <td className="px-4 py-3 text-center">
-                                                                    <input
-                                                                        type="number"
-                                                                        min={minQty}
-                                                                        value={m.quantity}
-                                                                        onChange={(e) => handleUpdateFormMachineChange(m.id, 'quantity', parseInt(e.target.value, 10) || 0)}
-                                                                        className="w-20 px-2 py-1.5 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-center"
-                                                                    />
+                                                                    <div className="relative inline-block">
+                                                                        <input
+                                                                            type="number"
+                                                                            min={minQty}
+                                                                            value={m.quantity}
+                                                                            onChange={(e) => handleUpdateFormMachineChange(m.id, 'quantity', parseInt(e.target.value, 10) || 0)}
+                                                                            className="w-20 px-2 py-1.5 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label="Decrease quantity"
+                                                                            onClick={() =>
+                                                                                handleUpdateFormMachineChange(
+                                                                                    m.id,
+                                                                                    'quantity',
+                                                                                    Math.max(minQty, (Number(m.quantity) || 0) - 1)
+                                                                                )
+                                                                            }
+                                                                            className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                                        >
+                                                                            <Minus className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label="Increase quantity"
+                                                                            onClick={() =>
+                                                                                handleUpdateFormMachineChange(
+                                                                                    m.id,
+                                                                                    'quantity',
+                                                                                    (Number(m.quantity) || 0) + 1
+                                                                                )
+                                                                            }
+                                                                            className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                                        >
+                                                                            <Plus className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </div>
                                                                     {rented > 0 && <span className="block text-xs text-amber-600 dark:text-amber-400 mt-0.5">min: {minQty} (rented)</span>}
                                                                     {updateFormErrors[`machine_${idx}_qty`] && <span className="block text-xs text-red-500 mt-0.5">{updateFormErrors[`machine_${idx}_qty`]}</span>}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right">
-                                                                    <input
-                                                                        type="number"
-                                                                        min="0"
-                                                                        step="0.01"
-                                                                        value={m.unitPrice}
-                                                                        onChange={(e) => handleUpdateFormMachineChange(m.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                                                        className="w-28 px-2 py-1.5 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-right"
-                                                                    />
+                                                                    <div className="relative inline-block">
+                                                                        <input
+                                                                            type="number"
+                                                                            min="0"
+                                                                            step="0.01"
+                                                                            value={m.unitPrice}
+                                                                            onChange={(e) => handleUpdateFormMachineChange(m.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                                                            className="w-28 px-2 py-1.5 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-right appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label="Decrease unit price"
+                                                                            onClick={() => {
+                                                                                const next = Math.max(
+                                                                                    0,
+                                                                                    Number(((Number(m.unitPrice) || 0) - 0.01).toFixed(2))
+                                                                                );
+                                                                                handleUpdateFormMachineChange(m.id, 'unitPrice', next);
+                                                                            }}
+                                                                            className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                                        >
+                                                                            <Minus className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label="Increase unit price"
+                                                                            onClick={() => {
+                                                                                const next = Number(((Number(m.unitPrice) || 0) + 0.01).toFixed(2));
+                                                                                handleUpdateFormMachineChange(m.id, 'unitPrice', next);
+                                                                            }}
+                                                                            className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                                        >
+                                                                            <Plus className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </div>
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">{(m.unitPrice * m.quantity).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                                                 <td className="px-4 py-3 text-center">
