@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Upload, X, Image as ImageIcon, FileText } from 'lucide-react';
+import { Eye, EyeOff, Upload, X, Image as ImageIcon, FileText, Plus, Minus } from 'lucide-react';
 import SearchableSelect from '@/src/components/common/searchable-select';
 
 export interface FormField {
@@ -504,6 +504,42 @@ const UpdateForm: React.FC<UpdateFormProps> = ({
         );
 
       case 'number':
+        if (field.name === 'monthlyRent') {
+          const current = Number(formData[field.name] ?? 0) || 0;
+          return (
+            <div className="relative">
+              <input
+                type="number"
+                value={formData[field.name] ?? ''}
+                onChange={(e) => handleInputChange(field.name, e.target.value)}
+                placeholder={field.placeholder}
+                className={`${baseInputClasses} pl-10 pr-10 appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                disabled={field.disabled}
+                step="any"
+                min="0"
+              />
+              <button
+                type="button"
+                aria-label="Decrease monthly rent"
+                onClick={() => handleInputChange(field.name, Math.max(0, current - 1))}
+                disabled={field.disabled}
+                className="absolute inset-y-0 left-2 flex items-center p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Increase monthly rent"
+                onClick={() => handleInputChange(field.name, current + 1)}
+                disabled={field.disabled}
+                className="absolute inset-y-0 right-2 flex items-center p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          );
+        }
+
         return (
           <input
             type="number"

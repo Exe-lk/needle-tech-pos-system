@@ -5,7 +5,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
-import { Eye, Pencil, X, Plus, Download, FileText, Trash2, Printer, Calendar } from 'lucide-react';
+import { Eye, Pencil, X, Plus, Minus, Download, FileText, Trash2, Printer, Calendar } from 'lucide-react';
 import { LetterheadDocument, LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
 import { Swal, toast } from '@/src/lib/swal';
@@ -1805,27 +1805,75 @@ const InvoicePage: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-2 px-2 text-center align-top">
-                          <input
-                            type="number"
-                            value={item.monthlyRentPerMachine}
-                            onChange={(e) => updateItem(index, 'monthlyRentPerMachine', Number(e.target.value))}
-                            className={`w-20 px-1.5 py-0.5 border rounded text-center ${inputBase} ${
-                              formErrors[`item_${index}_rent`] ? inputError : inputBorder
-                            } ${focusRing}`}
-                            min="0"
-                            step="0.01"
-                          />
+                          <div className="relative inline-block">
+                            <input
+                              type="number"
+                              value={item.monthlyRentPerMachine}
+                              onChange={(e) => updateItem(index, 'monthlyRentPerMachine', Number(e.target.value))}
+                              className={`w-20 px-1.5 py-0.5 pl-6 pr-6 border rounded text-center ${inputBase} ${
+                                formErrors[`item_${index}_rent`] ? inputError : inputBorder
+                              } ${focusRing} appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                              min="0"
+                              step="0.01"
+                            />
+                            <button
+                              type="button"
+                              aria-label="Decrease rate"
+                              onClick={() => {
+                                const next = Math.max(0, Number(((Number(item.monthlyRentPerMachine) || 0) - 0.01).toFixed(2)));
+                                updateItem(index, 'monthlyRentPerMachine', next);
+                              }}
+                              className="absolute inset-y-0 left-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Increase rate"
+                              onClick={() => {
+                                const next = Number(((Number(item.monthlyRentPerMachine) || 0) + 0.01).toFixed(2));
+                                updateItem(index, 'monthlyRentPerMachine', next);
+                              }}
+                              className="absolute inset-y-0 right-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                         <td className="py-2 px-2 text-center align-top">
-                          <input
-                            type="number"
-                            value={item.numberOfMachines}
-                            onChange={(e) => updateItem(index, 'numberOfMachines', Number(e.target.value))}
-                            className={`w-16 px-1.5 py-0.5 border rounded text-center ${inputBase} ${
-                              formErrors[`item_${index}_machines`] ? inputError : inputBorder
-                            } ${focusRing}`}
-                            min="1"
-                          />
+                          <div className="relative inline-block">
+                            <input
+                              type="number"
+                              value={item.numberOfMachines}
+                              onChange={(e) => updateItem(index, 'numberOfMachines', Number(e.target.value))}
+                              className={`w-16 px-1.5 py-0.5 pl-6 pr-6 border rounded text-center ${inputBase} ${
+                                formErrors[`item_${index}_machines`] ? inputError : inputBorder
+                              } ${focusRing} appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                              min="1"
+                            />
+                            <button
+                              type="button"
+                              aria-label="Decrease quantity"
+                              onClick={() => {
+                                const next = Math.max(1, (Number(item.numberOfMachines) || 1) - 1);
+                                updateItem(index, 'numberOfMachines', next);
+                              }}
+                              className="absolute inset-y-0 left-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Increase quantity"
+                              onClick={() => {
+                                const next = (Number(item.numberOfMachines) || 1) + 1;
+                                updateItem(index, 'numberOfMachines', next);
+                              }}
+                              className="absolute inset-y-0 right-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                         <td className="py-2 pl-2 text-right align-top text-gray-900 dark:text-white">
                           {calculateItemSubtotal(item).toLocaleString('en-LK', { minimumFractionDigits: 2 })}

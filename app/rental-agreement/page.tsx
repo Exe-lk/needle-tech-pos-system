@@ -6,7 +6,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
-import { Eye, Pencil, X, Plus, Trash2, Printer, FileText, ExternalLink, QrCode, Truck, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, ArrowLeft } from 'lucide-react';
+import { Eye, Pencil, X, Plus, Minus, Trash2, Printer, FileText, ExternalLink, QrCode, Truck, CheckCircle2, AlertCircle, Loader2, ChevronDown, Check, ArrowLeft } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument, LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
@@ -2818,15 +2818,39 @@ const RentalAgreementPage: React.FC = () => {
                                 />
                               </td>
                               <td className="border border-gray-800 dark:border-slate-600 px-2 py-1 align-top">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  value={machine.standardPrice || ''}
-                                  onChange={(e) => handleMachineChange(machine.id, 'standardPrice', parseFloat(e.target.value) || 0)}
-                                  className="w-full px-2 py-1 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 text-right text-sm"
-                                  placeholder="0"
-                                />
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={machine.standardPrice || ''}
+                                    onChange={(e) => handleMachineChange(machine.id, 'standardPrice', parseFloat(e.target.value) || 0)}
+                                    className="w-full px-2 py-1 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white bg-white dark:bg-slate-700 text-right text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    placeholder="0"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label="Decrease monthly rent per machine"
+                                    onClick={() => {
+                                      const next = Math.max(0, (Number(machine.standardPrice) || 0) - 1);
+                                      handleMachineChange(machine.id, 'standardPrice', next);
+                                    }}
+                                    className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                  >
+                                    <Minus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label="Increase monthly rent per machine"
+                                    onClick={() => {
+                                      const next = (Number(machine.standardPrice) || 0) + 1;
+                                      handleMachineChange(machine.id, 'standardPrice', next);
+                                    }}
+                                    className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </td>
                               <td className="border border-gray-800 dark:border-slate-600 px-1 py-1 align-middle text-center">
                                 {machines.length > 1 && (

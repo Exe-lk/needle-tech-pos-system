@@ -6,7 +6,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import CreateForm, { FormField, CreateFormRef } from '@/src/components/form-popup/create';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
-import { X, Plus, Trash2, ChevronDown, ChevronRight, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
+import { X, Plus, Minus, Trash2, ChevronDown, ChevronRight, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 import { authFetch } from '@/lib/auth-client';
@@ -1612,19 +1612,53 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                     data-po-field-key={`machine_quantity_${index}`}
                                                     tabIndex={-1}
                                                 >
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        value={machine.quantity}
-                                                        onChange={(e) =>
-                                                            handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
-                                                        }
-                                                        disabled={!machine.brand || !machine.model}
-                                                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`machine_quantity_${index}`]
-                                                                ? 'border-red-500'
-                                                                : 'border-gray-300 dark:border-slate-600'
-                                                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
-                                                    />
+                                                    <div className="relative">
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            value={machine.quantity}
+                                                            onChange={(e) =>
+                                                                handleMachineChange(machine.id, 'quantity', parseInt(e.target.value) || 1)
+                                                            }
+                                                            disabled={!machine.brand || !machine.model}
+                                                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formErrors[`machine_quantity_${index}`]
+                                                                    ? 'border-red-500'
+                                                                    : 'border-gray-300 dark:border-slate-600'
+                                                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                        />
+                                                        <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Decrease quantity"
+                                                                onClick={() =>
+                                                                    handleMachineChange(
+                                                                        machine.id,
+                                                                        'quantity',
+                                                                        Math.max(1, (Number(machine.quantity) || 1) - 1)
+                                                                    )
+                                                                }
+                                                                disabled={!machine.brand || !machine.model}
+                                                                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <Minus className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Increase quantity"
+                                                                onClick={() =>
+                                                                    handleMachineChange(
+                                                                        machine.id,
+                                                                        'quantity',
+                                                                        (Number(machine.quantity) || 1) + 1
+                                                                    )
+                                                                }
+                                                                disabled={!machine.brand || !machine.model}
+                                                                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <Plus className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                     {machine.brand && machine.model && machine.type && (
                                                         <div className={`mt-1.5 inline-flex items-center gap-1.5 w-fit px-2 py-1 rounded-md ${
                                                             availableStock > 0
@@ -1662,22 +1696,51 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                     data-po-field-key={`machine_monthlyRentalFee_${index}`}
                                                     tabIndex={-1}
                                                 >
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        value={machine.monthlyRentalFee || ''}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            const num = val === '' ? 0 : parseFloat(val) || 0;
-                                                            handleMachineChange(machine.id, 'monthlyRentalFee', num);
-                                                        }}
-                                                        placeholder="0"
-                                                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white ${formErrors[`machine_monthlyRentalFee_${index}`]
-                                                                ? 'border-red-500'
-                                                                : 'border-gray-300 dark:border-slate-600'
-                                                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
-                                                    />
+                                                    <div className="relative">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={machine.monthlyRentalFee || ''}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                const num = val === '' ? 0 : parseFloat(val) || 0;
+                                                                handleMachineChange(machine.id, 'monthlyRentalFee', num);
+                                                            }}
+                                                            placeholder="0"
+                                                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${formErrors[`machine_monthlyRentalFee_${index}`]
+                                                                    ? 'border-red-500'
+                                                                    : 'border-gray-300 dark:border-slate-600'
+                                                                } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                                                        />
+                                                        <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Decrease monthly rental fee"
+                                                                onClick={() => {
+                                                                    const next = Math.max(
+                                                                        0,
+                                                                        Number(((Number(machine.monthlyRentalFee) || 0) - 0.01).toFixed(2))
+                                                                    );
+                                                                    handleMachineChange(machine.id, 'monthlyRentalFee', next);
+                                                                }}
+                                                                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                            >
+                                                                <Minus className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Increase monthly rental fee"
+                                                                onClick={() => {
+                                                                    const next = Number(((Number(machine.monthlyRentalFee) || 0) + 0.01).toFixed(2));
+                                                                    handleMachineChange(machine.id, 'monthlyRentalFee', next);
+                                                                }}
+                                                                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                            >
+                                                                <Plus className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                     {formErrors[`machine_monthlyRentalFee_${index}`] && (
                                                         <p className="mt-1 text-sm text-red-500">
                                                             {formErrors[`machine_monthlyRentalFee_${index}`]}
