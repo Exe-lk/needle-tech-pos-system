@@ -481,7 +481,11 @@ const MachineListPage: React.FC = () => {
     }
   };
 
-  const loadDropdownData = async () => {
+  const loadDropdownData = async (): Promise<{
+    brandsData: Brand[];
+    modelsData: Model[];
+    typesData: MachineTypeData[];
+  }> => {
     setIsLoadingDropdowns(true);
     try {
       const [brandsData, modelsData, typesData] = await Promise.all([
@@ -493,8 +497,10 @@ const MachineListPage: React.FC = () => {
       setBrands(brandsData);
       setModels(modelsData);
       setMachineTypes(typesData);
+      return { brandsData, modelsData, typesData };
     } catch (error) {
       console.error('Error loading dropdown data:', error);
+      return { brandsData: [], modelsData: [], typesData: [] };
     } finally {
       setIsLoadingDropdowns(false);
     }
@@ -585,14 +591,25 @@ const MachineListPage: React.FC = () => {
     setSelectedMachine(machine);
     setIsUpdateModalOpen(true);
     
+    // Load dropdown data early so brand/model/type selections can resolve correctly.
+    const { brandsData } = await loadDropdownData();
+
     const machineDetail = await fetchMachineById(machine.id.toString());
     if (machineDetail) {
       setSelectedMachineDetail(machineDetail);
       setMachineFormWarrantyStatus(machineDetail.warrantyStatus || '');
+
+      // Critical: preselect brand so model dropdown enables and can show the existing value.
+      const brandMatch = brandsData.find((b) => b.name === machineDetail.brand);
+      if (brandMatch?.id) {
+        setSelectedBrandId(brandMatch.id);
+        await loadModelsByBrand(brandMatch.id);
+      } else {
+        // Brand is not an existing active brand (creatable scenario) – keep model selectable via typed value.
+        setSelectedBrandId(machineDetail.brand || '');
+        setModels([]);
+      }
     }
-    
-    // Load dropdown data for update modal
-    await loadDropdownData();
   };
 
   const handleCloseUpdateModal = () => {

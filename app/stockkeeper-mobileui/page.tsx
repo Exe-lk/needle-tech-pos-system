@@ -2,9 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Package, RotateCcw, Scan, Sun, Moon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { LogOut, Moon, Package, RotateCcw, Scan, Sun } from 'lucide-react';
+import { authFetch, clearAuth } from '@/lib/auth-client';
 
 export default function StockkeeperMobileUiPage() {
+  const router = useRouter();
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -41,6 +44,21 @@ export default function StockkeeperMobileUiPage() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await authFetch(
+        '/api/v1/auth/logout',
+        { method: 'POST' },
+        { skipRefresh: true }
+      );
+    } catch {
+      // best-effort
+    } finally {
+      clearAuth();
+      router.replace('/mobile-login');
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors flex flex-col">
       <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/50 px-4 py-4 shrink-0">
@@ -55,14 +73,24 @@ export default function StockkeeperMobileUiPage() {
             </p>
           </div>
           {mounted && (
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors shrink-0"
-              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            </div>
           )}
         </div>
       </div>

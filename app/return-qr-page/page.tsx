@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   FileText,
   ImagePlus,
+  LogOut,
   Moon,
   Package,
   Scan,
@@ -21,7 +22,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { authFetch } from '@/lib/auth-client';
+import { authFetch, clearAuth } from '@/lib/auth-client';
 import { AUTH_USER_KEY } from '@/lib/auth-constants';
 
 const API_BASE = '/api/v1';
@@ -426,6 +427,21 @@ const ReturnQRPage: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authFetch(
+        '/api/v1/auth/logout',
+        { method: 'POST' },
+        { skipRefresh: true }
+      );
+    } catch {
+      // best-effort
+    } finally {
+      clearAuth();
+      router.replace('/mobile-login');
     }
   };
 
@@ -1032,14 +1048,24 @@ const ReturnQRPage: React.FC = () => {
             </div>
           </div>
           {mounted && (
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors flex-shrink-0"
-              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            </div>
           )}
         </div>
 
@@ -1180,14 +1206,24 @@ const ReturnQRPage: React.FC = () => {
             </div>
           </div>
           {mounted && (
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors flex-shrink-0"
-              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            </div>
           )}
         </div>
 
@@ -1295,6 +1331,16 @@ const ReturnQRPage: React.FC = () => {
             <p className="text-xs text-gray-500 dark:text-slate-400">#{selectedAgreement.id}</p>
           </div>
           <div className="flex items-center gap-2">
+            {mounted && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
             {mounted && (
               <button
                 type="button"
@@ -1492,6 +1538,16 @@ const ReturnQRPage: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {mounted && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
             {mounted && (
               <button
                 type="button"

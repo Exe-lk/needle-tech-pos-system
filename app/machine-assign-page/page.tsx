@@ -3,11 +3,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import QRScannerComponent from '@/src/components/qr-scanner';
-import { authFetch } from '@/lib/auth-client';
+import { authFetch, clearAuth } from '@/lib/auth-client';
 import {
   ArrowLeft,
   CheckCircle2,
   ChevronDown,
+  LogOut,
   RotateCcw,
   Trash2,
   Zap,
@@ -365,6 +366,21 @@ const MachineAssignPage: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authFetch(
+        '/api/v1/auth/logout',
+        { method: 'POST' },
+        { skipRefresh: true }
+      );
+    } catch {
+      // best-effort
+    } finally {
+      clearAuth();
+      router.replace('/mobile-login');
     }
   };
 
@@ -730,14 +746,24 @@ const MachineAssignPage: React.FC = () => {
               </div>
             </div>
             {mounted && (
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors shrink-0"
-                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-              >
-                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                  aria-label="Logout"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                  aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+                >
+                  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -903,14 +929,24 @@ const MachineAssignPage: React.FC = () => {
             </p>
           </div>
           {mounted ? (
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <Zap className="w-5 h-5 text-yellow-500 dark:text-yellow-400" />
@@ -1054,6 +1090,16 @@ const MachineAssignPage: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {mounted ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            ) : null}
             {mounted ? (
               <button
                 type="button"
@@ -1263,6 +1309,16 @@ const MachineAssignPage: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {mounted && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+              aria-label="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          )}
           {mounted && (
             <button
               type="button"

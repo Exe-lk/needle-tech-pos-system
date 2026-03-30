@@ -2137,7 +2137,7 @@ const RentalAgreementPage: React.FC = () => {
                   Motor / Box No
                 </th>
                 <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
-                  Monthly Res
+                  Monthly Rent
                 </th>
               </tr>
             </thead>
