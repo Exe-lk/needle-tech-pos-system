@@ -14,7 +14,8 @@ import { Swal, toast } from '@/src/lib/swal';
 const API_BASE_URL = '/api/v1';
 
 type PurchaseRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Active' | 'Completed' | 'Cancelled' | 'Partially Fulfilled';
-type CustomerType = 'Business' | 'Customer';
+/** API returns Business vs Individual (GARMENT_FACTORY vs other); legacy UI may use Customer for individuals. */
+type CustomerType = 'Business' | 'Individual' | 'Customer';
 
 interface PurchaseRequest {
     id: string | number;
@@ -61,6 +62,10 @@ const toDateInputValue = (value: string | Date | null | undefined): string => {
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
 };
+
+/** Printed quotation letterhead: VAT logo for business customers; non-VAT for individuals. */
+const purchaseOrderPrintLogoPath = (customerType: string): string =>
+    customerType === 'Business' ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg';
 
 const getEarliestExpectedAvailabilityDate = (request: PurchaseRequest): string | null => {
     if (!request.machines || request.machines.length === 0) return null;
@@ -678,7 +683,12 @@ const PurchaseOrderPage: React.FC = () => {
     /** Printable purchase order in letterhead (used when user clicks Print in view modal). */
     const renderPurchaseOrderDocument = (request: PurchaseRequest) => (
         <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto min-h-[297mm] flex flex-col print:bg-white print:p-8">
-            <LetterheadDocument documentTitle="QUOTATION" footerStyle="simple" className="print:p-0 flex flex-col flex-1">
+            <LetterheadDocument
+                documentTitle="QUOTATION"
+                footerStyle="simple"
+                className="print:p-0 flex flex-col flex-1"
+                logoPath={purchaseOrderPrintLogoPath(request.customerType)}
+            >
                 <div className="text-center mb-4">
                     <p className="text-lg font-bold text-gray-900 dark:text-slate-100 print:text-gray-900">{request.requestNumber}</p>
                 </div>

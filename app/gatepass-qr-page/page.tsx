@@ -10,6 +10,7 @@ import React, {
 import QRScannerComponent from '@/src/components/qr-scanner';
 import {
   ArrowLeft,
+  LogOut,
   ShieldCheck,
   RotateCcw,
   QrCode,
@@ -25,7 +26,8 @@ import {
   Moon,
   Loader2,
 } from 'lucide-react';
-import { authFetch } from '@/lib/auth-client';
+import { useRouter } from 'next/navigation';
+import { authFetch, clearAuth } from '@/lib/auth-client';
 
 const API_BASE = '/api/v1';
 
@@ -173,6 +175,7 @@ function normalizeGatePassInput(input: string): string {
 // ---------------------------------------------------------------------------
 
 const GatePassQRPage: React.FC = () => {
+  const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [gatePassNumberInput, setGatePassNumberInput] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -229,6 +232,21 @@ const GatePassQRPage: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authFetch(
+        '/api/v1/auth/logout',
+        { method: 'POST' },
+        { skipRefresh: true }
+      );
+    } catch {
+      // best-effort
+    } finally {
+      clearAuth();
+      router.replace('/mobile-login');
     }
   };
 
@@ -533,14 +551,24 @@ const GatePassQRPage: React.FC = () => {
               </p>
             </div>
             {mounted && (
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-              >
-                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                  aria-label="Logout"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                  aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+                >
+                  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -640,14 +668,24 @@ const GatePassQRPage: React.FC = () => {
             </p>
           </div>
           {mounted ? (
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-              aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label={isDarkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            </div>
           ) : (
             <div className="w-10" />
           )}
@@ -774,6 +812,16 @@ const GatePassQRPage: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-1">
+            {mounted && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
             {mounted && (
               <button
                 type="button"
@@ -939,6 +987,16 @@ const GatePassQRPage: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
+          {mounted && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+              aria-label="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          )}
           {mounted && (
             <button
               type="button"

@@ -53,6 +53,20 @@ function normalizeMachineType(value: string): MachineType {
   return (map[normalized.toLowerCase()] as MachineType) || 'Other';
 }
 
+function normalizeTransactionType(value: string): TransactionType {
+  const normalized = (value ?? '').trim().toLowerCase().replace(/_/g, ' ');
+  const map: Record<string, TransactionType> = {
+    'stock in': 'Stock In',
+    'stock out': 'Stock Out',
+    'rental out': 'Rental Out',
+    'return in': 'Return In',
+    'maintenance out': 'Maintenance Out',
+    'maintenance in': 'Maintenance In',
+    retired: 'Retired',
+  };
+  return map[normalized] ?? 'Stock In';
+}
+
 const BincardPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
@@ -152,14 +166,19 @@ const BincardPage: React.FC = () => {
       })
       .then((json) => {
         if (cancelled) return;
-        const raw: any[] = json.data?.items?.entries ?? [];
+        // API returns paginatedResponse with `data.items` as an array.
+        // Keep a small fallback for any older/alternate shapes.
+        const raw: any[] =
+          (Array.isArray(json?.data?.items) ? json.data.items : undefined) ??
+          (Array.isArray(json?.data?.items?.entries) ? json.data.items.entries : undefined) ??
+          [];
         const mapped: BincardEntry[] = raw.map((e: any) => ({
           id: String(e.id),
           date: e.date ? new Date(e.date).toISOString().slice(0, 10) : '',
           brand: e.brand ?? '',
           model: e.model ?? '',
           type: normalizeMachineType(e.type ?? ''),
-          transactionType: (e.transactionType ?? '') as TransactionType,
+          transactionType: normalizeTransactionType(e.transactionType ?? ''),
           reference: e.reference ?? '',
           in: Number(e.in) ?? 0,
           out: Number(e.out) ?? 0,
