@@ -1,0 +1,2675 @@
+*****************************CUSTOMER PAGE******************************************
+
+
+
+1. GET /customers - List All Customers
+
+Description: Returns a paginated list of customers with search, filter, sort, and pagination support.
+
+Query Parameters:
+- search (string, optional): Search term to filter customers by name
+- type (string, optional): Filter by customer type - "Company" or "Individual"
+- status (string, optional): Filter by status - "Active", "Inactive", or "Blocked"
+- sortBy (string, optional): Column to sort by - "name", "type", "outstandingBalance", "status"
+- sortOrder (string, optional): Sort direction - "asc" or "desc"
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10, options: 10, 25, 50, 100)
+
+Example Request:
+GET /customers?search=ABC&type=Company&status=Active&sortBy=name&sortOrder=asc&page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "customers": [
+      {
+        "id": 1,
+        "name": "ABC Holdings (Pvt) Ltd",
+        "type": "Company",
+        "outstandingBalance": 120000.50,
+        "status": "Active"
+      },
+      {
+        "id": 2,
+        "name": "John Perera",
+        "type": "Individual",
+        "outstandingBalance": 3500.00,
+        "status": "Active"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalItems": 50,
+      "itemsPerPage": 10,
+      "hasNextPage": true,
+      "hasPreviousPage": false
+    }
+  }
+}
+
+Note: Frontend displays type as "Business" for "Company" and "Customer" for "Individual". API may return type as "Company"|"Individual"; frontend maps for display. Optional: include "address" in list items for dropdown use (create agreement, invoice).
+
+
+2. GET /customers/:id - Get Customer Profile (Overview)
+
+Description: Returns detailed customer information for the overview tab.
+
+URL Parameters:
+- id (number, required): Customer ID
+
+Example Request:
+GET /customers/1
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "ABC Holdings (Pvt) Ltd",
+    "type": "Company",
+    "vatTin": "VAT-123456789",
+    "nicNumber": null,
+    "address": "123 Business Street, Colombo 05",
+    "phone": "+94 11 2345678",
+    "email": "contact@example.lk",
+    "creditStatus": "Active",
+    "totalOutstanding": 120000.50
+  }
+}
+
+Note: For Individual customers, vatTin will be null and nicNumber will have a value. For Company customers, vatTin will have a value and nicNumber will be null.
+
+
+3. POST /customers - Create Customer
+
+Description: Creates a new customer (Company or Individual).
+
+Request Body for Company:
+{
+  "type": "Company",
+  "companyName": "ABC Holdings (Pvt) Ltd",
+  "vatTin": "VAT-123456789",
+  "businessAddress": "123 Business Street, Colombo 05",
+  "contactPerson": "John Doe",
+  "phone": "+94 11 2345678",
+  "email": "contact@example.lk",
+  "status": "Active"
+}
+
+Request Body for Individual:
+{
+  "type": "Individual",
+  "fullName": "John Perera",
+  "nicNumber": "123456789V",
+  "address": "456 Residential Road, Colombo 07",
+  "phone": "+94 11 9876543",
+  "email": "john.perera@example.lk",
+  "status": "Active"
+}
+
+Note: status values - "Active", "Inactive", "Blocked". Frontend list displays type as "Business" for Company and "Customer" for Individual; API may use "Company"|"Individual" and frontend maps for display.
+
+Response Body:
+{
+  "success": true,
+  "message": "Customer created successfully",
+  "data": {
+    "id": 6,
+    "name": "ABC Holdings (Pvt) Ltd",
+    "type": "Company",
+    "outstandingBalance": 0.00,
+    "status": "Active"
+  }
+}
+
+
+4. PUT /customers/:id - Update Customer
+
+Description: Updates an existing customer's information.
+
+URL Parameters:
+- id (number, required): Customer ID
+
+Request Body for Company:
+{
+  "type": "Company",
+  "companyName": "ABC Holdings (Pvt) Ltd",
+  "vatTin": "VAT-123456789",
+  "businessAddress": "123 Business Street, Colombo 05",
+  "contactPerson": "John Doe",
+  "phone": "+94 11 2345678",
+  "email": "contact@example.lk",
+  "status": "Active"
+}
+
+Request Body for Individual:
+{
+  "type": "Individual",
+  "fullName": "John Perera",
+  "nicNumber": "123456789V",
+  "address": "456 Residential Road, Colombo 07",
+  "phone": "+94 11 9876543",
+  "email": "john.perera@example.lk",
+  "status": "Active"
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Customer updated successfully",
+  "data": {
+    "id": 1,
+    "name": "ABC Holdings (Pvt) Ltd",
+    "type": "Company",
+    "outstandingBalance": 120000.50,
+    "status": "Active"
+  }
+}
+
+
+5. DELETE /customers/:id - Delete Customer
+
+Description: Deletes a customer and all associated data.
+
+URL Parameters:
+- id (number, required): Customer ID
+
+Example Request:
+DELETE /customers/1
+
+Response Body:
+{
+  "success": true,
+  "message": "Customer deleted successfully"
+}
+
+
+6. GET /customers/:id/rental-history - Get Rental History
+
+Description: Returns rental history for a specific customer.
+
+URL Parameters:
+- id (number, required): Customer ID
+
+Query Parameters:
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10)
+
+Example Request:
+GET /customers/1/rental-history?page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "rentalHistory": [
+      {
+        "id": 1,
+        "machineName": "Excavator CAT 320",
+        "rentalDate": "15/01/2024",
+        "returnDate": "15/02/2024",
+        "status": "Completed",
+        "totalAmount": 150000.00
+      },
+      {
+        "id": 2,
+        "machineName": "Bulldozer CAT D6",
+        "rentalDate": "01/03/2024",
+        "returnDate": null,
+        "status": "Active",
+        "totalAmount": 200000.00
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalItems": 2,
+      "itemsPerPage": 10
+    }
+  }
+}
+
+Note: Date format is DD/MM/YYYY. returnDate can be null for active rentals.
+
+
+7. GET /customers/:id/payments - Get Payments
+
+Description: Returns payment information for a specific customer.
+
+URL Parameters:
+- id (number, required): Customer ID
+
+Query Parameters:
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10)
+
+Example Request:
+GET /customers/1/payments?page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "payments": [
+      {
+        "id": 1,
+        "machineName": "Bulldozer CAT D6",
+        "dueDate": "01/04/2024",
+        "amount": 50000.00,
+        "status": "Pending"
+      },
+      {
+        "id": 2,
+        "machineName": "Bulldozer CAT D6",
+        "dueDate": "01/05/2024",
+        "amount": 50000.00,
+        "status": "Pending"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalItems": 2,
+      "itemsPerPage": 10
+    }
+  }
+}
+
+8. GET /customers/:id/damage-records - Get Damage Records
+
+Description: Returns damage records for a specific customer.
+
+URL Parameters:
+- id (number, required): Customer ID
+
+Query Parameters:
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10)
+
+Example Request:
+GET /customers/1/damage-records?page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "damageRecords": [
+      {
+        "id": 1,
+        "machineName": "Excavator CAT 320",
+        "rentalDate": "15/01/2024",
+        "returnDate": "15/02/2024",
+        "damageDescription": "Minor scratch on hydraulic arm",
+        "repairCost": 5000.00,
+        "status": "Repaired"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalItems": 1,
+      "itemsPerPage": 10
+    }
+  }
+}
+
+9. GET /customers/:id/agreements - Get Agreements
+
+Description: Returns rental agreements for a specific customer.
+
+URL Parameters:
+- id (number, required): Customer ID
+
+Query Parameters:
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10)
+
+Example Request:
+GET /customers/1/agreements?page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "agreements": [
+      {
+        "id": 1,
+        "agreementNumber": "AGR-2024-001",
+        "machineName": "Excavator CAT 320",
+        "startDate": "15/01/2024",
+        "endDate": "15/07/2024",
+        "rentalPeriod": "6 months",
+        "monthlyRate": 25000.00,
+        "totalAmount": 150000.00,
+        "status": "Active"
+      },
+      {
+        "id": 2,
+        "agreementNumber": "AGR-2024-002",
+        "machineName": "Bulldozer CAT D6",
+        "startDate": "01/03/2024",
+        "endDate": "01/09/2024",
+        "rentalPeriod": "6 months",
+        "monthlyRate": 33333.33,
+        "totalAmount": 200000.00,
+        "status": "Active"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalItems": 2,
+      "itemsPerPage": 10
+    }
+  }
+}
+
+10. GET /customers/:id/outstanding-alerts - Get Outstanding Alerts
+
+Description: Returns outstanding alerts for a specific customer.
+
+URL Parameters:
+- id (number, required): Customer ID
+
+Query Parameters:
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10)
+
+Example Request:
+GET /customers/1/outstanding-alerts?page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "outstandingAlerts": [
+      {
+        "id": 1,
+        "alertType": "Payment Overdue",
+        "description": "Monthly payment for Bulldozer CAT D6 is overdue by 15 days",
+        "amount": 50000.00,
+        "dueDate": "01/04/2024",
+        "severity": "High",
+        "status": "Active"
+      },
+      {
+        "id": 2,
+        "alertType": "High Balance",
+        "description": "Total outstanding balance exceeds warning threshold",
+        "amount": 120000.50,
+        "dueDate": "15/04/2024",
+        "severity": "Medium",
+        "status": "Active"
+      },
+      {
+        "id": 3,
+        "alertType": "Agreement Expiring",
+        "description": "Agreement AGR-2024-001 will expire in 30 days",
+        "amount": 0.00,
+        "dueDate": "15/07/2024",
+        "severity": "Low",
+        "status": "Active"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalItems": 3,
+      "itemsPerPage": 10
+    }
+  }
+}
+
+11. POST /rental-agreements - Create Rental Agreement
+
+Description: Creates a new rental agreement for a customer.
+
+Request Body:
+{
+  "customerId": 1,
+  "customerName": "ABC Holdings (Pvt) Ltd",
+  "startDate": "15/01/2024",
+  "endDate": "15/07/2024",
+  "machines": [
+    {
+      "id": "1",
+      "brand": "Brother",
+      "model": "XL2600i",
+      "type": "Industrial",
+      "quantity": 2,
+      "standardPrice": 50000.00
+    }
+  ],
+  "addOns": [
+    {
+      "id": "1",
+      "machineId": "1",
+      "addOnId": "ADDON-001",
+      "quantity": 1,
+      "price": 5000.00
+    }
+  ],
+  "pricing": {
+    "standardPricePerMachine": 50000.00,
+    "totalMachinePrice": 100000.00,
+    "totalAddOnPrice": 5000.00,
+    "totalPrice": 105000.00
+  }
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Rental Agreement created successfully",
+  "data": {
+    "id": 1,
+    "agreementNumber": "AGR-2024-001",
+    "customerId": 1,
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "startDate": "15/01/2024",
+    "endDate": "15/07/2024",
+    "machines": [
+      {
+        "id": "1",
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Industrial",
+        "quantity": 2,
+        "standardPrice": 50000.00
+      }
+    ],
+    "addOns": [
+      {
+        "id": "1",
+        "machineId": "1",
+        "addOnId": "ADDON-001",
+        "quantity": 1,
+        "price": 5000.00
+      }
+    ],
+    "pricing": {
+      "standardPricePerMachine": 50000.00,
+      "totalMachinePrice": 100000.00,
+      "totalAddOnPrice": 5000.00,
+      "totalPrice": 105000.00
+    },
+    "status": "Active"
+  }
+}
+
+ERROR RESPONSE FORMAT
+
+All endpoints should return errors in the following format:
+
+{
+  "success": false,
+  "message": "Error message describing what went wrong",
+  "errors": {
+    "fieldName": "Specific error message for this field"
+  }
+}
+
+Example Error Response:
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": {
+    "email": "Email is required",
+    "phone": "Phone number is invalid"
+  }
+}
+
+
+================================================================================
+USER MANAGEMENT PAGE
+================================================================================
+
+1. GET /users - List Users
+
+Description: Returns a paginated list of users with pagination support.
+
+Query Parameters:
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10, max: 1000)
+
+Example Request:
+GET /users?limit=1000
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "Users retrieved successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "items": [
+      {
+        "userId": "user-123",
+        "firstName": "John",
+        "lastName": "Doe",
+        "email": "john.doe@example.lk",
+        "phone": "+94 11 2345678",
+        "username": "johndoe",
+        "role": "ADMIN",
+        "isActive": true,
+        "createdDate": "2024-01-15T08:00:00Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalItems": 5,
+      "itemsPerPage": 1000
+    }
+  }
+}
+
+Note: role values - "ADMIN", "SUPER_ADMIN", "MANAGER", "OPERATOR", "USER". Frontend maps these to display names (e.g., "SUPER_ADMIN" → "Super Admin").
+
+
+2. GET /users/:userId - Get User Details
+
+Description: Returns detailed information for a specific user.
+
+URL Parameters:
+- userId (string, required): User ID
+
+Example Request:
+GET /users/user-123
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "User retrieved successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "userId": "user-123",
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john.doe@example.lk",
+    "phone": "+94 11 2345678",
+    "username": "johndoe",
+    "role": "ADMIN",
+    "isActive": true,
+    "createdDate": "2024-01-15T08:00:00Z",
+    "lastLoginAt": "2024-04-15T08:00:00Z"
+  }
+}
+
+
+3. POST /users - Create User
+
+Description: Creates a new user account. Only Admin and Super Admin can create users.
+
+Request Body:
+{
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "email": "jane.smith@example.lk",
+  "phone": "+94 11 9876543",
+  "username": "janesmith",
+  "password": "SecurePass123!",
+  "role": "MANAGER"
+}
+
+Response Body:
+{
+  "status": "success",
+  "code": 201,
+  "message": "User created successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "userId": "user-456",
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "email": "jane.smith@example.lk",
+    "username": "janesmith",
+    "role": "MANAGER",
+    "isActive": true,
+    "createdDate": "2024-04-15T10:00:00Z"
+  }
+}
+
+
+4. PUT /users/:userId - Update User
+
+Description: Updates an existing user's information. Partial updates supported.
+
+URL Parameters:
+- userId (string, required): User ID
+
+Request Body (all fields optional):
+{
+  "firstName": "Jane",
+  "lastName": "Smith-Updated",
+  "email": "jane.updated@example.lk",
+  "phone": "+94 11 9999999",
+  "role": "ADMIN",
+  "isActive": false
+}
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "User updated successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "userId": "user-456",
+    "firstName": "Jane",
+    "lastName": "Smith-Updated",
+    "email": "jane.updated@example.lk",
+    "role": "ADMIN",
+    "isActive": false
+  }
+}
+
+
+5. DELETE /users/:userId - Delete User
+
+Description: Deletes a user and revokes their system access permanently.
+
+URL Parameters:
+- userId (string, required): User ID
+
+Example Request:
+DELETE /users/user-456
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "User deleted successfully",
+  "timestamp": "2024-04-15T10:00:00Z"
+}
+
+
+6. GET /roles - List Roles
+
+Description: Returns available user roles with permissions.
+
+Query Parameters:
+- limit (number, optional): Items per page (default: 10, max: 100)
+
+Example Request:
+GET /roles?limit=100
+
+Response Body:
+{
+  "status": "success",
+  "code": 200,
+  "message": "Roles retrieved successfully",
+  "timestamp": "2024-04-15T10:00:00Z",
+  "data": {
+    "items": [
+      {
+        "id": "role-1",
+        "name": "ADMIN",
+        "description": "Administrator with full system access",
+        "permissions": ["users.create", "users.read", "users.update", "users.delete", "customers.all", "machines.all"]
+      },
+      {
+        "id": "role-2",
+        "name": "MANAGER",
+        "description": "Manager with limited administrative access",
+        "permissions": ["customers.all", "machines.all", "rentals.all", "invoices.all"]
+      },
+      {
+        "id": "role-3",
+        "name": "OPERATOR",
+        "description": "Operator with basic access",
+        "permissions": ["customers.read", "machines.read", "rentals.create", "rentals.read"]
+      }
+    ]
+  }
+}
+
+
+================================================================================
+DASHBOARD PAGE
+================================================================================
+
+1. GET /dashboard/stats - Get Dashboard Summary Statistics
+
+Description: Returns summary statistics for the dashboard (Total Customers, Active Rentals, Outstanding, Total Machines).
+
+Example Request:
+GET /dashboard/stats
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "totalCustomers": 1234,
+    "activeRentals": 567,
+    "outstanding": "Rs. 2.5M",
+    "totalMachines": 890
+  }
+}
+
+
+================================================================================
+MACHINES PAGE
+================================================================================
+
+1. GET /machines - List All Machines
+
+Description: Returns a paginated list of machines with search, filter, sort, and pagination support.
+
+Query Parameters:
+- search (string, optional): Search term (barcode, serial, brand, model)
+- brand (string, optional): Filter by brand
+- model (string, optional): Filter by model
+- type (string, optional): Filter by type - "Industrial", "Domestic", "Embroidery", "Overlock", "Buttonhole", "Other"
+- sortBy (string, optional): Column to sort by
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10)
+
+Example Request:
+GET /machines?search=Brother&type=Domestic&sortBy=brand&sortOrder=asc&page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "machines": [
+      {
+        "id": 1,
+        "barcode": "BROTHER-XL2600I-SN-2024-001",
+        "serialNumber": "SN-2024-001",
+        "boxNo": "BOX-2024-001",
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Domestic"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalItems": 50,
+      "itemsPerPage": 10,
+      "hasNextPage": true,
+      "hasPreviousPage": false
+    }
+  }
+}
+
+
+2. GET /machines/:id - Get Machine Profile (Overview)
+
+Description: Returns detailed machine information for the overview tab.
+
+URL Parameters:
+- id (number, required): Machine ID
+
+Example Request:
+GET /machines/1
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "barcode": "BROTHER-XL2600I-SN-2024-001",
+    "serialNumber": "SN-2024-001",
+    "boxNo": "BOX-2024-001",
+    "brand": "Brother",
+    "model": "XL2600i",
+    "type": "Domestic",
+    "status": "Available",
+    "currentCustomer": null,
+    "photos": ["url1", "url2"],
+    "purchaseDate": "2024-01-15",
+    "warrantyExpiry": "2027-01-15",
+    "location": "Main Warehouse",
+    "notes": "Regular maintenance required.",
+    "manufactureYear": "2024",
+    "country": "Sri Lanka",
+    "conditionOnArrival": "New",
+    "warrantyStatus": "Active",
+    "registrationLocation": "Main Warehouse"
+  }
+}
+
+
+3. GET /machines/:id/rental-history - Get Machine Rental History
+
+Description: Returns rental history for a specific machine.
+
+URL Parameters:
+- id (number, required): Machine ID
+
+Query Parameters:
+- page (number, optional): Page number (default: 1)
+- limit (number, optional): Items per page (default: 10)
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "rentalHistory": [
+      {
+        "id": 1,
+        "serialNumber": "SN-2024-001",
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Domestic",
+        "customer": "ABC Holdings (Pvt) Ltd",
+        "rentingPeriod": "2024-01-15 to 2024-02-15",
+        "startDate": "2024-01-15",
+        "endDate": "2024-02-15",
+        "status": "Completed"
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 1, "itemsPerPage": 10 }
+  }
+}
+
+
+4. POST /machines - Create Machine (Register)
+
+Description: Registers a new machine.
+
+Request Body:
+{
+  "brand": "Brother",
+  "model": "XL2600i",
+  "type": "Domestic",
+  "serialNumber": "SN-2024-001",
+  "boxNo": "BOX-2024-001",
+  "manufactureYear": "2024",
+  "country": "Sri Lanka",
+  "conditionOnArrival": "New",
+  "status": "Available",
+  "warrantyStatus": "Active",
+  "registrationLocation": "Main Warehouse",
+  "warrantyExpiryDate": "2027-01-15",
+  "referencePhoto": [],
+  "serialPlatePhoto": [],
+  "invoiceGrn": []
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Machine created successfully",
+  "data": {
+    "id": 1,
+    "barcode": "BROTHER-XL2600I-SN-2024-001",
+    "serialNumber": "SN-2024-001",
+    "boxNo": "BOX-2024-001",
+    "brand": "Brother",
+    "model": "XL2600i",
+    "type": "Domestic"
+  }
+}
+
+
+5. POST /machines/tools - Create Tool (Register)
+
+Description: Registers a new tool/accessory.
+
+Request Body:
+{
+  "toolName": "Thread Stand",
+  "toolType": "Thread Stand",
+  "brand": "Brother",
+  "model": "TS-100",
+  "serialNumber": "TS-2024-001",
+  "quantity": 1,
+  "unitPrice": 0,
+  "status": "Available",
+  "location": "Main Warehouse",
+  "purchaseDate": null,
+  "condition": "Good",
+  "notes": ""
+}
+
+Note: toolType values - "Thread Stand", "Extension Table", "Presser Foot Set", "Bobbin Case", "Needle Set", "Thread Spool", "Seam Ripper", "Measuring Tape", "Scissors", "Other". status - "Available", "In Use", "Maintenance", "Retired". condition - "New", "Good", "Fair", "Poor".
+
+Response Body:
+{
+  "success": true,
+  "message": "Tool created successfully",
+  "data": { "id": 1, "toolName": "Thread Stand", "toolType": "Thread Stand", "status": "Available" }
+}
+
+
+6. PUT /machines/:id - Update Machine
+
+Description: Updates an existing machine. Request body same shape as create (partial update supported).
+
+URL Parameters:
+- id (number, required): Machine ID
+
+Response Body:
+{
+  "success": true,
+  "message": "Machine updated successfully",
+  "data": { "id": 1, "brand": "Brother", "model": "XL2600i", "type": "Domestic", "status": "Available" }
+}
+
+
+7. DELETE /machines/:id - Delete Machine
+
+Description: Deletes a machine.
+
+URL Parameters:
+- id (number, required): Machine ID
+
+Response Body:
+{
+  "success": true,
+  "message": "Machine deleted successfully"
+}
+
+
+8. GET /brands - List Brands
+
+Description: Returns a list of all machine brands.
+
+Example Request:
+GET /brands
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "brands": [
+      {
+        "id": "brand-1",
+        "name": "Brother",
+        "code": "BR",
+        "description": "Brother International",
+        "isActive": true
+      },
+      {
+        "id": "brand-2",
+        "name": "Singer",
+        "code": "SG",
+        "description": "Singer Manufacturing Company",
+        "isActive": true
+      }
+    ]
+  }
+}
+
+
+9. GET /models - List Models
+
+Description: Returns a list of all machine models.
+
+Query Parameters:
+- brandId (string, optional): Filter models by brand ID
+
+Example Request:
+GET /models?brandId=brand-1
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "models": [
+      {
+        "id": "model-1",
+        "name": "XL2600i",
+        "code": "XL2600I",
+        "brandId": "brand-1",
+        "description": "Domestic sewing machine",
+        "isActive": true,
+        "brand": {
+          "id": "brand-1",
+          "name": "Brother",
+          "code": "BR"
+        }
+      }
+    ]
+  }
+}
+
+
+10. GET /machine-types - List Machine Types
+
+Description: Returns a list of all machine types/categories.
+
+Example Request:
+GET /machine-types
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "machineTypes": [
+      {
+        "id": "type-1",
+        "name": "Industrial",
+        "code": "IND",
+        "description": "Industrial sewing machines",
+        "isActive": true
+      },
+      {
+        "id": "type-2",
+        "name": "Domestic",
+        "code": "DOM",
+        "description": "Domestic sewing machines",
+        "isActive": true
+      }
+    ]
+  }
+}
+
+
+================================================================================
+INVENTORY PAGE
+================================================================================
+
+1. GET /inventory - List Inventory (Stock Levels by Brand/Model)
+
+Description: Returns inventory items with stock levels per brand/model.
+
+Query Parameters:
+- search (string, optional): Search by brand or model
+- type (string, optional): Filter by machine type
+- sortBy (string, optional): Column to sort by
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Example Request:
+GET /inventory?type=Domestic&page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "inventory": [
+      {
+        "id": 1,
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Domestic",
+        "totalStock": 25,
+        "availableStock": 20,
+        "rentedStock": 3,
+        "maintenanceStock": 2,
+        "retiredStock": 0,
+        "lastUpdated": "2024-04-15"
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 5, "itemsPerPage": 10 }
+  }
+}
+
+
+2. GET /inventory/transactions - List Stock Transactions
+
+Description: Returns stock-in/stock-out transactions for history view.
+
+Query Parameters:
+- brand (string, optional): Filter by brand
+- model (string, optional): Filter by model
+- transactionType (string, optional): "Stock In" or "Stock Out"
+- stockType (string, optional): "New" or "Used"
+- dateFrom (string, optional): ISO date
+- dateTo (string, optional): ISO date
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "transactions": [
+      {
+        "id": 1,
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Domestic",
+        "transactionType": "Stock In",
+        "stockType": "New",
+        "quantity": 10,
+        "warrantyExpiry": "2027-04-15",
+        "condition": null,
+        "location": "Main Warehouse",
+        "notes": "New shipment from supplier",
+        "transactionDate": "2024-04-15",
+        "performedBy": "Admin User"
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 1, "itemsPerPage": 10 }
+  }
+}
+
+
+================================================================================
+INVENTORY STOCK-IN PAGE
+================================================================================
+
+1. POST /inventory/stock-in - Create Stock In Transaction(s)
+
+Description: Records one or more stock-in transactions. Each item can have multiple machine units (serial/box per unit).
+
+Request Body:
+{
+  "transactions": [
+    {
+      "brand": "Brother",
+      "model": "XL2600i",
+      "type": "Domestic",
+      "stockType": "New",
+      "quantity": 2,
+      "warrantyExpiry": "2027-01-15",
+      "condition": null,
+      "location": "Main Warehouse",
+      "notes": "New shipment",
+      "transactionDate": "2024-04-15",
+      "performedBy": "Current User",
+      "machines": [
+        { "serialNumber": "SN-001", "boxNo": "BOX-001", "barcode": "BROTHER-XL2600I-SN-001", "qrCodeData": "..." },
+        { "serialNumber": "SN-002", "boxNo": "BOX-002", "barcode": "BROTHER-XL2600I-SN-002", "qrCodeData": "..." }
+      ]
+    }
+  ]
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Stock in recorded successfully",
+  "data": {
+    "transactionIds": [1, 2],
+    "totalUnits": 2
+  }
+}
+
+
+================================================================================
+PURCHASE ORDER PAGE
+================================================================================
+
+1. GET /purchase-orders - List Purchase Requests / Purchase Orders
+
+Description: Returns a paginated list of purchase requests (purchase orders).
+
+Query Parameters:
+- search (string, optional): Search by request number or customer name
+- status (string, optional): "Pending", "Approved", "Rejected", "Completed", "Cancelled", "Partially Fulfilled"
+- sortBy (string, optional): Column to sort by
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Example Request:
+GET /purchase-orders?status=Approved&page=1&limit=10
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "purchaseRequests": [
+      {
+        "id": 1,
+        "requestNumber": "PO24010001",
+        "customerId": 1,
+        "customerName": "ABC Holdings (Pvt) Ltd",
+        "customerType": "Business",
+        "requestDate": "2024-04-15",
+        "totalAmount": 100000,
+        "status": "Approved",
+        "requestedMachines": 2,
+        "machines": [
+          {
+            "id": "1",
+            "brand": "Brother",
+            "model": "XL2600i",
+            "type": "Domestic",
+            "quantity": 2,
+            "availableStock": 20,
+            "unitPrice": 35000,
+            "totalPrice": 70000,
+            "rentedQuantity": 2,
+            "pendingQuantity": 0
+          }
+        ],
+        "rentalAgreementIds": [1]
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 4, "itemsPerPage": 10 }
+  }
+}
+
+
+2. GET /purchase-orders/:id - Get Purchase Request Detail
+
+Description: Returns full detail of a purchase request including machines.
+
+URL Parameters:
+- id (number, required): Purchase Request ID
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "requestNumber": "PO24010001",
+    "customerId": 1,
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "customerType": "Business",
+    "requestDate": "2024-04-15",
+    "totalAmount": 100000,
+    "status": "Approved",
+    "requestedMachines": 2,
+    "machines": [
+      {
+        "id": "1",
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Domestic",
+        "quantity": 2,
+        "availableStock": 20,
+        "unitPrice": 35000,
+        "totalPrice": 70000,
+        "rentedQuantity": 2,
+        "pendingQuantity": 0,
+        "expectedAvailabilityDate": null
+      }
+    ],
+    "rentalAgreementIds": [1]
+  }
+}
+
+
+================================================================================
+PURCHASE ORDER CREATE PAGE
+================================================================================
+
+1. POST /purchase-orders - Create Purchase Request
+
+Description: Creates a new purchase request (purchase order) for a customer with requested machines.
+
+Request Body:
+{
+  "customerId": 1,
+  "customerName": "ABC Holdings (Pvt) Ltd",
+  "startDate": "2024-04-15",
+  "endDate": "2024-10-15",
+  "requestDate": "2024-04-15",
+  "machines": [
+    {
+      "id": "1",
+      "brand": "Brother",
+      "model": "XL2600i",
+      "type": "Domestic",
+      "quantity": 2,
+      "availableStock": 20,
+      "unitPrice": 35000,
+      "totalPrice": 70000,
+      "rentedQuantity": 0,
+      "pendingQuantity": 0
+    }
+  ],
+  "totalAmount": 70000
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Purchase request created successfully",
+  "data": {
+    "id": 1,
+    "requestNumber": "PO24010001",
+    "customerId": 1,
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "requestDate": "2024-04-15",
+    "totalAmount": 70000,
+    "status": "Pending",
+    "machines": [...]
+  }
+}
+
+
+2. POST /rental-agreements/from-purchase-request - Create Rental Agreement from Purchase Request
+
+Description: Creates a rental agreement from an approved purchase request (subset of machines with quantities and optional unit price overrides).
+
+Request Body:
+{
+  "purchaseRequestId": 1,
+  "rentalStartDate": "2024-04-20",
+  "rentalEndDate": "2024-10-20",
+  "machines": [
+    { "machineId": "1", "quantity": 2, "unitPrice": 35000 }
+  ]
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Rental agreement created successfully",
+  "data": {
+    "id": 1,
+    "agreementNo": "RA24010001",
+    "customerId": 1,
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "startDate": "2024-04-20",
+    "endDate": "2024-10-20",
+    "status": "Pending"
+  }
+}
+
+
+================================================================================
+RENTAL AGREEMENT PAGE
+================================================================================
+
+1. GET /rental-agreements - List Rental Agreements
+
+Description: Returns a paginated list of rental agreements.
+
+Query Parameters:
+- search (string, optional): Search by agreement no, customer name
+- status (string, optional): "Active", "Completed", "Cancelled", "Pending"
+- sortBy (string, optional): Column to sort by
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "rentalAgreements": [
+      {
+        "id": 1,
+        "agreementNo": "RA24010001",
+        "customerNo": "CUST-001",
+        "customerName": "ABC Holdings (Pvt) Ltd",
+        "serialNo": "SN-2024-002",
+        "startDate": "2024-01-15",
+        "endDate": "2024-04-15",
+        "monthlyRent": 50000,
+        "outstanding": 120000,
+        "status": "Active",
+        "purchaseRequestId": 1,
+        "purchaseRequestNumber": "PO24010001",
+        "expectedMachines": 2,
+        "addedMachines": 2,
+        "expectedMachineCategories": []
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 6, "itemsPerPage": 10 }
+  }
+}
+
+
+2. GET /rental-agreements/:id - Get Rental Agreement Detail
+
+Description: Returns full agreement detail including machine line items.
+
+URL Parameters:
+- id (number, required): Rental Agreement ID
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "agreementNo": "RA24010001",
+    "customerNo": "CUST-001",
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "customerAddress": "123 Main Street, Colombo 05",
+    "machines": [
+      {
+        "serialNo": "2LIDH01733",
+        "machineBrand": "Juki",
+        "machineModel": "LK-1903A-SS",
+        "machineType": "Electronic Bar Tack Machine",
+        "machineDescription": "JUKI LK-1903A-SS - ELECTRONIC BAR TACK MACHINE",
+        "motorBoxNo": "NMBDH01171",
+        "monthlyRent": 4250
+      }
+    ],
+    "startDate": "2024-01-15",
+    "endDate": "2024-04-15",
+    "monthlyRent": 50000,
+    "outstanding": 120000,
+    "status": "Active",
+    "totalAmount": 150000,
+    "paidAmount": 50000,
+    "deposit": 100000,
+    "notes": "Regular maintenance required.",
+    "additionalParts": "",
+    "customerIdNo": "72348.961V",
+    "customerFullName": "SURAJ PRANAWEERA",
+    "customerSignatureDate": "2026-01-02",
+    "customerSignature": "SURAJ PRANAWEERA",
+    "purchaseRequestId": 1,
+    "purchaseRequestNumber": "PO24010001",
+    "expectedMachines": 2,
+    "addedMachines": 2
+  }
+}
+
+
+3. GET /rental-agreements/by-number - Get Agreement by Number
+
+Description: Lookup rental agreement by agreement number to load machines for return or machine assignment.
+
+Query Parameters:
+- number (string, required): Agreement number (e.g. AGR-2024-001, RA24010001)
+
+Example Request:
+GET /rental-agreements/by-number?number=AGR-2024-001
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": "AGR-2024-001",
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "customerAddress": "123 Main Street, Colombo 05",
+    "customerPhone": "+94 11 2345678",
+    "customerEmail": "contact@abcholdings.lk",
+    "rentalStartDate": "2024-01-15",
+    "rentalEndDate": "2024-07-15",
+    "rentalPeriod": "6 months",
+    "monthlyRate": 25000,
+    "totalAmount": 150000,
+    "paidAmount": 100000,
+    "outstandingAmount": 50000,
+    "securityDeposit": 50000,
+    "dispatchedDate": "2024-01-15",
+    "expectedReturnDate": "2024-07-15",
+    "machines": [
+      {
+        "id": "MACH-001-01",
+        "model": "CAT 320",
+        "serialNumber": "SN-CAT320-2023-001",
+        "boxNumber": "BOX-CAT320-001",
+        "description": "Excavator CAT 320 - Unit 01"
+      }
+    ]
+  }
+}
+
+Note: Used by Returns Create page and Machine Assignment page to lookup agreement details before scanning.
+
+
+4. POST /rental-agreements - Create Rental Agreement (Standalone)
+
+Description: Creates a new rental agreement (customer, machines, add-ons, pricing). Same structure as documented under Customer page (item 11).
+
+Request Body: (See Customer Page - item 11 POST /rental-agreements)
+
+Response Body: (See Customer Page - item 11)
+
+
+5. PUT /rental-agreements/:id - Update Rental Agreement
+
+Description: Updates agreement details or adds machines (e.g. after QR scan). Can include machines array with serialNo, motorBoxNo, description, etc.
+
+URL Parameters:
+- id (number, required): Rental Agreement ID
+
+Request Body (partial): e.g. notes, additionalParts, or machines to add.
+
+Response Body:
+{
+  "success": true,
+  "message": "Rental agreement updated successfully",
+  "data": { "id": 1, "agreementNo": "RA24010001", "status": "Active", "addedMachines": 2 }
+}
+
+Note: Used by Machine Assignment page to add scanned machines to a Pending agreement. When all expected machines are added, the agreement status changes to Active, and an invoice is auto-generated.
+
+
+6. GET /rental-agreements/:id/gate-passes - List Gate Passes for Agreement
+
+Description: Returns gate passes linked to this rental agreement.
+
+URL Parameters:
+- id (number, required): Rental Agreement ID
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "gatePasses": [
+      {
+        "id": 1,
+        "gatepassNo": "016633",
+        "agreementReference": "RA-2024-001",
+        "dateOfIssue": "2024-01-20",
+        "returnable": true,
+        "entry": "OUT",
+        "items": []
+      }
+    ]
+  }
+}
+
+
+================================================================================
+MACHINE ASSIGNMENT PAGE (QR Scanner)
+================================================================================
+
+Description: Mobile-first QR scanner page for assigning physical machines to Pending rental agreements by scanning machine QR codes. After scanning all expected machines, the agreement becomes Active and an invoice is auto-generated.
+
+Flow:
+1. User enters rental agreement number
+2. Page displays agreement details and expected machine categories
+3. User scans QR codes (serialNo + motorBoxNo) for each machine
+4. Each scan adds a machine to the agreement
+5. When all expected machines are scanned, user submits to activate agreement
+
+APIs Used:
+- GET /rental-agreements/by-number?number=XXX - Lookup agreement (see Rental Agreement section #3)
+- PUT /rental-agreements/:id - Add scanned machines and update status (see Rental Agreement section #5)
+
+QR Code Format: QR contains JSON with serialNo and motorBoxNo (e.g., {"serialNo": "2LIDH01733", "motorBoxNo": "NMBDH01171"})
+
+Note: This page does not have dedicated APIs; it reuses rental agreement endpoints. Frontend generates invoice locally after activation and stores in localStorage for display on Invoice page.
+
+
+================================================================================
+GATEPASS PAGE
+================================================================================
+
+1. GET /gate-passes - List Gate Passes
+
+Description: Returns a paginated list of gate passes.
+
+Query Parameters:
+- search (string, optional): Search by gatepass no, agreement reference, driver name
+- entry (string, optional): "IN" or "OUT"
+- dateFrom (string, optional): ISO date
+- dateTo (string, optional): ISO date
+- sortBy (string, optional): Column to sort by
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "gatePasses": [
+      {
+        "id": 1,
+        "gatepassNo": "016633",
+        "agreementReference": "RA-2024-001",
+        "dateOfIssue": "2024-01-20",
+        "returnable": true,
+        "entry": "OUT",
+        "from": "Needle Technologies",
+        "to": "ABC Holdings (Pvt) Ltd",
+        "toAddress": "123 Main Street, Colombo 05",
+        "vehicleNumber": "ABC-1234",
+        "driverName": "Nimal Perera",
+        "items": [
+          {
+            "id": "1",
+            "description": "JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE",
+            "status": "GOOD",
+            "serialNo": "2LIDH01733",
+            "motorBoxNo": "NMBDH01171"
+          }
+        ],
+        "issuedBy": "Admin User",
+        "receivedBy": "Nimal Perera"
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 2, "itemsPerPage": 10 }
+  }
+}
+
+
+2. GET /gate-passes/:id - Get Gate Pass Detail
+
+Description: Returns a single gate pass with all items.
+
+URL Parameters:
+- id (number, required): Gate Pass ID
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "gatepassNo": "016633",
+    "agreementReference": "RA-2024-001",
+    "dateOfIssue": "2024-01-20",
+    "returnable": true,
+    "entry": "OUT",
+    "from": "Needle Technologies",
+    "to": "ABC Holdings (Pvt) Ltd",
+    "toAddress": "123 Main Street, Colombo 05",
+    "vehicleNumber": "ABC-1234",
+    "driverName": "Nimal Perera",
+    "items": [
+      {
+        "id": "1",
+        "description": "JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE",
+        "status": "GOOD",
+        "serialNo": "2LIDH01733",
+        "motorBoxNo": "NMBDH01171"
+      }
+    ],
+    "issuedBy": "Admin User",
+    "receivedBy": "Nimal Perera"
+  }
+}
+
+
+3. GET /gate-passes/by-number - Lookup Gate Pass by Number (Security Approval)
+
+Description: Used for security approval flow; lookup by gatepass number to get expected items for QR scan.
+
+Query Parameters:
+- number (string, required): Gate pass number (e.g. 016633)
+
+Example Request:
+GET /gate-passes/by-number?number=016633
+
+Response Body: Same as GET /gate-passes/:id data.
+
+
+4. POST /gate-passes - Create Gate Pass
+
+Description: Creates a new gate pass. Minimum 5 items required per gate pass.
+
+Request Body:
+{
+  "agreementReference": "RA-2024-001",
+  "dateOfIssue": "2024-01-20",
+  "returnable": true,
+  "entry": "OUT",
+  "from": "Needle Technologies",
+  "to": "ABC Holdings (Pvt) Ltd",
+  "toAddress": "123 Main Street, Colombo 05",
+  "vehicleNumber": "ABC-1234",
+  "driverName": "Nimal Perera",
+  "items": [
+    {
+      "id": "item-1",
+      "description": "JUKI LX-1903A-SS - ELECTRONIC BAR TACK MACHINE",
+      "status": "GOOD",
+      "serialNo": "2LIDH01733",
+      "motorBoxNo": "NMBDH01171"
+    }
+  ],
+  "issuedBy": "Admin User",
+  "receivedBy": ""
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Gate pass created successfully",
+  "data": {
+    "id": 1,
+    "gatepassNo": "016633",
+    "agreementReference": "RA-2024-001",
+    "dateOfIssue": "2024-01-20",
+    "entry": "OUT",
+    "items": [...]
+  }
+}
+
+
+5. PUT /gate-passes/:id - Update Gate Pass
+
+Description: Updates an existing gate pass (e.g. items, receivedBy).
+
+URL Parameters:
+- id (number, required): Gate Pass ID
+
+Request Body: Same shape as create (partial update supported).
+
+Response Body:
+{
+  "success": true,
+  "message": "Gate pass updated successfully",
+  "data": { "id": 1, "gatepassNo": "016633" }
+}
+
+
+6. POST /gate-passes/:id/security-approve - Security Approval (QR Scan Verification)
+
+Description: After security officer scans all expected items via QR, backend marks gate pass as security-approved. Request can include list of scanned (serialNo, motorBoxNo) pairs for audit.
+
+URL Parameters:
+- id (number, required): Gate Pass ID
+
+Request Body (optional):
+{
+  "scannedPairs": [
+    { "serialNo": "2LIDH01733", "motorBoxNo": "NMBDH01171" }
+  ]
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Gate pass security approved"
+}
+
+
+================================================================================
+GATEPASS QR PAGE (Security Verification)
+================================================================================
+
+Description: Mobile-first QR scanner page for security officers to verify gate passes before allowing machines to leave/enter premises. Scans each machine QR and matches against expected items on the gate pass.
+
+Flow:
+1. Security officer enters gatepass number
+2. Page displays gatepass details and expected machine list
+3. Officer scans QR codes (serialNo + motorBoxNo) for each machine
+4. System verifies each scan matches an expected machine
+5. Failed scans (wrong machines) can be marked as resolved if accidental
+6. When all machines verified and no unresolved mismatches, officer can approve
+
+APIs Used:
+- GET /gate-passes/by-number?number=XXX - Lookup gatepass (see Gatepass section #3)
+- POST /gate-passes/:id/security-approve - Approve gatepass (see Gatepass section #6)
+
+QR Code Format: QR contains JSON with serialNo and motorBoxNo (e.g., {"serialNo": "2LIDH01733", "motorBoxNo": "NMBDH01171"})
+
+Note: Frontend handles all scan validation and tracking. Only final approval call is sent to backend.
+
+
+================================================================================
+RETURNS PAGE (List) & RETURNS CREATE PAGE
+================================================================================
+
+1. GET /returns - List Returns
+
+Description: Returns a list of return records for the Returns list page.
+
+Query Parameters:
+- search (string, optional): Search by return number, machine name, customer name
+- agreementId (string, optional): Filter by agreement ID
+- returnType (string, optional): "Standard", "Damage", "Missing", "Exchange"
+- status (string, optional): "Pending", "Completed", "Under Review"
+- dateFrom (string, optional): ISO date
+- dateTo (string, optional): ISO date
+- sortBy (string, optional): Column to sort by
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "returns": [
+      {
+        "id": 1,
+        "returnNumber": "RET-2024-001",
+        "machineName": "Excavator CAT 320",
+        "machineId": "MACH-001",
+        "customerName": "ABC Holdings (Pvt) Ltd",
+        "returnDate": "2024-04-15",
+        "returnType": "Standard",
+        "status": "Completed",
+        "damageNote": null,
+        "photosCount": 0,
+        "repairCost": null,
+        "inspectedBy": "John Doe",
+        "machineDetails": {
+          "model": "CAT 320",
+          "serialNumber": "SN-CAT320-2023-001",
+          "manufacturer": "Caterpillar",
+          "year": 2023,
+          "category": "Excavator",
+          "location": "Warehouse A"
+        },
+        "rentalDetails": {
+          "agreementNumber": "AGR-2024-001",
+          "customerPhone": "+94 11 2345678",
+          "customerEmail": "contact@abcholdings.lk",
+          "rentalStartDate": "2024-01-15",
+          "rentalEndDate": "2024-07-15",
+          "rentalPeriod": "6 months",
+          "monthlyRate": 25000,
+          "totalAmount": 150000,
+          "paidAmount": 100000,
+          "outstandingAmount": 50000,
+          "securityDeposit": 50000,
+          "dispatchedDate": "2024-01-15",
+          "expectedReturnDate": "2024-07-15"
+        }
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 1, "itemsPerPage": 10 }
+  }
+}
+
+Note: returnType in list is "Standard" | "Damage" | "Missing" | "Exchange". When creating a return, frontend may send "Good" which backend can store/return as "Standard".
+
+
+2. POST /returns - Create Return
+
+Description: Creates a return record for an agreement with condition per machine (Good, Standard, Damage, Missing, Exchange) and optional damage notes/photos.
+
+Request Body:
+{
+  "agreementId": "AGR-2024-001",
+  "customerName": "ABC Holdings (Pvt) Ltd",
+  "totalMachines": 10,
+  "createdBy": "Current User",
+  "machines": [
+    {
+      "serialNumber": "SN-CAT320-2023-001",
+      "boxNumber": "BOX-CAT320-001",
+      "model": "CAT 320",
+      "description": "Excavator CAT 320 - Unit 01",
+      "returnType": "Good",
+      "damageNote": null,
+      "photosCount": 0
+    },
+    {
+      "serialNumber": "SN-CAT320-2023-002",
+      "boxNumber": "BOX-CAT320-002",
+      "model": "CAT 320",
+      "description": "Excavator CAT 320 - Unit 02",
+      "returnType": "Damage",
+      "damageNote": "Minor scratch on hydraulic arm",
+      "photosCount": 2
+    }
+  ]
+}
+
+Note: returnType values: "Good", "Standard", "Damage", "Missing", "Exchange". For "Damage" or "Missing", frontend expects damageNote and at least one photo.
+
+Response Body:
+{
+  "success": true,
+  "message": "Return created successfully",
+  "data": {
+    "id": 1,
+    "returnNumber": "RET-2024-001",
+    "agreementId": "AGR-2024-001",
+    "createdAt": "2024-04-15T10:00:00Z",
+    "createdBy": "Current User",
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "totalMachines": 10,
+    "machines": [...]
+  }
+}
+
+
+3. GET /returns/:id - Get Return Detail (View Modal)
+
+Description: Returns full return record with machineDetails and rentalDetails for the view modal.
+
+URL Parameters:
+- id (number, required): Return ID
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "returnNumber": "RET-2024-001",
+    "machineName": "Excavator CAT 320",
+    "machineId": "MACH-001",
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "returnDate": "2024-04-15",
+    "returnType": "Standard",
+    "status": "Completed",
+    "damageNote": null,
+    "photosCount": 0,
+    "repairCost": null,
+    "inspectedBy": "John Doe",
+    "machineDetails": { "model": "CAT 320", "serialNumber": "SN-CAT320-2023-001", "manufacturer": "Caterpillar", "year": 2023, "category": "Excavator", "location": "Warehouse A" },
+    "rentalDetails": { "agreementNumber": "AGR-2024-001", "customerPhone": "+94 11 2345678", "customerEmail": "contact@abcholdings.lk", "rentalStartDate": "2024-01-15", "rentalEndDate": "2024-07-15", "rentalPeriod": "6 months", "monthlyRate": 25000, "totalAmount": 150000, "paidAmount": 100000, "outstandingAmount": 50000, "securityDeposit": 50000, "dispatchedDate": "2024-01-15", "expectedReturnDate": "2024-07-15" }
+  }
+}
+
+
+4. PUT /returns/:id - Update Return (Edit Modal)
+
+Description: Updates a return record (status, repairCost, inspectedBy). Used when editing from Returns list page.
+
+URL Parameters:
+- id (number, required): Return ID
+
+Request Body:
+{
+  "status": "Completed",
+  "repairCost": 5000,
+  "inspectedBy": "John Doe"
+}
+
+Note: status values - "Pending", "Completed", "Under Review".
+
+Response Body:
+{
+  "success": true,
+  "message": "Return updated successfully",
+  "data": { "id": 1, "returnNumber": "RET-2024-001", "status": "Completed" }
+}
+
+
+================================================================================
+RETURN QR PAGE (Mobile Scanner)
+================================================================================
+
+Description: Mobile-first QR scanner page for processing machine returns. After looking up agreement, scans each machine QR, collects return condition (Good/Standard/Damage/Missing/Exchange), and captures damage notes + photos for damaged/missing items.
+
+Flow:
+1. User enters rental agreement number
+2. Page displays agreement details and machine list
+3. User scans QR codes for each machine
+4. For each scan, popup appears to select return type and capture damage proof if needed
+5. After all machines scanned, user submits return summary
+
+APIs Used:
+- GET /rental-agreements/by-number?number=XXX - Lookup agreement (see Rental Agreement section #3)
+- POST /returns - Create return (see Returns section #2)
+
+QR Code Format: QR contains JSON with serialNo and motorBoxNo (e.g., {"serialNo": "SN-CAT320-2023-001", "boxNumber": "BOX-CAT320-001"})
+
+Note: Photos are collected as File objects in frontend and included in POST /returns multipart/form-data request or uploaded separately.
+
+
+================================================================================
+INVOICE PAGE
+================================================================================
+
+1. GET /invoices - List Invoices
+
+Description: Returns a paginated list of invoices.
+
+Query Parameters:
+- search (string, optional): Search by invoice number, customer name
+- invoiceType (string, optional): "VAT" or "Non-VAT"
+- status (string, optional): "draft", "issued", "paid", "overdue"
+- dateFrom (string, optional): ISO date
+- dateTo (string, optional): ISO date
+- sortBy (string, optional): Column to sort by
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "invoices": [
+      {
+        "id": 1,
+        "invoiceNumber": "00415",
+        "invoiceType": "VAT",
+        "customerName": "ABC Holdings (Pvt) Ltd",
+        "customerAddress": "123 Main Street, Colombo 05",
+        "vatTinNic": "VAT-123456789",
+        "invoiceDate": "2024-12-31",
+        "periodFrom": "2024-12-01",
+        "periodTo": "2024-12-31",
+        "items": [
+          {
+            "id": "1",
+            "itemCode": "212WG00032",
+            "description": "JUKI LK1900A-SS-ELECTRONIC BAR TACK MACHINE",
+            "serialNumber": null,
+            "brand": "Juki",
+            "model": "LK1900A-SS",
+            "type": "Industrial",
+            "numberOfMachines": 1,
+            "monthlyRentPerMachine": 15000,
+            "subtotal": 15000
+          }
+        ],
+        "subtotal": 15000,
+        "vatAmount": 2700,
+        "totalAmount": 17700,
+        "paymentDetails": {
+          "paymentMethod": "Bank Transfer",
+          "paymentDate": "2024-01-20",
+          "receiptNumber": "RCP-2024-001",
+          "receiptFile": null,
+          "amount": 17700,
+          "status": "paid"
+        },
+        "status": "paid"
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 2, "itemsPerPage": 10 }
+  }
+}
+
+
+2. GET /invoices/:id - Get Invoice Detail
+
+Description: Returns full invoice for view/print/download.
+
+URL Parameters:
+- id (number, required): Invoice ID
+
+Response Body: Same structure as single invoice object above (with full items and paymentDetails).
+
+
+3. POST /invoices - Create Invoice
+
+Description: Creates a new invoice (draft or issued).
+
+Request Body:
+{
+  "invoiceType": "VAT",
+  "customerName": "ABC Holdings (Pvt) Ltd",
+  "customerAddress": "123 Main Street, Colombo 05",
+  "vatTinNic": "VAT-123456789",
+  "invoiceDate": "2024-12-31",
+  "periodFrom": "2024-12-01",
+  "periodTo": "2024-12-31",
+  "items": [
+    {
+      "itemCode": "212WG00032",
+      "description": "JUKI LK1900A-SS-ELECTRONIC BAR TACK MACHINE",
+      "serialNumber": null,
+      "brand": "Juki",
+      "model": "LK1900A-SS",
+      "type": "Industrial",
+      "numberOfMachines": 1,
+      "monthlyRentPerMachine": 15000,
+      "subtotal": 15000
+    }
+  ],
+  "subtotal": 15000,
+  "vatAmount": 2700,
+  "totalAmount": 17700,
+  "paymentDetails": {
+    "paymentMethod": "Bank Transfer",
+    "paymentDate": "2024-01-20",
+    "receiptNumber": "RCP-2024-001",
+    "receiptFile": null,
+    "amount": 17700,
+    "status": "paid"
+  },
+  "status": "issued"
+}
+
+Note: receiptFile is optional (File upload or URL string). Frontend may require either receiptNumber or receiptFile when dispatching payment.
+
+Response Body:
+{
+  "success": true,
+  "message": "Invoice created successfully",
+  "data": {
+    "id": 1,
+    "invoiceNumber": "00415",
+    "invoiceType": "VAT",
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "totalAmount": 17700,
+    "status": "issued"
+  }
+}
+
+
+4. PUT /invoices/:id - Update Invoice
+
+Description: Updates an existing invoice (e.g. payment details, status).
+
+URL Parameters:
+- id (number, required): Invoice ID
+
+Request Body: Same shape as create (partial update supported).
+
+Response Body:
+{
+  "success": true,
+  "message": "Invoice updated successfully",
+  "data": { "id": 1, "invoiceNumber": "00415", "status": "paid" }
+}
+
+
+================================================================================
+BINCARD PAGE
+================================================================================
+
+1. GET /bincard/entries - List Bincard Entries
+
+Description: Returns bincard (stock movement) entries with optional filters.
+
+Query Parameters:
+- brand (string, optional): Filter by brand
+- model (string, optional): Filter by model
+- transactionType (string, optional): "Stock In", "Stock Out", "Rental Out", "Return In", "Maintenance Out", "Maintenance In", "Retired"
+- dateFrom (string, optional): ISO date
+- dateTo (string, optional): ISO date
+- sortBy (string, optional): Column to sort by (e.g. date)
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "entries": [
+      {
+        "id": 1,
+        "date": "2024-01-01",
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Domestic",
+        "transactionType": "Stock In",
+        "reference": "PO-2024-001",
+        "in": 25,
+        "out": 0,
+        "balance": 25,
+        "location": "Main Warehouse",
+        "performedBy": "Admin User",
+        "notes": "Initial stock from supplier"
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 10, "itemsPerPage": 10 }
+  }
+}
+
+
+2. GET /bincard/summary - Get Bincard Summary by Brand/Model
+
+Description: Returns summary (opening balance, total in, total out, closing balance) per brand/model.
+
+Query Parameters:
+- brand (string, optional): Filter by brand
+- model (string, optional): Filter by model
+- dateFrom (string, optional): ISO date
+- dateTo (string, optional): ISO date
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "summary": [
+      {
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Domestic",
+        "openingBalance": 0,
+        "totalIn": 25,
+        "totalOut": 5,
+        "closingBalance": 20,
+        "lastTransactionDate": "2024-02-15"
+      }
+    ]
+  }
+}
+
+
+================================================================================
+ANALYTICS PAGE
+================================================================================
+
+1. GET /analytics/monthly-revenue - Get Monthly Revenue
+
+Description: Returns monthly revenue (VAT, Non-VAT, total) for charts.
+
+Query Parameters:
+- period (string, optional): "6M", "12M", "YTD"
+- year (number, optional): Year
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "monthlyRevenue": [
+      {
+        "month": "Jan 2024",
+        "monthNumber": 1,
+        "vatRevenue": 450000,
+        "nonVatRevenue": 120000,
+        "totalRevenue": 570000
+      }
+    ]
+  }
+}
+
+
+2. GET /analytics/machine-utilization - Get Machine Utilization
+
+Description: Returns utilization metrics per model (rentals, days rented, utilization rate, revenue).
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "machineUtilization": [
+      {
+        "model": "XL2600i",
+        "brand": "Brother",
+        "totalRentals": 45,
+        "totalDaysRented": 320,
+        "utilizationRate": 85.2,
+        "revenue": 160000
+      }
+    ]
+  }
+}
+
+
+3. GET /analytics/damage-frequency - Get Damage Frequency
+
+Description: Returns damage stats per model (total damages, repair cost, damage rate).
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "damageFrequency": [
+      {
+        "model": "XL2600i",
+        "brand": "Brother",
+        "totalDamages": 8,
+        "repairCost": 40000,
+        "damageRate": 17.8
+      }
+    ]
+  }
+}
+
+
+4. GET /analytics/idle-machines - Get Idle Machines
+
+Description: Returns list of machines that are available but idle (with days idle, last rental date).
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "idleMachines": [
+      {
+        "id": 1,
+        "barcode": "BROTHER-XL2600I-SN-2024-001",
+        "serialNumber": "SN-2024-001",
+        "brand": "Brother",
+        "model": "XL2600i",
+        "type": "Domestic",
+        "status": "Available",
+        "daysIdle": 15,
+        "lastRentalDate": "2024-05-01"
+      }
+    ]
+  }
+}
+
+
+5. GET /analytics/rental-status-distribution - Get Rental Status Distribution
+
+Description: Returns distribution of rental agreements by status (Active, Completed, Pending, Cancelled) with counts and percentages.
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "rentalStatusDistribution": [
+      { "status": "Active", "count": 42, "percentage": 58 },
+      { "status": "Completed", "count": 24, "percentage": 33 },
+      { "status": "Pending", "count": 4, "percentage": 6 },
+      { "status": "Cancelled", "count": 2, "percentage": 3 }
+    ]
+  }
+}
+
+
+6. GET /analytics/revenue-by-brand - Get Revenue by Brand
+
+Description: Returns revenue breakdown by machine brand with percentages.
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "revenueByBrand": [
+      { "brand": "Brother", "revenue": 1250000, "percentage": 32 },
+      { "brand": "Singer", "revenue": 980000, "percentage": 25 },
+      { "brand": "Janome", "revenue": 850000, "percentage": 22 },
+      { "brand": "Juki", "revenue": 520000, "percentage": 13 },
+      { "brand": "Others", "revenue": 320000, "percentage": 8 }
+    ]
+  }
+}
+
+
+7. GET /analytics/outstanding-aging - Get Outstanding Aging
+
+Description: Returns outstanding balance aging analysis (0-30 days, 31-60 days, 61+ days).
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "outstandingAging": [
+      { "bucket": "0-30 days", "amount": 450000, "count": 12 },
+      { "bucket": "31-60 days", "amount": 280000, "count": 5 },
+      { "bucket": "61+ days", "amount": 180000, "count": 3 }
+    ]
+  }
+}
+
+
+8. GET /analytics/alerts-by-type - Get Alerts by Type
+
+Description: Returns count of outstanding alerts grouped by type and severity.
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "alertsByType": [
+      { "type": "Payment Overdue", "count": 8, "severity": "High" },
+      { "type": "High Balance", "count": 5, "severity": "Medium" },
+      { "type": "Agreement Expiring", "count": 12, "severity": "Low" },
+      { "type": "Credit Limit Exceeded", "count": 2, "severity": "Critical" }
+    ]
+  }
+}
+
+
+9. GET /analytics/gatepass-volume - Get Gatepass Volume
+
+Description: Returns count of inbound and outbound gate passes.
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "gatepassVolume": [
+      { "entry": "OUT", "count": 156, "label": "Outbound" },
+      { "entry": "IN", "count": 142, "label": "Inbound" }
+    ]
+  }
+}
+
+
+================================================================================
+OUTSTANDING ALERTS PAGE
+================================================================================
+
+1. GET /outstanding-alerts - List Outstanding Alerts
+
+Description: Returns a paginated list of outstanding alerts (payment overdue, high balance, credit limit exceeded, agreement expiring).
+
+Query Parameters:
+- search (string, optional): Search by customer name
+- customerType (string, optional): "Company" or "Individual"
+- alertType (string, optional): "Payment Overdue", "High Balance", "Credit Limit Exceeded", "Agreement Expiring"
+- severity (string, optional): "Low", "Medium", "High", "Critical"
+- status (string, optional): "Active" or "Resolved"
+- sortBy (string, optional): Column to sort by
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "outstandingAlerts": [
+      {
+        "id": 1,
+        "customerId": 1,
+        "customerName": "ABC Holdings (Pvt) Ltd",
+        "customerType": "Company",
+        "alertType": "Payment Overdue",
+        "description": "Monthly payment for Bulldozer CAT D6 is overdue by 15 days",
+        "amount": 50000,
+        "dueDate": "2024-04-01",
+        "severity": "High",
+        "status": "Active",
+        "createdAt": "2024-04-16",
+        "resolvedAt": null,
+        "relatedAgreement": "AGR-2024-002",
+        "relatedMachine": "Bulldozer CAT D6",
+        "daysOverdue": 15
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 8, "itemsPerPage": 10 }
+  }
+}
+
+
+2. GET /outstanding-alerts/:id - Get Alert Detail
+
+Description: Returns a single outstanding alert.
+
+URL Parameters:
+- id (number, required): Alert ID
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "customerId": 1,
+    "customerName": "ABC Holdings (Pvt) Ltd",
+    "customerType": "Company",
+    "alertType": "Payment Overdue",
+    "description": "Monthly payment for Bulldozer CAT D6 is overdue by 15 days",
+    "amount": 50000,
+    "dueDate": "2024-04-01",
+    "severity": "High",
+    "status": "Active",
+    "createdAt": "2024-04-16",
+    "relatedAgreement": "AGR-2024-002",
+    "relatedMachine": "Bulldozer CAT D6",
+    "daysOverdue": 15
+  }
+}
+
+
+3. PATCH /outstanding-alerts/:id/resolve - Resolve Alert
+
+Description: Marks an outstanding alert as resolved.
+
+URL Parameters:
+- id (number, required): Alert ID
+
+Request Body (optional):
+{
+  "resolvedAt": "2024-04-20",
+  "notes": "Payment received"
+}
+
+Response Body:
+{
+  "success": true,
+  "message": "Alert resolved successfully",
+  "data": { "id": 1, "status": "Resolved", "resolvedAt": "2024-04-20" }
+}
+
+
+4. PATCH /outstanding-alerts/:id - Update Alert (Edit Modal)
+
+Description: Partial update of an outstanding alert (status, resolvedAt). Used when editing from Outstanding Alerts list page.
+
+URL Parameters:
+- id (number, required): Alert ID
+
+Request Body:
+{
+  "status": "Resolved",
+  "resolvedAt": "2024-04-20"
+}
+
+Note: When status is set to "Resolved", frontend expects resolvedAt to be set (ISO date string). When status is set back to "Active", resolvedAt may be cleared.
+
+Response Body:
+{
+  "success": true,
+  "message": "Alert updated successfully",
+  "data": { "id": 1, "status": "Resolved", "resolvedAt": "2024-04-20" }
+}
+
+
+================================================================================
+TRANSACTION LOG PAGE
+================================================================================
+
+1. GET /transaction-log - List Transaction Logs
+
+Description: Returns a paginated list of all system transactions (inventory, rental, return, invoice, maintenance, etc.).
+
+Query Parameters:
+- search (string, optional): Search by reference, description, customer
+- category (string, optional): "Inventory", "Rental", "Return", "Invoice", "Maintenance", "Other"
+- transactionType (string, optional): e.g. "Stock In", "Stock Out", "Rental Created", "Return Processed", "Invoice Generated", "Payment Received", "Maintenance Out", "Maintenance In", "Machine Retired"
+- dateFrom (string, optional): ISO date
+- dateTo (string, optional): ISO date
+- status (string, optional): "Success", "Pending", "Failed", "Cancelled"
+- sortBy (string, optional): Column to sort by (e.g. transactionDate)
+- sortOrder (string, optional): "asc" or "desc"
+- page (number, optional): Page number
+- limit (number, optional): Items per page
+
+Response Body:
+{
+  "success": true,
+  "data": {
+    "transactions": [
+      {
+        "id": 1,
+        "transactionDate": "2024-01-01",
+        "transactionTime": "10:30:00",
+        "category": "Inventory",
+        "transactionType": "Stock In",
+        "reference": "PO-2024-001",
+        "description": "StockIn: Brother XL2600i - 25 units",
+        "brand": "Brother",
+        "model": "XL2600i",
+        "customer": null,
+        "amount": null,
+        "quantity": 25,
+        "location": "Main Warehouse",
+        "performedBy": "Admin User",
+        "status": "Success",
+        "notes": "Initial stock from supplier"
+      }
+    ],
+    "pagination": { "currentPage": 1, "totalPages": 1, "totalItems": 13, "itemsPerPage": 10 }
+  }
+}
+
+
+2. GET /transaction-log/export - Export Transaction Log
+
+Description: Exports transaction log with same filters as list (category, transactionType, dateFrom, dateTo, etc.). Frontend uses this for the Export button.
+
+Query Parameters: Same as GET /transaction-log (category, transactionType, dateFrom, dateTo, search, status, sortBy, sortOrder).
+
+Response: File download (CSV or XLSX). Content-Type and filename as appropriate (e.g. application/csv, transactions.csv).
+
+
+================================================================================
+QR PAGE (Scanner)
+================================================================================
+
+The QR page (/qr) does not call backend APIs directly. It receives query parameters and returns the decoded result (e.g. serial number, box number) to the parent via URL or postMessage.
+
+Query Parameters (for /qr page):
+- context (string, optional): e.g. "general", "gatepass", "returns"
+- returnUrl (string, optional): URL to redirect after scan
+- title (string, optional): Page title, default "QR Code Scanner"
+- subtitle (string, optional): Subtitle text
+
+QR Decoded Payload (frontend expects one of):
+- JSON with keys: serialNo / serialNumber / serial, motorBoxNo / boxNo / boxNumber (for gatepass/returns scan).
+- Or plain text parseable for serial/box (e.g. "Serial: XXX, Box: YYY").
+
+No request/response bodies for backend; backend may store scan audit logs if needed (e.g. POST /audit/scan with decoded data and context).
+
+
+================================================================================
+LETTER HEAD PAGE
+================================================================================
+
+Description: A print-only page for generating company letterhead. No API calls. Displays company logo, contact information, and blank content area for printing.
+
+Note: Frontend component renders letterhead template with company info (name, address, phone, email) and footer. Print via browser print dialog.
+
+
+================================================================================
+REFERENCE DATA / DROPDOWNS (Shared by multiple pages)
+================================================================================
+
+The following list endpoints are used by the frontend for dropdowns and selectors. Backend can return the same list APIs with optional minimal fields for dropdown use, or use the same list response.
+
+- GET /customers - Used by: Rental Agreement (create - customer select), Purchase Order Create (customer select), Invoice (customer select). Frontend needs: id, name, type, status. Optional: address (for display in agreement/invoice). Filter: status = Active for create flows.
+- GET /rental-agreements - Used by: Gatepass (create/update - agreement reference select). Frontend needs: id (or agreementNo as identifier), customerName, customerAddress (or link to customer). Gatepass form sends agreementReference (agreement id or agreement number string).
+- GET /inventory - Used by: Purchase Order Create (brand/model/type/availableStock for machine rows). Frontend needs: id, brand, model, type, totalStock, availableStock, rentedStock, maintenanceStock for each inventory item.
+- GET /brands - Used by: Machine pages, Invoice pages for brand dropdown
+- GET /models - Used by: Machine pages, Invoice pages for model dropdown (filtered by brandId)
+- GET /machine-types - Used by: Machine pages, Invoice pages for type dropdown
+- Add-ons: Rental Agreement Create uses add-ons list (id, name, price). Doc references mockAddOns; backend can provide GET /add-ons or include in agreement create context.
+
+Pagination: All list endpoints support page and limit (default limit 10; options 10, 25, 50, 100 where applicable). Frontend Table component uses itemsPerPage; parent passes filtered/sorted data from API.
+
+
+================================================================================
+ADDITIONAL NOTES
+================================================================================
+
+1. Authentication: All endpoints (except login/register) require Authorization header with Bearer token.
+   Header format: Authorization: Bearer {access_token}
+   Token stored in localStorage as 'needletech_access_token'
+
+2. Date Formats:
+   - Display dates: DD/MM/YYYY (e.g., "15/01/2024")
+   - API request/response dates: ISO 8601 format (e.g., "2024-01-15T10:00:00Z")
+   - Frontend handles conversion between formats
+
+3. Status Mapping:
+   - Customer status: Frontend "Active"/"Inactive"/"Blocked" ↔ API may use same or different values
+   - User status: Frontend "Active"/"Inactive" ↔ API isActive boolean
+   - Machine status: "Available", "Rented", "Maintenance", "Retired"
+   - Rental agreement status: "Active", "Completed", "Cancelled", "Pending"
+   - Invoice status: "draft", "issued", "paid", "overdue"
+   - Gate pass entry: "IN", "OUT"
+
+4. Pagination Response Format (Standard):
+   {
+     "currentPage": number,
+     "totalPages": number,
+     "totalItems": number,
+     "itemsPerPage": number,
+     "hasNextPage": boolean (optional),
+     "hasPreviousPage": boolean (optional)
+   }
+
+5. Error Response Format (All Endpoints):
+   {
+     "success": false,
+     "message": "Error message",
+     "errors": { "fieldName": "Field error message" }
+   }
+
+6. File Uploads:
+   - Machine registration: referencePhoto, serialPlatePhoto, invoiceGrn (multiple files)
+   - Returns: damage photos (multiple files per machine)
+   - Invoice: receiptFile (single file)
+   - Format: multipart/form-data or base64 encoded in JSON
+   - Accepted formats: JPG, PNG, PDF (max 5MB per file)
+
+7. QR Code Format (Machine QR):
+   JSON: { "serialNo": "string", "motorBoxNo": "string" }
+   Alternative keys accepted: serialNumber, serial, boxNo, boxNumber
+   Used by: Machine Assignment, Gatepass QR, Return QR pages
+
+8. Mobile Pages (QR Scanner Pages):
+   - Machine Assignment: /machine-assign-page
+   - Gatepass QR (Security): /gatepass-qr-page
+   - Return QR: /return-qr-page
+   - General QR Scanner: /qr
+   All use same QR format and share similar flow patterns
+
+
+=================================================================================
+END OF API DOCUMENTATION
+=================================================================================

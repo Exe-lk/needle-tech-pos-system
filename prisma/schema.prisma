@@ -1,0 +1,1066 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============ Authentication & Authorization ============
+
+model Role {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  permissions String[] // Array of permission strings
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  users User[]
+
+  @@index([name])
+  @@map("roles")
+}
+
+model User {
+  id           String    @id @db.Uuid // Matches Supabase auth.users.id
+  username     String    @unique
+  roleId       String    @db.Uuid
+  fullName     String
+  email        String    @unique
+  phone        String?
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?  @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  // Relations
+  createdRentals    Rental[]       @relation("RentalCreator")
+  createdInvoices   Invoice[]      @relation("InvoiceCreator")
+  receivedPayments  Payment[]      @relation("PaymentReceiver")
+  issuedGatePasses  GatePass[]     @relation("GatePassIssuer")
+  inspectedReturns  Return[]       @relation("ReturnInspector")
+  createdDamageReports DamageReport[] @relation("DamageReportCreator")
+  auditLogs         AuditLog[]
+  qrPrintLogs       QrPrintLog[]
+
+  @@index([username])
+  @@index([email])
+  @@index([roleId])
+  @@index([status])
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+
+model Settings {
+  id              String   @id @default("global")
+  
+  // Company Info
+  companyName     String?
+  companyAddress  String?
+  vatRegistrationNumber String?
+  currency        String   @default("USD")
+  defaultCountry  String?
+  
+  // Tax Settings
+  defaultVatRate  Decimal  @default(0) @db.Decimal(5, 2)
+  customerTypeTaxRules Json? // Array of tax rules
+  
+  // Credit Policy
+  enableCreditLock Boolean @default(true)
+  lockAfterDaysOverdue Int @default(30)
+  maxOutstandingForNewRentals Decimal @default(0) @db.Decimal(15, 2)
+  
+  // Alert Schedule
+  alertDaysOfMonth Int[] // Days of month to send alerts
+  alertChannels    String[] // EMAIL, SMS, etc.
+  
+  // Invoice Settings
+  invoicePrefix    String @default("INV")
+  invoiceStartNumber Int @default(1000)
+  
+  // Rental Settings
+  agreementPrefix  String @default("RNT")
+  agreementStartNumber Int @default(1000)
+  
+  // Gate Pass Settings
+  gatePassPrefix   String @default("GP")
+  gatePassStartNumber Int @default(1000)
+  
+  // Return Settings
+  returnPrefix     String @default("RET")
+  returnStartNumber Int @default(1000)
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("settings")
+}
+
+// ============ Customers ============
+
+model Customer {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code            String   @unique
+  type            CustomerType
+  name            String
+  contactPerson   String?
+  phones          String[]
+  emails          String[]
+  
+  // Address
+  billingAddressLine1  String?
+  billingAddressLine2  String?
+  billingCity          String?
+  billingRegion        String?
+  billingPostalCode    String?
+  billingCountry       String?
+  
+  shippingAddressLine1 String?
+  shippingAddressLine2 String?
+  shippingCity         String?
+  shippingRegion       String?
+  shippingPostalCode   String?
+  shippingCountry      String?
+  
+  // Tax Profile
+  vatApplicable           Boolean  @default(true)
+  vatRegistrationNumber   String?
+  taxCategory             TaxCategory @default(VAT)
+  
+  // Financials
+  creditLimit                    Decimal  @default(0) @db.Decimal(15, 2)
+  paymentTermsDays               Int      @default(30)
+  currentBalance                 Decimal  @default(0) @db.Decimal(15, 2)
+  oldestOutstandingInvoiceDate   DateTime? @db.Timestamptz(6)
+  isCreditLocked                 Boolean  @default(false)
+  creditLockReason               String?
+  
+  // Alert Preferences
+  alertChannels   String[] // EMAIL, SMS
+  alertLanguage   String   @default("en")
+  
+  status          CustomerStatus @default(ACTIVE)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  locations       CustomerLocation[]
+  purchaseOrders  PurchaseOrder[]
+  rentals         Rental[]
+  invoices        Invoice[]
+  payments        Payment[]
+  gatePasses      GatePass[]
+  returns         Return[]
+  outstandingAlerts OutstandingAlert[]
+  transactionLogs TransactionLog[]
+
+  @@index([code])
+  @@index([type])
+  @@index([status])
+  @@index([isCreditLocked])
+  @@index([currentBalance])
+  @@map("customers")
+}
+
+model CustomerLocation {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId  String   @db.Uuid
+  name        String   // e.g. "Main Factory", "Warehouse A"
+  addressLine1 String?
+  addressLine2 String?
+  city        String?
+  region      String?
+  postalCode  String?
+  country     String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+
+  @@index([customerId])
+  @@map("customer_locations")
+}
+
+enum CustomerType {
+  GARMENT_FACTORY
+  INDIVIDUAL
+}
+
+enum TaxCategory {
+  VAT
+  NON_VAT
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+
+
+// ============ Machine Management ============
+
+model Brand {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  code        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  models      Model[]
+  machines    Machine[]
+
+  @@index([name])
+  @@index([code])
+  @@index([isActive])
+  @@map("brands")
+}
+
+model Model {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  brandId     String   @db.Uuid
+  code        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  machines    Machine[]
+
+  @@unique([name, brandId])
+  @@index([name])
+  @@index([brandId])
+  @@index([isActive])
+  @@map("models")
+}
+
+model MachineType {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  code        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  machines    Machine[]
+
+  @@index([name])
+  @@index([code])
+  @@index([isActive])
+  @@map("machine_types")
+}
+
+model Machine {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  brandId      String   @db.Uuid
+  modelId      String?  @db.Uuid
+  typeId       String?  @db.Uuid
+  serialNumber String   @unique
+  boxNumber    String?
+  qrCodeValue  String   @unique
+  qrCodeImageUrl String?
+  
+  photos       String[] // Array of photo URLs
+  voltage      String?
+  power        String?
+  stitchType   String?
+  maxSpeedSpm  Int?
+  specsOther   String?
+  
+  status       MachineStatus @default(AVAILABLE)
+  statusHistory Json[] // Array of status change records
+  
+  // Current Location
+  currentLocationType String?
+  currentLocationName String?
+  currentLocationAddress String?
+  
+  // Additional Machine Details (from frontend requirements)
+  manufactureYear     String?
+  country             String?
+  conditionOnArrival  String?
+  warrantyStatus      String?
+  warrantyExpiryDate  DateTime? @db.Timestamptz(6)
+  purchaseDate        DateTime? @db.Timestamptz(6)
+  notes               String?
+  
+  // Lifecycle
+  onboardedAt        DateTime  @default(now()) @db.Timestamptz(6)
+  onboardedByUserId  String?   @db.Uuid
+  lastRentalId       String?   @db.Uuid
+  totalRentalDays    Int       @default(0)
+  
+  // Pricing
+  unitPrice          Decimal?  @db.Decimal(10, 2)
+  monthlyRentalFee   Decimal?  @db.Decimal(10, 2)
+  
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  brand         Brand       @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  model         Model?      @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  type          MachineType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  rentalMachines  RentalMachine[]
+  gatePassMachines GatePassMachine[]
+  returns         Return[] @relation("ReturnMachine")
+  returnMachines  ReturnMachine[] @relation("ReturnMachineItems")
+  damageReports   DamageReport[]
+  qrPrintLogs     QrPrintLog[]
+
+  @@index([serialNumber])
+  @@index([qrCodeValue])
+  @@index([brandId])
+  @@index([modelId])
+  @@index([typeId])
+  @@index([status])
+  @@index([boxNumber])
+  @@map("machines")
+}
+
+enum MachineStatus {
+  AVAILABLE
+  RENTED
+  DAMAGED
+  MAINTENANCE
+  RETIRED
+}
+
+// ============ Tools Management ============
+
+model Tool {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  toolName        String
+  toolType        String
+  brand           String?
+  model           String?
+  serialNumber    String?
+  quantity        Int
+  unitPrice       Decimal? @db.Decimal(10, 2)
+  status          ToolStatus @default(AVAILABLE)
+  location        String
+  purchaseDate    DateTime? @db.Timestamptz(6)
+  condition       ToolCondition @default(GOOD)
+  notes           String?
+  toolPhotoUrls   String[] // Array of photo URLs
+  
+  // Soft delete
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime? @db.Timestamptz(6)
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([toolName])
+  @@index([toolType])
+  @@index([status])
+  @@index([location])
+  @@index([isDeleted])
+  @@map("tools")
+}
+
+enum ToolStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  RETIRED
+}
+
+enum ToolCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+// ============ Purchase Orders (Purchase Requests) ============
+
+model PurchaseOrder {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestNumber   String   @unique
+  customerId      String   @db.Uuid
+  requestDate     DateTime @db.Timestamptz(6)
+  totalAmount     Decimal  @db.Decimal(15, 2)
+  status          PurchaseOrderStatus @default(PENDING)
+  
+  // Rental period for agreements created from this PO (user cannot change in Create Hiring form)
+  startDate       DateTime? @db.Timestamptz(6)
+  endDate         DateTime? @db.Timestamptz(6)
+  
+  // Customer location for this purchase order
+  customerLocationId String? @db.Uuid
+  
+  // Purchase request machines (stored as JSON for flexibility)
+  machines        Json[] // Array of machine requests with quantities
+  
+  notes           String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerLocation CustomerLocation? @relation(fields: [customerLocationId], references: [id], onDelete: SetNull)
+  rentals         Rental[] @relation("PurchaseOrderRentals")
+
+  @@index([requestNumber])
+  @@index([customerId])
+  @@index([status])
+  @@index([requestDate])
+  @@index([customerLocationId])
+  @@map("purchase_orders")
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  PARTIALLY_FULFILLED
+}
+
+// ============ Bincard (Stock Movements) ============
+
+model BincardEntry {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date            DateTime @db.Timestamptz(6)
+  transactionType StockTransactionType
+  
+  // Machine identification (denormalized for easier querying)
+  brand           String
+  model           String
+  machineType     String?
+  
+  // Transaction details
+  reference       String? // PO number, rental number, etc.
+  quantityIn      Int     @default(0)
+  quantityOut     Int     @default(0)
+  balance         Int
+  location        String?
+  stockType       String? // "New" or "Used" for stock-in transactions
+  warrantyExpiry  DateTime? @db.Timestamptz(6)
+  condition       String?
+  
+  performedBy     String?
+  notes           String?
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([date(sort: Desc)])
+  @@index([brand])
+  @@index([model])
+  @@index([transactionType])
+  @@map("bincard_entries")
+}
+
+enum StockTransactionType {
+  STOCK_IN
+  STOCK_OUT
+  RENTAL_OUT
+  RETURN_IN
+  MAINTENANCE_OUT
+  MAINTENANCE_IN
+  RETIRED
+  ADJUSTMENT
+}
+
+
+model Rental {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agreementNumber String   @unique
+  customerId      String   @db.Uuid
+  purchaseOrderId String?  @db.Uuid
+  status          RentalStatus @default(ACTIVE)
+  agreementType   String   @default("RENTAL")
+  
+  startDate       DateTime @db.Timestamptz(6)
+  expectedEndDate DateTime? @db.Timestamptz(6) // Optional for open-ended agreements
+  actualEndDate   DateTime? @db.Timestamptz(6)
+  
+  // Billing / payment basis
+  paymentBasis         RentalPaymentBasis  @default(MONTHLY)   // MONTHLY | DAILY
+  firstMonthProrated  Boolean             @default(false)     // If true, first period charged by days; if false, full month
+  
+  // Financials
+  subtotal        Decimal  @db.Decimal(15, 2)
+  vatAmount       Decimal  @db.Decimal(15, 2)
+  total           Decimal  @db.Decimal(15, 2)
+  depositTotal    Decimal  @default(0) @db.Decimal(15, 2)
+  paidAmount      Decimal  @default(0) @db.Decimal(15, 2)
+  balance         Decimal  @db.Decimal(15, 2)
+  currency        String   @default("USD")
+  
+  securityDepositInvoiceId String? @db.Uuid
+  
+  isLockedForNewTransactions Boolean @default(false)
+  lockedReason              String?
+  
+  // For agreements created from PO without assigned machines: requested lines (brand, model, type, quantity, dailyRate)
+  requestedMachineLines     Json?    // [{ brand, model, type?, quantity, dailyRate }]
+  
+  createdByUserId String   @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder? @relation("PurchaseOrderRentals", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  createdBy       User      @relation("RentalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  
+  machines        RentalMachine[]
+  invoices        Invoice[]
+  gatePasses      GatePass[]
+  returns         Return[]
+  damageReports   DamageReport[]
+
+  @@index([agreementNumber])
+  @@index([customerId])
+  @@index([purchaseOrderId])
+  @@index([status])
+  @@index([startDate])
+  @@index([createdByUserId])
+  @@map("rentals")
+}
+
+enum RentalPaymentBasis {
+  MONTHLY
+  DAILY
+}
+
+model RentalMachine {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rentalId        String   @db.Uuid
+  machineId       String   @db.Uuid
+  
+  dailyRate       Decimal  @db.Decimal(10, 2)
+  securityDeposit Decimal  @db.Decimal(10, 2)
+  quantity        Int      @default(1)
+  
+  // Track billing period for open-ended agreements
+  lastBilledToDate  DateTime?  @db.Timestamptz(6)   // Last date included in an invoice for this line
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  rental          Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  machine         Machine  @relation(fields: [machineId], references: [id], onDelete: Restrict)
+
+  @@index([rentalId])
+  @@index([machineId])
+  @@map("rental_machines")
+}
+
+enum RentalStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+model Invoice {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceNumber   String   @unique
+  customerId      String   @db.Uuid
+  rentalId        String?  @db.Uuid
+  type            InvoiceType
+  taxCategory     TaxCategory
+  status          InvoiceStatus @default(DRAFT)
+  
+  issueDate       DateTime @db.Timestamptz(6)
+  dueDate         DateTime @db.Timestamptz(6)
+  
+  lineItems       Json[] // Array of line items
+  
+  // Totals
+  subtotal        Decimal  @db.Decimal(15, 2)
+  vatAmount       Decimal  @db.Decimal(15, 2)
+  grandTotal      Decimal  @db.Decimal(15, 2)
+  currency        String   @default("USD")
+  
+  paymentStatus   PaymentStatus @default(PENDING)
+  paidAmount      Decimal  @default(0) @db.Decimal(15, 2)
+  balance         Decimal  @db.Decimal(15, 2)
+  
+  createdByUserId String   @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  rental          Rental?  @relation(fields: [rentalId], references: [id], onDelete: SetNull)
+  createdBy       User     @relation("InvoiceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  
+  payments        PaymentInvoice[]
+  damageReports   DamageReport[]
+  returns         Return[] @relation("ReturnInvoice")
+
+  @@index([invoiceNumber])
+  @@index([customerId])
+  @@index([rentalId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([paymentStatus])
+  @@map("invoices")
+}
+
+enum InvoiceType {
+  RENTAL
+  DEPOSIT
+  DAMAGE
+  OTHER
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+
+model Payment {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  receiptNumber   String   @unique
+  customerId      String   @db.Uuid
+  
+  totalAmount     Decimal  @db.Decimal(15, 2)
+  currency        String   @default("USD")
+  paymentMethod   PaymentMethod
+  referenceNumber String?
+  
+  paidAt          DateTime @db.Timestamptz(6)
+  receivedByUserId String  @db.Uuid
+  notes           String?
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  receivedBy      User     @relation("PaymentReceiver", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  
+  invoices        PaymentInvoice[]
+
+  @@index([receiptNumber])
+  @@index([customerId])
+  @@index([paidAt])
+  @@map("payments")
+}
+
+model PaymentInvoice {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentId   String   @db.Uuid
+  invoiceId   String   @db.Uuid
+  amount      Decimal  @db.Decimal(15, 2)
+  
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@map("payment_invoices")
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  CARD
+}
+
+
+model GatePass {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gatePassNumber  String   @unique
+  rentalId        String   @db.Uuid
+  customerId      String   @db.Uuid
+  
+  driverName      String?
+  vehicleNumber   String?
+  
+  departureTime   DateTime @db.Timestamptz(6)
+  arrivalTime     DateTime? @db.Timestamptz(6)
+  
+  issuedByUserId  String   @db.Uuid
+  status          GatePassStatus @default(PENDING)
+  printedAt       DateTime? @db.Timestamptz(6)
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  rental          Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  issuedBy        User     @relation("GatePassIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
+  
+  machines        GatePassMachine[]
+
+  @@index([gatePassNumber])
+  @@index([rentalId])
+  @@index([customerId])
+  @@index([status])
+  @@index([departureTime])
+  @@map("gate_passes")
+}
+
+model GatePassMachine {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gatePassId  String   @db.Uuid
+  machineId   String   @db.Uuid
+  quantity    Int      @default(1)
+  
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  gatePass    GatePass @relation(fields: [gatePassId], references: [id], onDelete: Cascade)
+  machine     Machine  @relation(fields: [machineId], references: [id], onDelete: Restrict)
+
+  @@index([gatePassId])
+  @@index([machineId])
+  @@map("gate_pass_machines")
+}
+
+enum GatePassStatus {
+  PENDING
+  DEPARTED
+  RETURNED
+  REJECTED
+}
+
+
+model Return {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  returnNumber        String   @unique
+  rentalId            String   @db.Uuid
+  customerId          String   @db.Uuid
+  machineId           String?  @db.Uuid // Optional for backward compatibility, use ReturnMachine for multiple machines
+  
+  returnDate          DateTime @db.Timestamptz(6)
+  condition           String?
+  triageCategory      TriageCategory @default(STANDARD)
+  notes               String?
+  photos              String[]
+  
+  damageReportId      String?  @db.Uuid
+  invoiceId           String?  @db.Uuid // Link to invoice generated for this return
+  inspectedByUserId   String   @db.Uuid
+  returnReceiptNumber String?
+  
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  rental              Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  customer            Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  machine             Machine? @relation("ReturnMachine", fields: [machineId], references: [id], onDelete: Restrict)
+  inspectedBy         User     @relation("ReturnInspector", fields: [inspectedByUserId], references: [id], onDelete: Restrict)
+  damageReport        DamageReport? @relation(fields: [damageReportId], references: [id], onDelete: SetNull)
+  invoice             Invoice? @relation("ReturnInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
+  machines            ReturnMachine[]
+
+  @@index([returnNumber])
+  @@index([rentalId])
+  @@index([machineId])
+  @@index([returnDate])
+  @@index([triageCategory])
+  @@index([invoiceId])
+  @@map("returns")
+}
+
+model ReturnMachine {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  returnId             String   @db.Uuid
+  machineId            String   @db.Uuid
+  
+  returnType           String   // "Good", "Standard", "Damage", "Missing", "Exchange"
+  damageNote           String?
+  photos               String[] // Array of photo URLs for this machine
+  
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  return              Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  machine             Machine  @relation("ReturnMachineItems", fields: [machineId], references: [id], onDelete: Restrict)
+
+  @@index([returnId])
+  @@index([machineId])
+  @@map("return_machines")
+}
+
+enum TriageCategory {
+  STANDARD
+  DAMAGE
+  MISSING_PARTS
+  EXCHANGE
+}
+
+model DamageReport {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  machineId               String   @db.Uuid
+  rentalId                String   @db.Uuid
+  
+  severity                DamageSeverity
+  category                DamageCategory
+  description             String
+  photos                  String[]
+  
+  estimatedRepairCost     Decimal  @default(0) @db.Decimal(10, 2)
+  approvedChargeToCustomer Decimal @default(0) @db.Decimal(10, 2)
+  billedInvoiceId         String?  @db.Uuid
+  
+  resolved                Boolean  @default(false)
+  resolvedAt              DateTime? @db.Timestamptz(6)
+  
+  createdByUserId         String   @db.Uuid
+  createdAt               DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  machine                 Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  rental                  Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  billedInvoice           Invoice? @relation(fields: [billedInvoiceId], references: [id], onDelete: SetNull)
+  createdBy               User     @relation("DamageReportCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  
+  returns                 Return[]
+
+  @@index([machineId])
+  @@index([rentalId])
+  @@index([resolved])
+  @@index([severity])
+  @@map("damage_reports")
+}
+
+enum DamageSeverity {
+  MINOR
+  MODERATE
+  MAJOR
+}
+
+enum DamageCategory {
+  DAMAGE
+  MISSING_PARTS
+  EXCHANGE
+}
+
+model OutstandingAlert {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId          String   @db.Uuid
+  generatedAt         DateTime @db.Timestamptz(6)
+  scheduleDay         Int
+  channel             AlertChannel
+  status              AlertStatus @default(PENDING)
+  sentAt              DateTime? @db.Timestamptz(6)
+  
+  // Frontend requirements
+  alertType           AlertType?
+  severity            AlertSeverity?
+  description         String?
+  amount              Decimal?  @db.Decimal(15, 2)
+  dueDate             DateTime? @db.Timestamptz(6)
+  resolvedAt          DateTime? @db.Timestamptz(6)
+  relatedAgreement    String?
+  relatedMachine      String?
+  daysOverdue         Int?
+  
+  overdueInvoices     Json[] // Array of overdue invoice summaries
+  
+  // Snapshot Totals
+  totalOutstanding    Decimal  @db.Decimal(15, 2)
+  totalOverdue        Decimal  @db.Decimal(15, 2)
+  
+  creditLockTriggered Boolean  @default(false)
+  
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  customer            Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([generatedAt])
+  @@index([status])
+  @@index([alertType])
+  @@index([severity])
+  @@index([scheduleDay])
+  @@map("outstanding_alerts")
+}
+
+enum AlertType {
+  PAYMENT_OVERDUE
+  HIGH_BALANCE
+  CREDIT_LIMIT_EXCEEDED
+  AGREEMENT_EXPIRING
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertChannel {
+  EMAIL
+  SMS
+}
+
+enum AlertStatus {
+  PENDING
+  SENT
+  FAILED
+  ACTIVE
+  RESOLVED
+}
+
+// ============ Transaction Log ============
+
+model TransactionLog {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transactionDate DateTime @db.Timestamptz(6)
+  category        TransactionCategory
+  transactionType String
+  reference       String?
+  description     String
+  brand           String?
+  model           String?
+  customerId      String?  @db.Uuid
+  amount          Decimal? @db.Decimal(15, 2)
+  quantity        Int?
+  location        String?
+  performedBy     String?
+  status          TransactionStatus @default(SUCCESS)
+  notes           String?
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  // Relations
+  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([transactionDate(sort: Desc)])
+  @@index([category])
+  @@index([transactionType])
+  @@index([status])
+  @@index([customerId])
+  @@map("transaction_logs")
+}
+
+enum TransactionCategory {
+  INVENTORY
+  RENTAL
+  RETURN
+  INVOICE
+  MAINTENANCE
+  OTHER
+}
+
+enum TransactionStatus {
+  SUCCESS
+  PENDING
+  FAILED
+  CANCELLED
+}
+
+
+model AuditLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  timestamp   DateTime @default(now()) @db.Timestamptz(6)
+  userId      String   @db.Uuid
+  roleId      String?  @db.Uuid
+  action      AuditAction
+  entityType  String
+  entityId    String?  @db.Uuid
+  description String?
+  
+  before      Json?
+  after       Json?
+  
+  // Source
+  sourceIp    String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([timestamp(sort: Desc)])
+  @@index([userId])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  LOGIN
+  LOGOUT
+}
+
+// ============ QR Print Logs ============
+
+model QrPrintLog {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  machineId       String   @db.Uuid
+  printedByUserId String   @db.Uuid
+  
+  // Denormalized fields for easier querying
+  serialNumber    String
+  boxNumber       String?
+  qrCodeValue     String
+  
+  // Print details
+  printCount      Int      @default(1) // Number of copies printed in this session
+  printedAt       DateTime @default(now()) @db.Timestamptz(6)
+  
+  // Additional metadata
+  notes           String?
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  machine         Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  printedBy       User     @relation(fields: [printedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([machineId])
+  @@index([printedByUserId])
+  @@index([printedAt(sort: Desc)])
+  @@index([serialNumber])
+  @@index([qrCodeValue])
+  @@map("qr_print_logs")
+}
