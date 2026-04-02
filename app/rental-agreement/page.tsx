@@ -28,6 +28,8 @@ interface RentalAgreement {
   agreementNo: string;
   customerNo: string;
   customerName: string;
+  /** Used for table filtering; derived from customers list (Business/Customer). */
+  customerType?: string;
   serialNo: string;
   startDate: string;
   endDate: string | null;
@@ -538,12 +540,12 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
 // Mock customer data
 const mockCustomers = [
-  { id: 'CUST-001', name: 'ABC Holdings (Pvt) Ltd', address: '123 Main Street, Colombo 05' },
-  { id: 'CUST-002', name: 'John Perera', address: '456 Galle Road, Mount Lavinia' },
-  { id: 'CUST-003', name: 'XYZ Engineering', address: '789 Kandy Road, Peradeniya' },
-  { id: 'CUST-004', name: 'Kamal Silva', address: '321 Negombo Road, Wattala' },
-  { id: 'CUST-005', name: 'Mega Constructions', address: '654 High Level Road, Maharagama' },
-  { id: 'CUST-006', name: 'VIHANGA SHADE STRUCTURES', address: '317/2, NEW KANDY ROAD, BIYAGAMA' },
+  { id: 'CUST-001', name: 'ABC Holdings (Pvt) Ltd', address: '123 Main Street, Colombo 05', type: 'Business' as const },
+  { id: 'CUST-002', name: 'John Perera', address: '456 Galle Road, Mount Lavinia', type: 'Customer' as const },
+  { id: 'CUST-003', name: 'XYZ Engineering', address: '789 Kandy Road, Peradeniya', type: 'Business' as const },
+  { id: 'CUST-004', name: 'Kamal Silva', address: '321 Negombo Road, Wattala', type: 'Customer' as const },
+  { id: 'CUST-005', name: 'Mega Constructions', address: '654 High Level Road, Maharagama', type: 'Business' as const },
+  { id: 'CUST-006', name: 'VIHANGA SHADE STRUCTURES', address: '317/2, NEW KANDY ROAD, BIYAGAMA', type: 'Business' as const },
 ];
 
 // Mock machine data
@@ -834,6 +836,13 @@ const columns: TableColumn[] = [
     filterable: true,
   },
   {
+    key: 'customerType',
+    label: 'Customer Type',
+    sortable: false,
+    filterable: true,
+    hidden: true,
+  },
+  {
     key: 'purchaseRequestNumber',
     label: 'Purchase Order',
     sortable: true,
@@ -960,6 +969,7 @@ const columns: TableColumn[] = [
 const RentalAgreementPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isCreateTypeSelectOpen, setIsCreateTypeSelectOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -1001,7 +1011,8 @@ const RentalAgreementPage: React.FC = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [rentalDetail, setRentalDetail] = useState<RentalAgreementInfo | null>(null);
   const [rentalDetailLoading, setRentalDetailLoading] = useState(false);
-  const [customers, setCustomers] = useState<{ id: string; name: string; address?: string }[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string; address?: string; type?: 'Business' | 'Customer' }[]>([]);
+  const [createAgreementVariant, setCreateAgreementVariant] = useState<'vat' | 'nonVat' | null>(null);
   /** When set, inline QR scanner is shown for this category (gatepass-style, no navigation). */
   const [activeScanCategoryIndex, setActiveScanCategoryIndex] = useState<number | null>(null);
   const [scannerKey, setScannerKey] = useState(1);
@@ -1059,11 +1070,21 @@ const RentalAgreementPage: React.FC = () => {
       if (!res.ok) return;
       const items = json?.data?.items ?? json?.data ?? [];
       const list = Array.isArray(items)
-        ? items.map((c: { id: string; name: string; billingAddressLine1?: string; billingCity?: string; billingRegion?: string; billingPostalCode?: string; billingCountry?: string }) => ({
-          id: c.id,
-          name: c.name,
-          address: [c.billingAddressLine1, c.billingCity, c.billingRegion, c.billingPostalCode, c.billingCountry].filter(Boolean).join(', '),
-        }))
+        ? items.map((c: { id: string; name: string; billingAddressLine1?: string; billingCity?: string; billingRegion?: string; billingPostalCode?: string; billingCountry?: string; type?: string }) => {
+          const raw = (c.type ?? '').toString().trim().toUpperCase();
+          const mappedType: 'Business' | 'Customer' | undefined =
+            raw === 'GARMENT_FACTORY' || raw === 'BUSINESS' || raw === 'COMPANY'
+              ? 'Business'
+              : raw === 'INDIVIDUAL' || raw === 'CUSTOMER' || raw === 'PERSON'
+                ? 'Customer'
+                : undefined;
+          return {
+            id: c.id,
+            name: c.name,
+            address: [c.billingAddressLine1, c.billingCity, c.billingRegion, c.billingPostalCode, c.billingCountry].filter(Boolean).join(', '),
+            type: mappedType,
+          };
+        })
         : [];
       setCustomers(list);
     } catch {
@@ -1074,6 +1095,11 @@ const RentalAgreementPage: React.FC = () => {
   useEffect(() => {
     fetchRentals();
   }, [fetchRentals]);
+
+  // Needed for Customer Type filter (safe: if it fails, filter will just have no options)
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   useEffect(() => {
     if (isViewModalOpen && selectedAgreement) {
@@ -1090,8 +1116,20 @@ const RentalAgreementPage: React.FC = () => {
   }, [isViewModalOpen, selectedAgreement?.id, fetchRentalById]);
 
   useEffect(() => {
-    if (isCreateModalOpen && customers.length === 0) fetchCustomers();
-  }, [isCreateModalOpen, customers.length, fetchCustomers]);
+    if ((isCreateModalOpen || isCreateTypeSelectOpen) && customers.length === 0) fetchCustomers();
+  }, [isCreateModalOpen, isCreateTypeSelectOpen, customers.length, fetchCustomers]);
+
+  const agreementsForTable = useMemo(() => {
+    const list = customers.length > 0 ? customers : mockCustomers;
+    const typeById = new Map<string, string>();
+    list.forEach((c: any) => {
+      if (c?.id && c?.type) typeById.set(String(c.id), String(c.type));
+    });
+    return agreements.map((a) => ({
+      ...a,
+      customerType: typeById.get(a.customerNo) || '',
+    }));
+  }, [agreements, customers]);
 
   // Calculate pricing
   const pricing = useMemo(() => {
@@ -1130,12 +1168,20 @@ const RentalAgreementPage: React.FC = () => {
 
   // Customer options for SearchableSelect (API customers with fallback to mock)
   const customerOptions = useMemo(() => {
-    const list = customers.length > 0 ? customers : mockCustomers;
-    return list.map((customer) => ({
+    const list = (customers.length > 0 ? customers : mockCustomers) as Array<{ id: string; name: string; address?: string; type?: 'Business' | 'Customer' }>;
+    const filtered =
+      createAgreementVariant === 'vat'
+        ? list.filter((c) => c.type === 'Business')
+        : createAgreementVariant === 'nonVat'
+          ? list.filter((c) => c.type === 'Customer')
+          : list;
+    // If API data doesn't include type for some reason, don't accidentally hide everything.
+    const safeList = filtered.length > 0 ? filtered : list;
+    return safeList.map((customer) => ({
       value: customer.id,
       label: `${customer.name}${customer.address ? ` - ${customer.address}` : ''}`,
     }));
-  }, [customers]);
+  }, [customers, createAgreementVariant]);
 
   // Brand options for SearchableSelect
   const brandOptions = useMemo(() => {
@@ -1192,7 +1238,7 @@ const RentalAgreementPage: React.FC = () => {
     return `RA${yy}${mm}${seq}`;
   };
 
-  const handleCreateAgreement = () => {
+  const beginCreateAgreement = () => {
     setIsCreateModalOpen(true);
     setAgreementNo(generateAgreementNo());
     setCustomerId('');
@@ -1207,6 +1253,20 @@ const RentalAgreementPage: React.FC = () => {
     setCustomerSignatureDate(new Date().toISOString().split('T')[0]);
     setCustomerAddress('');
     setFormErrors({});
+  };
+
+  const handleCreateAgreement = () => {
+    setIsCreateTypeSelectOpen(true);
+  };
+
+  const handleCloseCreateTypeSelectModal = () => {
+    setIsCreateTypeSelectOpen(false);
+  };
+
+  const handleCreateVariantSelect = (variant: 'vat' | 'nonVat') => {
+    setCreateAgreementVariant(variant);
+    setIsCreateTypeSelectOpen(false);
+    beginCreateAgreement();
   };
 
   const handleCloseCreateModal = () => {
@@ -1224,6 +1284,7 @@ const RentalAgreementPage: React.FC = () => {
     setCustomerSignatureDate('');
     setCustomerAddress('');
     setFormErrors({});
+    setCreateAgreementVariant(null);
   };
 
   // Auto-fill customer full name and address when customer is selected (signature stays empty for user to enter/print)
@@ -2552,7 +2613,7 @@ const RentalAgreementPage: React.FC = () => {
               </div>
             )}
             <Table
-              data={agreements}
+              data={agreementsForTable}
               columns={columns}
               actions={actions}
               itemsPerPage={10}
@@ -2606,8 +2667,47 @@ const RentalAgreementPage: React.FC = () => {
           </div>
         )}
 
-
-
+        {/* Create Agreement Type Select Modal (VAT vs Non-VAT) */}
+        {isCreateTypeSelectOpen && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create Hiring Machine Agreement</h2>
+                <Tooltip content="Close">
+                  <button
+                    onClick={handleCloseCreateTypeSelectModal}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </Tooltip>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Select what you want to create.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleCreateVariantSelect('nonVat')}
+                    className="px-4 py-3 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <img src="/non_vat_logo.jpeg" alt="Non-VAT logo" className="h-10 w-auto mb-2" />
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white">Non-VAT</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Individual customers</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateVariantSelect('vat')}
+                    className="px-4 py-3 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <img src="/vat_logo.jpeg" alt="VAT logo" className="h-10 w-auto mb-2" />
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white">VAT</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Business customers</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create Rental Agreement Modal - Document-style (matches print Hiring Machine Agreement) */}
         {isCreateModalOpen && (
@@ -2630,8 +2730,18 @@ const RentalAgreementPage: React.FC = () => {
                   <div className="mb-6">
                     <div className="flex flex-row items-center justify-between gap-4 mb-2">
                       <div className="flex-shrink-0">
-                        <div className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white">NEEDLE</div>
-                        <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mt-0.5">TECHNOLOGIES CO.(PVT) LTD.</div>
+                        {createAgreementVariant ? (
+                          <img
+                            src={createAgreementVariant === 'vat' ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg'}
+                            alt={createAgreementVariant === 'vat' ? 'VAT logo' : 'Non-VAT logo'}
+                            className="h-12 sm:h-14 w-auto"
+                          />
+                        ) : (
+                          <>
+                            <div className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white">NEEDLE</div>
+                            <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mt-0.5">TECHNOLOGIES CO.(PVT) LTD.</div>
+                          </>
+                        )}
                       </div>
                       <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-400 text-right flex-1">
                         {LETTERHEAD_COMPANY_INFO.tagline}

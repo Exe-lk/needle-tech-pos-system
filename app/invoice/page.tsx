@@ -548,6 +548,7 @@ const columns: TableColumn[] = [
 const InvoicePage: React.FC = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isInvoiceTypeSelectOpen, setIsInvoiceTypeSelectOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -572,6 +573,7 @@ const InvoicePage: React.FC = () => {
 
   // Create form state
   const [customerId, setCustomerId] = useState('');
+  const [createInvoiceMode, setCreateInvoiceMode] = useState<'VAT' | 'Non-VAT' | null>(null);
   const [invoiceType, setInvoiceType] = useState<'VAT' | 'Non-VAT'>('VAT');
   const [invoiceDate, setInvoiceDate] = useState('');
   const [periodFrom, setPeriodFrom] = useState('');
@@ -648,10 +650,11 @@ const InvoicePage: React.FC = () => {
   };
 
   const handleCreateInvoice = () => {
-    setIsCreateModalOpen(true);
-    // Reset form
+    setIsInvoiceTypeSelectOpen(true);
+    // Reset form (invoice type is chosen next)
     setCustomerId('');
     setInvoiceType('VAT');
+    setCreateInvoiceMode(null);
     setInvoiceDate('');
     setPeriodFrom('');
     setPeriodTo('');
@@ -665,10 +668,24 @@ const InvoicePage: React.FC = () => {
     setAvailableModelsPerItem({});
   };
 
+  const handleCloseInvoiceTypeSelectModal = () => {
+    setIsInvoiceTypeSelectOpen(false);
+  };
+
+  const handleInvoiceTypeSelect = (mode: 'VAT' | 'Non-VAT') => {
+    setCreateInvoiceMode(mode);
+    setInvoiceType(mode);
+    setCustomerId('');
+    setFormErrors({});
+    setIsInvoiceTypeSelectOpen(false);
+    setIsCreateModalOpen(true);
+  };
+
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setCustomerId('');
     setInvoiceType('VAT');
+    setCreateInvoiceMode(null);
     setInvoiceDate('');
     setPeriodFrom('');
     setPeriodTo('');
@@ -684,6 +701,10 @@ const InvoicePage: React.FC = () => {
 
   const handleCustomerChange = (customerId: string) => {
     setCustomerId(customerId);
+    if (createInvoiceMode) {
+      setInvoiceType(createInvoiceMode);
+      return;
+    }
     const customer = customers.find((c) => c.id === customerId);
     if (customer) {
       setInvoiceType(customer.type === 'Company' ? 'VAT' : 'Non-VAT');
@@ -1607,7 +1628,15 @@ const InvoicePage: React.FC = () => {
   // Create form content — layout matches printed TAX INVOICE for familiar UX
   const renderInvoiceForm = () => {
     const { subtotal, vatAmount, totalAmount } = calculateTotals();
-    const selectedCustomer = customers.find((c) => c.id === customerId);
+    const filteredCustomers =
+      createInvoiceMode === 'VAT'
+        ? customers.filter((c) => c.type === 'Company')
+        : createInvoiceMode === 'Non-VAT'
+          ? customers.filter((c) => c.type === 'Individual')
+          : customers;
+
+    const selectedCustomer =
+      filteredCustomers.find((c) => c.id === customerId) || customers.find((c) => c.id === customerId);
 
     const inputBase = 'bg-white dark:bg-slate-700 dark:border-slate-500 dark:text-white dark:placeholder-gray-400';
     const inputError = 'border-red-500 dark:border-red-400';
@@ -1657,7 +1686,7 @@ const InvoicePage: React.FC = () => {
                 } ${focusRing}`}
               >
                 <option value="">Select Customer</option>
-                {customers.map((c) => (
+                {filteredCustomers.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -2285,6 +2314,61 @@ const InvoicePage: React.FC = () => {
             />
           </div>
         </main>
+
+        {/* Invoice Type Selection Modal (VAT vs Non-VAT) */}
+        {isInvoiceTypeSelectOpen && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-slate-700">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create Invoice</h2>
+                <button
+                  onClick={handleCloseInvoiceTypeSelectModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Select invoice type to continue. This sets the letterhead logo and filters customers.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handleInvoiceTypeSelect('VAT')}
+                    className="px-4 py-4 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-20 h-12 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                        <img src="/vat_logo.jpeg" alt="VAT logo" className="w-full h-full object-contain" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">VAT Invoice</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Business customers only</div>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInvoiceTypeSelect('Non-VAT')}
+                    className="px-4 py-4 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-20 h-12 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                        <img src="/non_vat_logo.jpeg" alt="Non-VAT logo" className="w-full h-full object-contain" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">Non‑VAT Invoice</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Individual customers only</div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create Invoice Modal — document-style layout matching printed TAX INVOICE */}
         {isCreateModalOpen && (

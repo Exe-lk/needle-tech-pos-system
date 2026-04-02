@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import CreateForm, { FormField, CreateFormRef } from '@/src/components/form-popup/create';
@@ -502,8 +502,30 @@ const mockMachineModels = [
 ];
 const mockMachineTypes = ['Industrial', 'Domestic', 'Embroidery', 'Overlock', 'Buttonhole', 'Other'];
 
+function PurchaseModeFromSearchParams({
+    onModeChange,
+}: {
+    onModeChange: (mode: 'vat' | 'non_vat' | null) => void;
+}) {
+    const searchParams = useSearchParams();
+
+    const mode = useMemo(() => {
+        const raw = (searchParams?.get('mode') || '').toLowerCase();
+        if (raw === 'vat') return 'vat' as const;
+        if (raw === 'non_vat') return 'non_vat' as const;
+        return null;
+    }, [searchParams]);
+
+    useEffect(() => {
+        onModeChange(mode);
+    }, [mode, onModeChange]);
+
+    return null;
+}
+
 const CreatePurchaseRequestPage: React.FC = () => {
     const router = useRouter();
+    const [purchaseMode, setPurchaseMode] = useState<'vat' | 'non_vat' | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -621,6 +643,12 @@ const CreatePurchaseRequestPage: React.FC = () => {
         fetchMasterData();
     }, [fetchCustomers, fetchInventory, fetchMasterData]);
 
+    const desiredCustomerApiType = useMemo(() => {
+        if (purchaseMode === 'vat') return 'GARMENT_FACTORY';
+        if (purchaseMode === 'non_vat') return 'INDIVIDUAL';
+        return null;
+    }, [purchaseMode]);
+
     // Selected customer from API or mock (for type check)
     const selectedCustomer = useMemo(() => {
         if (!selectedCustomerId) return null;
@@ -632,6 +660,24 @@ const CreatePurchaseRequestPage: React.FC = () => {
     }, [selectedCustomerId, customers]);
 
     const isBusinessCustomer = selectedCustomer?.type === 'GARMENT_FACTORY';
+
+    // If mode is forced (VAT/non-VAT) and selected customer doesn't match, clear selection safely.
+    useEffect(() => {
+        if (!desiredCustomerApiType) return;
+        if (!selectedCustomerId) return;
+        if (!selectedCustomer) return;
+        if (selectedCustomer.type !== desiredCustomerApiType) {
+            setSelectedCustomerId('');
+            setSelectedCustomerLocationId('');
+            setCustomerLocations([]);
+            setFormErrors((prev) => {
+                const next = { ...prev };
+                delete next.selectedCustomerId;
+                delete next.selectedCustomerLocationId;
+                return next;
+            });
+        }
+    }, [desiredCustomerApiType, selectedCustomerId, selectedCustomer]);
 
     // When customer changes: clear location; if business, fetch locations for that customer
     useEffect(() => {
@@ -744,6 +790,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
         if (customers.length > 0) {
             return customers
                 .filter((c) => c.status !== 'INACTIVE')
+                .filter((c) => (desiredCustomerApiType ? c.type === desiredCustomerApiType : true))
                 .map((customer) => ({
                     value: customer.id,
                     label: `${customer.name} (${customer.type === 'GARMENT_FACTORY' ? 'Business' : 'Customer'})`,
@@ -751,11 +798,15 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }
         return mockCustomers
             .filter((c) => c.status === 'Active')
+            .filter((c) => {
+                if (!desiredCustomerApiType) return true;
+                return desiredCustomerApiType === 'GARMENT_FACTORY' ? c.type === 'Company' : c.type === 'Individual';
+            })
             .map((customer) => ({
                 value: customer.id.toString(),
                 label: `${customer.name} (${getCustomerTypeLabel(customer.type)})`,
             }));
-    }, [customers]);
+    }, [customers, desiredCustomerApiType]);
 
     // Prepare brand options (from inventory API when loaded)
     const brandOptions = useMemo(() => {
@@ -804,7 +855,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     const handleOpenRegisterModal = () => {
         setIsRegisterModalOpen(true);
-        setActiveCreateTab('company');
+        setActiveCreateTab(desiredCustomerApiType === 'INDIVIDUAL' ? 'individual' : 'company');
     };
 
     const handleCloseRegisterModal = () => {
@@ -1046,7 +1097,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             type: 'textarea',
             placeholder: 'Enter full business address',
             required: true,
-            rows: 3,
+            rows: 2,
         },
         {
             name: 'contactPerson',
@@ -1070,17 +1121,6 @@ const CreatePurchaseRequestPage: React.FC = () => {
             placeholder: 'Enter contact email',
             required: true,
             validation: validateEmail,
-        },
-        {
-            name: 'status',
-            label: 'Status',
-            type: 'select',
-            placeholder: 'Select status',
-            required: true,
-            options: [
-                { label: 'Active', value: 'Active' },
-                { label: 'Inactive', value: 'Inactive' },
-            ],
         },
     ];
 
@@ -1107,7 +1147,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             type: 'textarea',
             placeholder: 'Enter full address',
             required: true,
-            rows: 3,
+            rows: 2,
         },
         {
             name: 'phone',
@@ -1125,17 +1165,6 @@ const CreatePurchaseRequestPage: React.FC = () => {
             required: true,
             validation: validateEmail,
         },
-        {
-            name: 'status',
-            label: 'Status',
-            type: 'select',
-            placeholder: 'Select status',
-            required: true,
-            options: [
-                { label: 'Active', value: 'Active' },
-                { label: 'Inactive', value: 'Inactive' },
-            ],
-        },
     ];
 
     const handleCompanySubmit = async (data: Record<string, any>) => {
@@ -1143,7 +1172,6 @@ const CreatePurchaseRequestPage: React.FC = () => {
         try {
             const addressParts = parseAddress(data.businessAddress || '');
             const code = await generateCustomerCode();
-            const statusApi = (data.status === 'Active' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE';
             const locationsPayload = businessLocations
                 .filter((loc) => (loc.name && loc.name.trim()) || (loc.address && loc.address.trim()))
                 .map((loc) => ({ name: (loc.name || '').trim(), address: (loc.address || '').trim() }));
@@ -1161,7 +1189,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 billingPostalCode: addressParts.postalCode || undefined,
                 billingCountry: addressParts.country || undefined,
                 vatRegistrationNumber: data.vatTin || null,
-                status: statusApi,
+                status: 'ACTIVE' as const,
                 ...(locationsPayload.length > 0 && { locations: locationsPayload }),
             };
             const response = await authFetch(`${API_BASE_URL}/customers`, {
@@ -1201,7 +1229,6 @@ const CreatePurchaseRequestPage: React.FC = () => {
         try {
             const addressParts = parseAddress(data.address || '');
             const code = await generateCustomerCode();
-            const statusApi = (data.status === 'Active' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE';
             const payload = {
                 code,
                 type: 'INDIVIDUAL',
@@ -1215,7 +1242,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 billingRegion: addressParts.region || undefined,
                 billingPostalCode: addressParts.postalCode || undefined,
                 billingCountry: addressParts.country || undefined,
-                status: statusApi,
+                status: 'ACTIVE' as const,
             };
             const response = await authFetch(`${API_BASE_URL}/customers`, {
                 method: 'POST',
@@ -1278,6 +1305,9 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+            <Suspense fallback={null}>
+                <PurchaseModeFromSearchParams onModeChange={setPurchaseMode} />
+            </Suspense>
             {/* Top navbar */}
             <Navbar onMenuClick={handleMenuClick} />
 
@@ -1320,11 +1350,15 @@ const CreatePurchaseRequestPage: React.FC = () => {
                             footerStyle="simple"
                             className="p-6 sm:p-8"
                             logoPath={
-                                selectedCustomer
-                                    ? isBusinessCustomer
+                                purchaseMode
+                                    ? purchaseMode === 'vat'
                                         ? '/vat_logo.jpeg'
                                         : '/non_vat_logo.jpeg'
-                                    : undefined
+                                    : selectedCustomer
+                                        ? isBusinessCustomer
+                                            ? '/vat_logo.jpeg'
+                                            : '/non_vat_logo.jpeg'
+                                        : undefined
                             }
                             
                         >
@@ -1886,6 +1920,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                         clearButtonLabel="Clear"
                                         loading={isSubmitting}
                                         enableDynamicSpecs={false}
+                                        density="compact"
                                         hideFooterActions
                                         formId="register-customer-form-company"
                                         className="shadow-none border-0 p-0"
@@ -1917,7 +1952,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                                 return next;
                                                             })
                                                         }
-                                                        className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
                                                     />
                                                 </div>
                                                 <div className="flex gap-2 items-end">
@@ -1936,7 +1971,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                                     return next;
                                                                 })
                                                             }
-                                                            className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                                                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
                                                         />
                                                     </div>
                                                     <button
@@ -1946,7 +1981,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                                 prev.length > 1 ? prev.filter((_, i) => i !== index) : [{ name: '', address: '' }]
                                                             )
                                                         }
-                                                        className="shrink-0 p-3 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                                        className="shrink-0 p-2.5 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                                                         aria-label="Remove location"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
@@ -1977,6 +2012,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     clearButtonLabel="Clear"
                                     loading={isSubmitting}
                                     enableDynamicSpecs={false}
+                                    density="compact"
                                     hideFooterActions
                                     formId="register-customer-form-individual"
                                     className="shadow-none border-0 p-0"

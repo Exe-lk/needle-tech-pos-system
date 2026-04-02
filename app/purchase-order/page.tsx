@@ -144,6 +144,7 @@ const PurchaseOrderPage: React.FC = () => {
     const router = useRouter();
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+    const [isCreateTypeSelectOpen, setIsCreateTypeSelectOpen] = useState(false);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [isRentalModalOpen, setIsRentalModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
@@ -214,7 +215,12 @@ const PurchaseOrderPage: React.FC = () => {
     const handleMenuClick = () => setIsMobileSidebarOpen((prev) => !prev);
     const handleMobileSidebarClose = () => setIsMobileSidebarOpen(false);
     const handleLogout = () => console.log('Logout clicked');
-    const handleCreatePurchaseRequest = () => router.push('/purchase-order/create');
+    const handleCreatePurchaseRequest = () => setIsCreateTypeSelectOpen(true);
+    const handleCloseCreateTypeSelectModal = () => setIsCreateTypeSelectOpen(false);
+    const handleCreateTypeSelect = (mode: 'vat' | 'non_vat') => {
+        setIsCreateTypeSelectOpen(false);
+        router.push(`/purchase-order/create?mode=${mode}`);
+    };
 
     const handleViewRequest = (request: PurchaseRequest) => {
         setSelectedRequest(request);
@@ -776,6 +782,66 @@ const PurchaseOrderPage: React.FC = () => {
                         <Table data={purchaseRequests} columns={columns} actions={actions} itemsPerPage={10} searchable filterable loading={loading} onCreateClick={handleCreatePurchaseRequest} createButtonLabel="Create Purchase Order" emptyMessage="No purchase requests found." />
                     </div>
                 </main>
+
+                {/* Create Purchase Order Type Select Modal (VAT / Non-VAT) */}
+                {isCreateTypeSelectOpen && (
+                    <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden">
+                            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                                <div>
+                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                                        Create Purchase Order
+                                    </h2>
+                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                        Select VAT type to continue.
+                                    </p>
+                                </div>
+                                <Tooltip content="Close">
+                                    <button
+                                        onClick={handleCloseCreateTypeSelectModal}
+                                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </Tooltip>
+                            </div>
+                            <div className="p-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCreateTypeSelect('vat')}
+                                        className="rounded-xl border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors text-left p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-14 w-28 bg-white rounded-md border border-gray-200 dark:border-slate-600 overflow-hidden flex items-center justify-center">
+                                                <img src="/vat_logo.jpeg" alt="VAT" className="h-full w-full object-contain" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-semibold text-gray-900 dark:text-white">VAT Purchase Order</div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Business customers only</div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCreateTypeSelect('non_vat')}
+                                        className="rounded-xl border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors text-left p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-14 w-28 bg-white rounded-md border border-gray-200 dark:border-slate-600 overflow-hidden flex items-center justify-center">
+                                                <img src="/non_vat_logo.jpeg" alt="Non VAT" className="h-full w-full object-contain" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-semibold text-gray-900 dark:text-white">Non‑VAT Purchase Order</div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Individual customers only</div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {isViewModalOpen && selectedRequest && (
                     <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
