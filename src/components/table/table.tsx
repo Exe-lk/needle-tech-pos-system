@@ -10,6 +10,8 @@ export interface TableColumn {
   sortable?: boolean;
   filterable?: boolean;
   filterType?: 'select' | 'dateRange';
+  /** If true, column participates in filters/search but is not rendered in the table. */
+  hidden?: boolean;
   render?: (value: any, row: any) => React.ReactNode;
 }
 
@@ -206,6 +208,8 @@ const Table: React.FC<TableProps> = ({
   const [showFilters, setShowFilters] = useState(false);
   const [pageSize, setPageSize] = useState(itemsPerPage);
   const [calculatedHeight, setCalculatedHeight] = useState<string>('calc(100vh - 280px)');
+
+  const visibleColumns = useMemo(() => columns.filter((c) => !c.hidden), [columns]);
 
   useEffect(() => {
     const calculateHeight = () => {
@@ -513,7 +517,7 @@ const Table: React.FC<TableProps> = ({
             <table className="min-w-full">
               <thead className="bg-gray-50 dark:bg-slate-700 border-y border-gray-200 dark:border-slate-700 sticky top-0 z-10">
                 <tr>
-                  {columns.map((column) => (
+                  {visibleColumns.map((column) => (
                     <th
                       key={column.key}
                       onClick={() => handleSort(column.key)}
@@ -554,7 +558,7 @@ const Table: React.FC<TableProps> = ({
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={columns.length + (actions.length > 0 ? 1 : 0)}
+                      colSpan={visibleColumns.length + (actions.length > 0 ? 1 : 0)}
                       className="px-6 py-12 text-center"
                     >
                       <div className="flex justify-center items-center">
@@ -566,7 +570,7 @@ const Table: React.FC<TableProps> = ({
                 ) : paginatedData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={columns.length + (actions.length > 0 ? 1 : 0)}
+                      colSpan={visibleColumns.length + (actions.length > 0 ? 1 : 0)}
                       className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
                     >
                       {emptyMessage}
@@ -584,7 +588,7 @@ const Table: React.FC<TableProps> = ({
                           getRowClassName ? getRowClassName(row) : ''
                         }`}
                       >
-                        {columns.map((column) => (
+                        {visibleColumns.map((column) => (
                           <td
                             key={column.key}
                             className="px-6 py-4 text-sm text-gray-900 dark:text-white whitespace-nowrap"
@@ -654,11 +658,11 @@ const Table: React.FC<TableProps> = ({
                   >
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex-1">
-                        {columns[0] && (
+                        {visibleColumns[0] && (
                           <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                            {columns[0].render
-                              ? columns[0].render(row[columns[0].key], row)
-                              : row[columns[0].key]}
+                            {visibleColumns[0].render
+                              ? visibleColumns[0].render(row[visibleColumns[0].key], row)
+                              : row[visibleColumns[0].key]}
                           </div>
                         )}
                       </div>
@@ -686,7 +690,7 @@ const Table: React.FC<TableProps> = ({
                       )}
                     </div>
                     <div className="mt-2 space-y-1.5">
-                      {columns.map((column) => (
+                      {visibleColumns.map((column) => (
                         <div key={column.key} className="flex text-xs text-gray-700 dark:text-gray-200">
                           <span className="w-28 flex-shrink-0 font-medium text-gray-500 dark:text-gray-400">
                             {column.label}

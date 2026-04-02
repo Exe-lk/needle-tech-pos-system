@@ -44,7 +44,7 @@ CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PARTIAL', 'PAID', 'OVERDUE');
 CREATE TYPE "PaymentMethod" AS ENUM ('CASH', 'BANK_TRANSFER', 'CHEQUE', 'CARD');
 
 -- CreateEnum
-CREATE TYPE "GatePassStatus" AS ENUM ('PENDING', 'DEPARTED', 'RETURNED');
+CREATE TYPE "GatePassStatus" AS ENUM ('PENDING', 'DEPARTED', 'RETURNED', 'REJECTED');
 
 -- CreateEnum
 CREATE TYPE "TriageCategory" AS ENUM ('STANDARD', 'DAMAGE', 'MISSING_PARTS', 'EXCHANGE');
@@ -359,6 +359,7 @@ CREATE TABLE "rentals" (
     "securityDepositInvoiceId" UUID,
     "isLockedForNewTransactions" BOOLEAN NOT NULL DEFAULT false,
     "lockedReason" TEXT,
+    "requestedMachineLines" JSONB,
     "createdByUserId" UUID NOT NULL,
     "createdAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMPTZ(6) NOT NULL,
@@ -589,6 +590,23 @@ CREATE TABLE "audit_logs" (
     "createdAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "qr_print_logs" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "machineId" UUID NOT NULL,
+    "printedByUserId" UUID NOT NULL,
+    "serialNumber" TEXT NOT NULL,
+    "boxNumber" TEXT,
+    "qrCodeValue" TEXT NOT NULL,
+    "printCount" INTEGER NOT NULL DEFAULT 1,
+    "printedAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "notes" TEXT,
+    "createdAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "qr_print_logs_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -927,6 +945,21 @@ CREATE INDEX "audit_logs_entityId_idx" ON "audit_logs"("entityId");
 -- CreateIndex
 CREATE INDEX "audit_logs_action_idx" ON "audit_logs"("action");
 
+-- CreateIndex
+CREATE INDEX "qr_print_logs_machineId_idx" ON "qr_print_logs"("machineId");
+
+-- CreateIndex
+CREATE INDEX "qr_print_logs_printedByUserId_idx" ON "qr_print_logs"("printedByUserId");
+
+-- CreateIndex
+CREATE INDEX "qr_print_logs_printedAt_idx" ON "qr_print_logs"("printedAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "qr_print_logs_serialNumber_idx" ON "qr_print_logs"("serialNumber");
+
+-- CreateIndex
+CREATE INDEX "qr_print_logs_qrCodeValue_idx" ON "qr_print_logs"("qrCodeValue");
+
 -- AddForeignKey
 ALTER TABLE "users" ADD CONSTRAINT "users_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "roles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -1046,3 +1079,9 @@ ALTER TABLE "transaction_logs" ADD CONSTRAINT "transaction_logs_customerId_fkey"
 
 -- AddForeignKey
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "qr_print_logs" ADD CONSTRAINT "qr_print_logs_machineId_fkey" FOREIGN KEY ("machineId") REFERENCES "machines"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "qr_print_logs" ADD CONSTRAINT "qr_print_logs_printedByUserId_fkey" FOREIGN KEY ("printedByUserId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
