@@ -147,6 +147,28 @@ interface ApiInvoice {
       requestNumber: string;
     } | null;
   } | null;
+  invoiceRentals?: {
+    rental?: {
+      id: string;
+      agreementNumber: string;
+      startDate: string;
+      expectedEndDate: string | null;
+      status: string;
+      purchaseOrder?: {
+        id: string;
+        requestNumber: string;
+      } | null;
+    } | null;
+  }[];
+}
+
+interface ApiRentalLite {
+  id: string;
+  agreementNumber: string;
+  startDate: string;
+  expectedEndDate: string | null;
+  status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  purchaseOrder?: { id: string; requestNumber: string } | null;
 }
 
 // Customer dropdown type
@@ -286,6 +308,33 @@ const fetchMachineTypes = async (): Promise<MachineTypeData[]> => {
   }
 };
 
+const fetchActiveRentalsForInvoice = async (customerId: string, periodFrom: string, periodTo: string): Promise<ApiRentalLite[]> => {
+  if (!customerId || !periodFrom || !periodTo) return [];
+  try {
+    const url = `${API_BASE_URL}/rentals?customerId=${encodeURIComponent(customerId)}&status=ACTIVE&periodFrom=${encodeURIComponent(periodFrom)}&periodTo=${encodeURIComponent(periodTo)}&limit=1000`;
+    const response = await authFetch(url, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch rentals');
+    }
+    const data = await response.json();
+    const rentals: any[] = data.data?.items || [];
+    return rentals.map((r: any) => ({
+      id: r.id,
+      agreementNumber: r.agreementNumber,
+      startDate: r.startDate,
+      expectedEndDate: r.expectedEndDate ?? null,
+      status: r.status,
+      purchaseOrder: r.purchaseOrder ? { id: r.purchaseOrder.id, requestNumber: r.purchaseOrder.requestNumber } : null,
+    }));
+  } catch (error) {
+    console.error('Error fetching rentals:', error);
+    return [];
+  }
+};
+
 const fetchInvoices = async (): Promise<Invoice[]> => {
   try {
     const response = await authFetch(`${API_BASE_URL}/invoices?limit=1000`, {
@@ -304,6 +353,12 @@ const fetchInvoices = async (): Promise<Invoice[]> => {
       const customer = invoice.customer;
       const lineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
       const purchaseOrderNumber = invoice.rental?.purchaseOrder?.requestNumber || '';
+      const agreementNumbers =
+        Array.isArray(invoice.invoiceRentals)
+          ? invoice.invoiceRentals
+              .map((ir: any) => ir?.rental?.agreementNumber)
+              .filter(Boolean)
+          : [];
       
       return {
         id: invoice.id,
@@ -312,7 +367,7 @@ const fetchInvoices = async (): Promise<Invoice[]> => {
         customerName: customer?.name || 'Unknown Customer',
         customerAddress: customer ? buildCustomerAddress(customer) : '',
         vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-        purchaseOrderNumber,
+        purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
         invoiceDate: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
         periodFrom: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
         periodTo: invoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -364,6 +419,12 @@ const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
     const customer = apiInvoice.customer;
     const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
     const purchaseOrderNumber = apiInvoice.rental?.purchaseOrder?.requestNumber || '';
+    const agreementNumbers =
+      Array.isArray(apiInvoice.invoiceRentals)
+        ? apiInvoice.invoiceRentals
+            .map((ir: any) => ir?.rental?.agreementNumber)
+            .filter(Boolean)
+        : [];
 
     return {
       id: apiInvoice.id,
@@ -372,7 +433,7 @@ const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
       customerName: customer?.name || 'Unknown Customer',
       customerAddress: customer ? buildCustomerAddress(customer) : '',
       vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-      purchaseOrderNumber,
+      purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
       invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -423,6 +484,12 @@ const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoic
     const customer = apiInvoice.customer;
     const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
     const purchaseOrderNumber = apiInvoice.rental?.purchaseOrder?.requestNumber || '';
+    const agreementNumbers =
+      Array.isArray(apiInvoice.invoiceRentals)
+        ? apiInvoice.invoiceRentals
+            .map((ir: any) => ir?.rental?.agreementNumber)
+            .filter(Boolean)
+        : [];
 
     return {
       id: apiInvoice.id,
@@ -431,7 +498,7 @@ const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoic
       customerName: customer?.name || 'Unknown Customer',
       customerAddress: customer ? buildCustomerAddress(customer) : '',
       vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-      purchaseOrderNumber,
+      purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
       invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -578,6 +645,10 @@ const InvoicePage: React.FC = () => {
   const [invoiceDate, setInvoiceDate] = useState('');
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
+  const [availableRentalsForPeriod, setAvailableRentalsForPeriod] = useState<ApiRentalLite[]>([]);
+  const [selectedRentalIds, setSelectedRentalIds] = useState<Set<string>>(new Set());
+  const [isLoadingRentalsForPeriod, setIsLoadingRentalsForPeriod] = useState(false);
+  // Manual itemised item entry removed; invoice line items come from backend based on rentals
   const [items, setItems] = useState<Omit<InvoiceItem, 'id' | 'subtotal'>[]>([]);
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
@@ -596,6 +667,33 @@ const InvoicePage: React.FC = () => {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Load active rentals matching customer + period (optional feature; does not affect existing flows)
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!isCreateModalOpen) return;
+      if (!customerId || !periodFrom || !periodTo) {
+        setAvailableRentalsForPeriod([]);
+        setSelectedRentalIds(new Set());
+        return;
+      }
+      setIsLoadingRentalsForPeriod(true);
+      try {
+        const rentals = await fetchActiveRentalsForInvoice(customerId, periodFrom, periodTo);
+        if (cancelled) return;
+        setAvailableRentalsForPeriod(rentals);
+        // keep selected ids that still exist
+        setSelectedRentalIds(prev => new Set([...prev].filter(id => rentals.some(r => r.id === id))));
+      } finally {
+        if (!cancelled) setIsLoadingRentalsForPeriod(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreateModalOpen, customerId, periodFrom, periodTo]);
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -689,7 +787,9 @@ const InvoicePage: React.FC = () => {
     setInvoiceDate('');
     setPeriodFrom('');
     setPeriodTo('');
-    setItems([]);
+  setAvailableRentalsForPeriod([]);
+  setSelectedRentalIds(new Set());
+  setItems([]);
     setPaymentMethod('');
     setPaymentDate('');
     setReceiptNumber('');
@@ -711,80 +811,6 @@ const InvoicePage: React.FC = () => {
     }
   };
 
-  const generateItemCode = (index: number): string => {
-    return `212WG${String(index + 1).padStart(5, '0')}`;
-  };
-
-  const generateDescription = (brandName: string, modelName: string, typeName: string): string => {
-    if (brandName && modelName && typeName) {
-      return `${brandName.toUpperCase()} ${modelName} - ${typeName.toUpperCase()}`;
-    }
-    return '';
-  };
-
-  const addItem = () => {
-    setItems([
-      ...items,
-      {
-        itemCode: generateItemCode(items.length),
-        description: '',
-        brand: '',
-        model: '',
-        type: 'Industrial',
-        numberOfMachines: 1,
-        monthlyRentPerMachine: 0,
-      },
-    ]);
-  };
-
-  const removeItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
-    // Clean up brand/model state for this item
-    const newSelectedBrandIds = { ...selectedBrandIds };
-    const newAvailableModels = { ...availableModelsPerItem };
-    delete newSelectedBrandIds[index];
-    delete newAvailableModels[index];
-    setSelectedBrandIds(newSelectedBrandIds);
-    setAvailableModelsPerItem(newAvailableModels);
-    
-    // Regenerate item codes
-    const updatedItems = items.filter((_, i) => i !== index).map((item, idx) => ({
-      ...item,
-      itemCode: generateItemCode(idx),
-    }));
-    setItems(updatedItems);
-  };
-
-  const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
-    const updatedItems = [...items];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
-    
-    // Handle brand change
-    if (field === 'brand') {
-      const brand = brands.find(b => b.name === value);
-      if (brand) {
-        setSelectedBrandIds(prev => ({ ...prev, [index]: brand.id }));
-        loadModelsForBrand(brand.id, index);
-        // Reset model when brand changes
-        updatedItems[index].model = '';
-        updatedItems[index].description = '';
-      }
-    }
-    
-    // Handle model or type change - update description
-    if (field === 'model' || field === 'type') {
-      if (updatedItems[index].brand && updatedItems[index].model && updatedItems[index].type) {
-        updatedItems[index].description = generateDescription(
-          updatedItems[index].brand,
-          updatedItems[index].model,
-          updatedItems[index].type
-        );
-      }
-    }
-    
-    setItems(updatedItems);
-  };
-
   const calculateItemSubtotal = (item: Omit<InvoiceItem, 'id' | 'subtotal'>): number => {
     return item.numberOfMachines * item.monthlyRentPerMachine;
   };
@@ -801,17 +827,8 @@ const InvoicePage: React.FC = () => {
 
     if (!customerId) errors.customerId = 'Customer is required';
     if (!invoiceDate) errors.invoiceDate = 'Invoice Date is required';
-    if (!periodFrom) errors.periodFrom = 'Period From is required';
-    if (!periodTo) errors.periodTo = 'Period To is required';
-    if (items.length === 0) errors.items = 'At least one item is required';
-    
-    items.forEach((item, index) => {
-      if (!item.brand) errors[`item_${index}_brand`] = 'Brand is required';
-      if (!item.model) errors[`item_${index}_model`] = 'Model is required';
-      if (!item.type) errors[`item_${index}_type`] = 'Type is required';
-      if (item.numberOfMachines <= 0) errors[`item_${index}_machines`] = 'Number of machines must be greater than 0';
-      if (item.monthlyRentPerMachine <= 0) errors[`item_${index}_rent`] = 'Monthly rent must be greater than 0';
-    });
+  if (!periodFrom) errors.periodFrom = 'Period From is required';
+  if (!periodTo) errors.periodTo = 'Period To is required';
 
     if (!paymentMethod) errors.paymentMethod = 'Payment Method is required';
     if (!paymentDate) errors.paymentDate = 'Payment Date is required';
@@ -827,42 +844,21 @@ const InvoicePage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const customer = customers.find((c) => c.id === customerId);
       const { subtotal, vatAmount, totalAmount } = calculateTotals();
       
-      // Prepare line items for API
-      const lineItems = items.map((item, index) => {
-        const brand = brands.find(b => b.name === item.brand);
-        const model = availableModelsPerItem[index]?.find(m => m.name === item.model);
-        const type = machineTypes.find(t => t.name === item.type);
-        
-        return {
-          description: item.description,
-          quantity: item.numberOfMachines,
-          unitPrice: item.monthlyRentPerMachine,
-          machineId: null, // Optional, can be set if you have machine IDs
-          brand: item.brand,
-          model: item.model,
-          type: item.type,
-          brandId: brand?.id,
-          modelId: model?.id,
-          machineTypeId: type?.id,
-          itemCode: item.itemCode,
-          serialNumber: item.serialNumber,
-          vatRate: invoiceType === 'VAT' ? 0.18 : 0,
-        };
-      });
-
       const invoicePayload = {
         customerId: customerId,
         type: 'RENTAL', // or appropriate invoice type
         taxCategory: invoiceType === 'VAT' ? 'VAT' : 'NON_VAT',
-        lineItems: lineItems,
+  // Line items are derived from linked rentals on the backend
         issueDate: invoiceDate,
         dueDate: periodTo,
+        periodFrom,
+        periodTo,
         subtotal: subtotal,
         vatAmount: vatAmount,
         grandTotal: totalAmount,
+        ...(selectedRentalIds.size > 0 ? { rentalIds: Array.from(selectedRentalIds) } : {}),
       };
 
       const newInvoice = await createInvoice(invoicePayload);
@@ -1735,217 +1731,89 @@ const InvoicePage: React.FC = () => {
           </div>
           <div className="border-b border-gray-800 dark:border-slate-600 my-3" />
 
-          {/* Itemized table — matches print: Item | Description | Rate | Qty | Amount */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Itemised details</span>
-              <button
-                type="button"
-                onClick={addItem}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-500 hover:bg-blue-700 dark:hover:bg-indigo-600 rounded border border-blue-700 dark:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-400"
-              >
-                <Plus className="w-4 h-4" />
-                Add Item
-              </button>
+          {/* Optional: link multiple active hiring agreements (rentals) to this invoice */}
+          <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="text-gray-600 dark:text-gray-400 font-medium">Hiring Agreements (optional): </span>
+                <span className="text-gray-900 dark:text-white">
+                  {selectedRentalIds.size > 0 ? `${selectedRentalIds.size} selected` : 'None selected'}
+                </span>
+              </div>
+              {isLoadingRentalsForPeriod && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">Loading agreements…</span>
+              )}
             </div>
-            {formErrors.items && (
-              <p className="mb-2 text-sm text-red-500 dark:text-red-400">{formErrors.items}</p>
+
+            {customerId && periodFrom && periodTo && availableRentalsForPeriod.length === 0 && !isLoadingRentalsForPeriod && (
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                No ACTIVE agreements overlap this period.
+              </div>
             )}
 
-            {items.length === 0 ? (
-              <div className="text-center py-6 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-slate-500 rounded-lg bg-gray-50/50 dark:bg-slate-700/30">
-                No items added. Click &quot;Add Item&quot; to add items to the invoice.
-              </div>
-            ) : (
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-gray-800 dark:border-slate-600">
-                    <th className="text-left py-2 pr-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Item</th>
-                    <th className="text-left py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Description</th>
-                    <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Rate</th>
-                    <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Qty</th>
-                    <th className="text-right py-2 pl-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Amount</th>
-                    <th className="w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, index) => (
-                    <React.Fragment key={index}>
-                      <tr className="border-b border-gray-200 dark:border-slate-700">
-                        <td className="py-2 pr-2 align-top">
-                          <input
-                            type="text"
-                            value={item.itemCode}
-                            readOnly
-                            className="w-full bg-gray-50 dark:bg-slate-700/50 border-0 p-0 text-gray-900 dark:text-white text-sm"
-                          />
-                        </td>
-                        <td className="py-2 px-2 align-top">
-                          <input
-                            type="text"
-                            value={item.description}
-                            readOnly
-                            className="w-full bg-gray-50 dark:bg-slate-700/50 border-0 p-0 text-gray-900 dark:text-white text-sm"
-                          />
-                          <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                            <select
-                              value={item.brand}
-                              onChange={(e) => updateItem(index, 'brand', e.target.value)}
-                              className={`px-1.5 py-0.5 border rounded ${inputBase} ${
-                                formErrors[`item_${index}_brand`] ? inputError : inputBorder
-                              } ${focusRing}`}
-                            >
-                              <option value="">Brand</option>
-                              {brands.map((b) => (
-                                <option key={b.id} value={b.name}>{b.name}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={item.model}
-                              onChange={(e) => updateItem(index, 'model', e.target.value)}
-                              disabled={!item.brand}
-                              className={`px-1.5 py-0.5 border rounded ${inputBase} ${inputBorder} ${focusRing} disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:opacity-70`}
-                            >
-                              <option value="">Model</option>
-                              {item.brand && availableModelsPerItem[index]?.map((m) => (
-                                <option key={m.id} value={m.name}>{m.name}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={item.type}
-                              onChange={(e) => updateItem(index, 'type', e.target.value as MachineType)}
-                              className={`px-1.5 py-0.5 border rounded ${inputBase} ${
-                                formErrors[`item_${index}_type`] ? inputError : inputBorder
-                              } ${focusRing}`}
-                            >
-                              {machineTypes.map((t) => (
-                                <option key={t.id} value={t.name}>{t.name}</option>
-                              ))}
-                            </select>
-                            {invoiceType === 'Non-VAT' && (
-                              <input
-                                type="text"
-                                value={item.serialNumber || ''}
-                                onChange={(e) => updateItem(index, 'serialNumber', e.target.value)}
-                                placeholder="Serial No"
-                                className={`px-1.5 py-0.5 border rounded ${inputBase} ${inputBorder} ${focusRing}`}
-                              />
+            {availableRentalsForPeriod.length > 0 && (
+              <div className="mt-2 border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden">
+                <div className="max-h-48 overflow-auto">
+                  {availableRentalsForPeriod.map((r) => {
+                    const checked = selectedRentalIds.has(r.id);
+                    return (
+                      <label
+                        key={r.id}
+                        className="flex items-start gap-3 px-3 py-2 border-b border-gray-100 dark:border-slate-700 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/30"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedRentalIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(r.id)) next.delete(r.id);
+                              else next.add(r.id);
+                              return next;
+                            });
+                          }}
+                          className="mt-1"
+                        />
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                              {r.agreementNumber}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+                              {r.status}
+                            </span>
+                            {r.purchaseOrder?.requestNumber && (
+                              <span className="text-xs text-gray-600 dark:text-gray-400">
+                                PO: {r.purchaseOrder.requestNumber}
+                              </span>
                             )}
                           </div>
-                        </td>
-                        <td className="py-2 px-2 text-center align-top">
-                          <div className="relative inline-block">
-                            <input
-                              type="number"
-                              value={item.monthlyRentPerMachine}
-                              onChange={(e) => updateItem(index, 'monthlyRentPerMachine', Number(e.target.value))}
-                              className={`w-20 px-1.5 py-0.5 pl-6 pr-6 border rounded text-center ${inputBase} ${
-                                formErrors[`item_${index}_rent`] ? inputError : inputBorder
-                              } ${focusRing} appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                              min="0"
-                              step="0.01"
-                            />
-                            <button
-                              type="button"
-                              aria-label="Decrease rate"
-                              onClick={() => {
-                                const next = Math.max(0, Number(((Number(item.monthlyRentPerMachine) || 0) - 0.01).toFixed(2)));
-                                updateItem(index, 'monthlyRentPerMachine', next);
-                              }}
-                              className="absolute inset-y-0 left-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
-                            >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Increase rate"
-                              onClick={() => {
-                                const next = Number(((Number(item.monthlyRentPerMachine) || 0) + 0.01).toFixed(2));
-                                updateItem(index, 'monthlyRentPerMachine', next);
-                              }}
-                              className="absolute inset-y-0 right-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
+                          <div className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                            {new Date(r.startDate).toLocaleDateString('en-LK')} →{' '}
+                            {r.expectedEndDate ? new Date(r.expectedEndDate).toLocaleDateString('en-LK') : 'Open-ended'}
                           </div>
-                        </td>
-                        <td className="py-2 px-2 text-center align-top">
-                          <div className="relative inline-block">
-                            <input
-                              type="number"
-                              value={item.numberOfMachines}
-                              onChange={(e) => updateItem(index, 'numberOfMachines', Number(e.target.value))}
-                              className={`w-16 px-1.5 py-0.5 pl-6 pr-6 border rounded text-center ${inputBase} ${
-                                formErrors[`item_${index}_machines`] ? inputError : inputBorder
-                              } ${focusRing} appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                              min="1"
-                            />
-                            <button
-                              type="button"
-                              aria-label="Decrease quantity"
-                              onClick={() => {
-                                const next = Math.max(1, (Number(item.numberOfMachines) || 1) - 1);
-                                updateItem(index, 'numberOfMachines', next);
-                              }}
-                              className="absolute inset-y-0 left-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
-                            >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Increase quantity"
-                              onClick={() => {
-                                const next = (Number(item.numberOfMachines) || 1) + 1;
-                                updateItem(index, 'numberOfMachines', next);
-                              }}
-                              className="absolute inset-y-0 right-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="py-2 pl-2 text-right align-top text-gray-900 dark:text-white">
-                          {calculateItemSubtotal(item).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 text-center align-top">
-                          <button
-                            type="button"
-                            onClick={() => removeItem(index)}
-                            className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            aria-label="Remove item"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            )}
-
-            {/* Totals — matches print: Total Amount left label, value right */}
-            {items.length > 0 && (
-              <div className="mt-3 space-y-1">
-                <div className="flex justify-between items-baseline">
-                  <span className="font-bold text-gray-900 dark:text-white">Total Amount</span>
-                  <span className="font-bold text-gray-900 dark:text-white text-lg">
-                    {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                  </span>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
-                {invoiceType === 'VAT' && vatAmount > 0 && (
-                  <>
-                    <div className="flex justify-end text-sm text-gray-700 dark:text-gray-300">
-                      Sub Amount: Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="flex justify-end text-sm text-gray-700 dark:text-gray-300">
-                      VAT (18%): Rs. {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                    </div>
-                  </>
-                )}
+                <div className="px-3 py-2 bg-gray-50 dark:bg-slate-700/20 flex items-center justify-between">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    Selected agreements will be linked to the invoice (no automatic line item changes).
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRentalIds(new Set())}
+                    className="text-xs font-medium text-blue-700 dark:text-indigo-300 hover:underline"
+                  >
+                    Clear selection
+                  </button>
+                </div>
               </div>
             )}
           </div>
+
+          {/* Itemised details section removed; amounts will be calculated from rentals/backend. */}
           <div className="border-b border-gray-800 dark:border-slate-600 my-3" />
 
           {/* Authorized By / Received By — matches print */}

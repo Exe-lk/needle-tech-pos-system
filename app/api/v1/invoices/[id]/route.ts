@@ -11,7 +11,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
   try {
     const { id } = await params;
     
-    const invoice = await prisma.invoice.findUnique({
+    const invoice = await prisma.invoice.findUnique(({
       where: { id },
       include: {
         customer: true,
@@ -25,8 +25,27 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
             },
           },
         },
+        invoiceRentals: {
+          include: {
+            rental: {
+              select: {
+                id: true,
+                agreementNumber: true,
+                startDate: true,
+                expectedEndDate: true,
+                status: true,
+                purchaseOrder: {
+                  select: {
+                    id: true,
+                    requestNumber: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
-    });
+    } as any));
     
     if (!invoice) {
       return notFoundResponse('Invoice not found');
@@ -53,7 +72,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
       return notFoundResponse('Invoice not found');
     }
     
-    const updatedInvoice = await prisma.invoice.update({
+    const updatedInvoice = await prisma.invoice.update(({
       where: { id },
       data: {
         ...(body.status && { status: body.status }),
@@ -71,8 +90,27 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
             },
           },
         },
+        invoiceRentals: {
+          include: {
+            rental: {
+              select: {
+                id: true,
+                agreementNumber: true,
+                startDate: true,
+                expectedEndDate: true,
+                status: true,
+                purchaseOrder: {
+                  select: {
+                    id: true,
+                    requestNumber: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
-    });
+    } as any));
     
     return successResponse(updatedInvoice, 'Invoice updated successfully');
   } catch (error: any) {

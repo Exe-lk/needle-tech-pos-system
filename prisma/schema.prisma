@@ -532,6 +532,7 @@ model Rental {
   
   machines        RentalMachine[]
   invoices        Invoice[]
+  invoiceRentals  InvoiceRental[]
   gatePasses      GatePass[]
   returns         Return[]
   damageReports   DamageReport[]
@@ -611,6 +612,7 @@ model Invoice {
   rental          Rental?  @relation(fields: [rentalId], references: [id], onDelete: SetNull)
   createdBy       User     @relation("InvoiceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   
+  invoiceRentals  InvoiceRental[]
   payments        PaymentInvoice[]
   damageReports   DamageReport[]
   returns         Return[] @relation("ReturnInvoice")
@@ -622,6 +624,21 @@ model Invoice {
   @@index([dueDate])
   @@index([paymentStatus])
   @@map("invoices")
+}
+
+model InvoiceRental {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId String   @db.Uuid
+  rentalId  String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  rental    Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, rentalId])
+  @@index([invoiceId])
+  @@index([rentalId])
+  @@map("invoice_rentals")
 }
 
 enum InvoiceType {
