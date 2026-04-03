@@ -17,7 +17,7 @@ const API_BASE = '/api/v1';
 type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
 type StockType = 'New' | 'Used';
 
-const MACHINE_TYPE_OPTIONS: { value: MachineType; label: string }[] = [
+const MACHINE_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'Industrial', label: 'Industrial' },
   { value: 'Domestic', label: 'Domestic' },
   { value: 'Embroidery', label: 'Embroidery' },
@@ -36,6 +36,11 @@ interface ModelRecord {
   name: string;
   brandId: string;
   brand?: { name: string };
+}
+
+interface MachineTypeRecord {
+  id: string;
+  name: string;
 }
 
 interface SearchableSelectProps {
@@ -267,6 +272,8 @@ const StockInPage: React.FC = () => {
   const [brands, setBrands] = useState<BrandRecord[]>([]);
   const [models, setModels] = useState<ModelRecord[]>([]);
   const [brandsModelsLoading, setBrandsModelsLoading] = useState(true);
+  const [machineTypes, setMachineTypes] = useState<MachineTypeRecord[]>([]);
+  const [machineTypesLoading, setMachineTypesLoading] = useState(true);
 
   // New model form state
   const [newModelBrand, setNewModelBrand] = useState('');
@@ -302,22 +309,29 @@ const StockInPage: React.FC = () => {
   // Fetch brands and models on mount
   const fetchBrandsAndModels = useCallback(async () => {
     setBrandsModelsLoading(true);
+    setMachineTypesLoading(true);
     try {
-      const [brandsRes, modelsRes] = await Promise.all([
+      const [brandsRes, modelsRes, typesRes] = await Promise.all([
         authFetch(`${API_BASE}/brands?page=1&limit=200`, { credentials: 'include' }),
         authFetch(`${API_BASE}/models?page=1&limit=500`, { credentials: 'include' }),
+        authFetch(`${API_BASE}/machine-types/active`, { credentials: 'include' }),
       ]);
       const brandsJson = await brandsRes.json();
       const modelsJson = await modelsRes.json();
+      const typesJson = await typesRes.json();
       const brandsList = brandsJson?.data?.items ?? [];
       const modelsList = modelsJson?.data?.items ?? [];
+      const typesList = typesJson?.data ?? [];
       setBrands(Array.isArray(brandsList) ? brandsList : []);
       setModels(Array.isArray(modelsList) ? modelsList : []);
+      setMachineTypes(Array.isArray(typesList) ? typesList : []);
     } catch {
       setBrands([]);
       setModels([]);
+      setMachineTypes([]);
     } finally {
       setBrandsModelsLoading(false);
+      setMachineTypesLoading(false);
     }
   }, []);
 
@@ -371,8 +385,19 @@ const StockInPage: React.FC = () => {
     [brands, models]
   );
 
-  // Default machine type when brand/model selected (no type from API, default to Domestic)
-  const getDefaultMachineType = (_brand: string, _model: string): MachineType => 'Domestic';
+  const machineTypeOptions = useMemo(() => {
+    const names = [...new Set(machineTypes.map((t) => t.name))].filter(Boolean).sort();
+    return names.length
+      ? names.map((name) => ({ value: name, label: name }))
+      : MACHINE_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+  }, [machineTypes]);
+
+  // Default machine type when brand/model selected
+  const getDefaultMachineType = (_brand: string, _model: string): MachineType => {
+    const hasDomestic = machineTypeOptions.some((o) => o.value === 'Domestic');
+    if (hasDomestic) return 'Domestic';
+    return (machineTypeOptions[0]?.value || '') as MachineType;
+  };
 
   // Prepare brand options
   const brandOptions = useMemo(() => {
@@ -443,11 +468,11 @@ const StockInPage: React.FC = () => {
   useEffect(() => {
     if (newModelBrand && newModelModel) {
       const defaultType = getDefaultMachineType(newModelBrand, newModelModel);
-      setNewModelType((prev) => (prev && MACHINE_TYPE_OPTIONS.some((o) => o.value === prev) ? prev : defaultType));
+      setNewModelType((prev) => (prev && machineTypeOptions.some((o) => o.value === prev) ? prev : defaultType));
     } else {
       setNewModelType('');
     }
-  }, [newModelBrand, newModelModel]);
+  }, [newModelBrand, newModelModel, machineTypeOptions]);
 
   // Validate new model form
   const validateNewModel = (): boolean => {
@@ -1097,6 +1122,7 @@ const StockInPage: React.FC = () => {
                   onChange={(value) => {
                     setNewModelBrand(value);
                     setNewModelModel('');
+                    setNewModelType('');
                   }}
                   options={brandOptions}
                   placeholder={brandsModelsLoading ? 'Loading...' : 'Select brand'}
@@ -1112,7 +1138,10 @@ const StockInPage: React.FC = () => {
                 </label>
                 <SearchableSelect
                   value={newModelModel}
-                  onChange={setNewModelModel}
+                  onChange={(value) => {
+                    setNewModelModel(value);
+                    setNewModelType('');
+                  }}
                   options={modelOptions}
                   placeholder="Select model"
                   disabled={!newModelBrand}
@@ -1128,9 +1157,9 @@ const StockInPage: React.FC = () => {
                 <SearchableSelect
                   value={newModelType}
                   onChange={setNewModelType}
-                  options={MACHINE_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                  placeholder="Select type"
-                  disabled={!newModelBrand || !newModelModel}
+                  options={machineTypeOptions}
+                  placeholder={machineTypesLoading ? 'Loading...' : 'Select type'}
+                  disabled={!newModelBrand || !newModelModel || machineTypesLoading}
                   error={newModelErrors.type}
                 />
               </div>
