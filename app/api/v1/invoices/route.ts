@@ -147,15 +147,19 @@ export const POST = withAuthAndRole(
     const body = await request.json();
     const { customerId, rentalId, rentalIds, type, taxCategory, lineItems, issueDate, dueDate, subtotal, vatAmount, grandTotal, periodFrom, periodTo } = body;
     
-    if (!customerId || !type || !lineItems || !Array.isArray(lineItems) || lineItems.length === 0) {
+    const rentalIdsArray: string[] | undefined = Array.isArray(rentalIds) ? rentalIds.filter(Boolean) : undefined;
+
+    const hasProvidedLineItems = Array.isArray(lineItems) && lineItems.length > 0;
+    const hasRentalLink = Boolean(rentalId) || Boolean(rentalIdsArray && rentalIdsArray.length > 0);
+
+    if (!customerId || !type || (!hasProvidedLineItems && !hasRentalLink)) {
       return validationErrorResponse('Missing required fields', {
         customerId: !customerId ? ['Customer ID is required'] : [],
         type: !type ? ['Invoice type is required'] : [],
-        lineItems: !lineItems || lineItems.length === 0 ? ['At least one line item is required'] : [],
+        lineItems: !hasProvidedLineItems && !hasRentalLink ? ['At least one line item is required'] : [],
       });
     }
 
-    const rentalIdsArray: string[] | undefined = Array.isArray(rentalIds) ? rentalIds.filter(Boolean) : undefined;
     if (Array.isArray(rentalIds) && (!rentalIdsArray || rentalIdsArray.length === 0)) {
       return validationErrorResponse('Invalid rentalIds', {
         rentalIds: ['At least one rental ID is required when rentalIds is provided'],
@@ -182,6 +186,23 @@ export const POST = withAuthAndRole(
       const endOk = !r.expectedEndDate || r.expectedEndDate >= from;
       return startOk && endOk;
     };
+
+    const VAT_RATE = 0.18;
+    const toValidDateOrNull = (d: unknown): Date | null => {
+      if (!d) return null;
+      const dt = new Date(d as any);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    };
+    const computeDiffMonths = (from: Date, to: Date): number => {
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
+      fromDate.setHours(0, 0, 0, 0);
+      toDate.setHours(0, 0, 0, 0);
+      const diffMs = toDate.getTime() - fromDate.getTime();
+      const diffDays = Math.max(1, diffMs / (1000 * 60 * 60 * 24));
+      return Math.max(1, Math.ceil(diffDays / 30));
+    };
+    const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
     // Verify rental(s) if provided
     const periodFromDate = periodFrom ? new Date(periodFrom) : issueDate ? new Date(issueDate) : null;
@@ -256,6 +277,97 @@ export const POST = withAuthAndRole(
     const invoiceNumber = `INV-${Date.now()}`;
     const userId = auth.id;
 
+    // If the client didn't provide line items but linked rental(s), derive line items and totals from rental machines.
+    // This matches the invoice UI flow where user selects agreements + period and expects backend to generate items.
+    let finalLineItems: any[] = hasProvidedLineItems ? lineItems : [];
+    let finalSubtotal = typeof subtotal === 'number' ? subtotal : Number(subtotal) || 0;
+    let finalVatAmount = typeof vatAmount === 'number' ? vatAmount : Number(vatAmount) || 0;
+    let finalGrandTotal = typeof grandTotal === 'number' ? grandTotal : Number(grandTotal) || 0;
+
+    if (!hasProvidedLineItems && hasRentalLink) {
+      const idsToFetch = rentalIdsArray && rentalIdsArray.length > 0 ? rentalIdsArray : rentalId ? [rentalId] : [];
+      const rentals = await prisma.rental.findMany({
+        where: { id: { in: idsToFetch } },
+        select: {
+          id: true,
+          agreementNumber: true,
+          startDate: true,
+          expectedEndDate: true,
+          machines: {
+            select: {
+              quantity: true,
+              dailyRate: true,
+              machine: {
+                select: {
+                  brand: { select: { name: true } },
+                  model: { select: { name: true } },
+                  type: { select: { name: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const from = toValidDateOrNull(periodFromDate) ?? (issueDate ? toValidDateOrNull(issueDate) : null) ?? now;
+      const to = toValidDateOrNull(periodToDate) ?? (dueDate ? toValidDateOrNull(dueDate) : null) ?? now;
+      const months = computeDiffMonths(from, to);
+
+      // Group machines by agreement + brand/model/type so multi-agreement invoices stay readable.
+      const categoryMap = new Map<string, { agreementNumber: string; brand: string; model: string; type: string; count: number; monthlyRatePerMachine: number }>();
+      for (const r of rentals) {
+        const agreementNo = r.agreementNumber ?? '';
+        const rms = Array.isArray(r.machines) ? r.machines : [];
+        for (const rm of rms) {
+          const brand = rm.machine?.brand?.name ?? 'Unknown';
+          const model = rm.machine?.model?.name ?? 'Unknown';
+          const mtype = rm.machine?.type?.name ?? '';
+          const qty = typeof rm.quantity === 'number' ? rm.quantity : Number(rm.quantity) || 1;
+          const daily = Number(rm.dailyRate) || 0;
+          const monthlyPerMachine = daily * 30;
+          const key = `${agreementNo}|${brand}|${model}|${mtype}|${monthlyPerMachine}`;
+          if (!categoryMap.has(key)) {
+            categoryMap.set(key, { agreementNumber: agreementNo, brand, model, type: mtype, count: 0, monthlyRatePerMachine: monthlyPerMachine });
+          }
+          categoryMap.get(key)!.count += qty;
+        }
+      }
+
+      let itemIndex = 0;
+      finalLineItems = Array.from(categoryMap.values()).map((cat) => {
+        const baseDesc = [cat.brand, cat.model, cat.type].filter(Boolean).join(' ').toUpperCase() || 'Machine';
+        const desc = cat.agreementNumber ? `${baseDesc} (AGREEMENT ${cat.agreementNumber})` : baseDesc;
+        return {
+          description: desc,
+          quantity: cat.count,
+          unitPrice: round2(cat.monthlyRatePerMachine * months),
+          machineId: null,
+          brand: cat.brand,
+          model: cat.model,
+          type: cat.type,
+          brandId: null,
+          modelId: null,
+          machineTypeId: null,
+          itemCode: `212WG${String(++itemIndex).padStart(5, '0')}`,
+          serialNumber: undefined,
+          vatRate: VAT_RATE,
+        };
+      });
+
+      // Totals derived from line items.
+      finalSubtotal = round2(finalLineItems.reduce((sum: number, li: any) => sum + (Number(li.quantity) || 0) * (Number(li.unitPrice) || 0), 0));
+      const shouldApplyVat = taxCategoryFromCustomerType === 'VAT';
+      finalVatAmount = shouldApplyVat ? round2(finalSubtotal * VAT_RATE) : 0;
+      finalGrandTotal = round2(finalSubtotal + finalVatAmount);
+
+      if (!Array.isArray(finalLineItems) || finalLineItems.length === 0) {
+        return validationErrorResponse('Unable to derive line items from rentals', {
+          rentalId: rentalId ? ['Selected rental has no machines assigned to invoice'] : [],
+          rentalIds: rentalIdsArray ? ['Selected rentals have no machines assigned to invoice'] : [],
+        });
+      }
+    }
+
     const invoiceRentalsCreate =
       rentalIdsArray
         ? {
@@ -293,11 +405,11 @@ export const POST = withAuthAndRole(
         status: 'DRAFT',
         issueDate: issueDate ? new Date(issueDate) : now,
         dueDate: dueDate ? new Date(dueDate) : now,
-        lineItems,
-        subtotal: subtotal || 0,
-        vatAmount: vatAmount || 0,
-        grandTotal: grandTotal || 0,
-        balance: grandTotal || 0,
+        lineItems: finalLineItems,
+        subtotal: finalSubtotal || 0,
+        vatAmount: finalVatAmount || 0,
+        grandTotal: finalGrandTotal || 0,
+        balance: finalGrandTotal || 0,
         createdByUserId: userId,
         ...invoiceRentalsCreate,
       },
