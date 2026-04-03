@@ -523,7 +523,18 @@ function PurchaseModeFromSearchParams({
     return null;
 }
 
-const CreatePurchaseRequestPage: React.FC = () => {
+export type PurchaseOrderCreateMode = 'vat' | 'non_vat';
+type CreatePurchaseOrderVariant = 'page' | 'modal';
+
+export const CreatePurchaseOrderContent: React.FC<{
+    variant?: CreatePurchaseOrderVariant;
+    /** When provided, overrides querystring mode and locks the experience to this mode (used by modal). */
+    mode?: PurchaseOrderCreateMode;
+    /** Used by modal variant to close without navigation. */
+    onClose?: () => void;
+    /** Called after a successful create (before close/navigation). */
+    onCreated?: () => void;
+}> = ({ variant = 'page', mode, onClose, onCreated }) => {
     const router = useRouter();
     const [purchaseMode, setPurchaseMode] = useState<'vat' | 'non_vat' | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -642,6 +653,13 @@ const CreatePurchaseRequestPage: React.FC = () => {
         fetchInventory();
         fetchMasterData();
     }, [fetchCustomers, fetchInventory, fetchMasterData]);
+
+    // In modal variant we force a mode, bypassing querystring.
+    useEffect(() => {
+        if (variant !== 'modal') return;
+        if (!mode) return;
+        setPurchaseMode(mode);
+    }, [variant, mode]);
 
     const desiredCustomerApiType = useMemo(() => {
         if (purchaseMode === 'vat') return 'GARMENT_FACTORY';
@@ -1061,6 +1079,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 title: 'Created',
                 text: 'Purchase order created successfully.',
             });
+            onCreated?.();
+            if (variant === 'modal') {
+                onClose?.();
+                return;
+            }
             router.push('/purchase-order');
         } catch (error: any) {
             console.error('Error creating purchase request:', error);
@@ -1304,44 +1327,50 @@ const CreatePurchaseRequestPage: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-            <Suspense fallback={null}>
-                <PurchaseModeFromSearchParams onModeChange={setPurchaseMode} />
-            </Suspense>
-            {/* Top navbar */}
-            <Navbar onMenuClick={handleMenuClick} />
+        <div className={variant === 'page' ? 'min-h-screen bg-gray-100 dark:bg-slate-950' : ''}>
+            {variant === 'page' && (
+                <Suspense fallback={null}>
+                    <PurchaseModeFromSearchParams onModeChange={setPurchaseMode} />
+                </Suspense>
+            )}
+            {variant === 'page' && (
+                <>
+                    <Navbar onMenuClick={handleMenuClick} />
+                    <Sidebar
+                        onLogout={handleLogout}
+                        isMobileOpen={isMobileSidebarOpen}
+                        onMobileClose={handleMobileSidebarClose}
+                        onExpandedChange={setIsSidebarExpanded}
+                    />
+                </>
+            )}
 
-            {/* Left sidebar */}
-            <Sidebar
-                onLogout={handleLogout}
-                isMobileOpen={isMobileSidebarOpen}
-                onMobileClose={handleMobileSidebarClose}
-                onExpandedChange={setIsSidebarExpanded}
-            />
-
-            {/* Main content area */}
-            <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-                }`}>
-                <div className="max-w-6xl mx-auto space-y-6">
-                    {/* Page header: back button top left (same as inventory/stock-in) */}
-                    <div className="flex items-center gap-4">
-                        <Tooltip content="Back to Purchase Orders">
-                            <button
-                                onClick={() => router.push('/purchase-order')}
-                                className="flex items-center justify-center p-2 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors shrink-0"
-                            >
-                                <ChevronRight className="w-5 h-5 rotate-180" />
-                            </button>
-                        </Tooltip>
-                        <div>
-                            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                                Create Purchase Order
-                            </h2>
-                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                Create a new purchase order and select customer, dates, and machines.
-                            </p>
+            <main
+                className={
+                    variant === 'page'
+                        ? `pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'}`
+                        : 'p-0'
+                }
+            >
+                <div className={variant === 'page' ? 'max-w-6xl mx-auto space-y-6' : 'space-y-4'}>
+                    {variant === 'page' ? (
+                        <div className="flex items-center gap-4">
+                            <Tooltip content="Back to Purchase Orders">
+                                <button
+                                    onClick={() => router.push('/purchase-order')}
+                                    className="flex items-center justify-center p-2 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors shrink-0"
+                                >
+                                    <ChevronRight className="w-5 h-5 rotate-180" />
+                                </button>
+                            </Tooltip>
+                            <div>
+                                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Create Purchase Order</h2>
+                                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    Create a new purchase order and select customer, dates, and machines.
+                                </p>
+                            </div>
                         </div>
-                    </div>
+                    ) : null}
 
                     {/* Form Card - Letterhead-style document (matches official PO / letterhead) */}
                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden w-full max-w-6xl mx-auto">
@@ -2047,6 +2076,10 @@ const CreatePurchaseRequestPage: React.FC = () => {
             )}
         </div>
     );
+};
+
+const CreatePurchaseRequestPage: React.FC = () => {
+    return <CreatePurchaseOrderContent variant="page" />;
 };
 
 export default CreatePurchaseRequestPage;
