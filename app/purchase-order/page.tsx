@@ -10,6 +10,7 @@ import Tooltip from '@/src/components/common/tooltip';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
 import { Swal, toast } from '@/src/lib/swal';
+import { CreatePurchaseOrderContent, type PurchaseOrderCreateMode } from './create/page';
 
 const API_BASE_URL = '/api/v1';
 
@@ -145,6 +146,8 @@ const PurchaseOrderPage: React.FC = () => {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
     const [isCreateTypeSelectOpen, setIsCreateTypeSelectOpen] = useState(false);
+    const [isCreatePurchaseOrderModalOpen, setIsCreatePurchaseOrderModalOpen] = useState(false);
+    const [createPurchaseOrderMode, setCreatePurchaseOrderMode] = useState<PurchaseOrderCreateMode | null>(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [isRentalModalOpen, setIsRentalModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
@@ -219,7 +222,12 @@ const PurchaseOrderPage: React.FC = () => {
     const handleCloseCreateTypeSelectModal = () => setIsCreateTypeSelectOpen(false);
     const handleCreateTypeSelect = (mode: 'vat' | 'non_vat') => {
         setIsCreateTypeSelectOpen(false);
-        router.push(`/purchase-order/create?mode=${mode}`);
+        setCreatePurchaseOrderMode(mode);
+        setIsCreatePurchaseOrderModalOpen(true);
+    };
+    const handleCloseCreatePurchaseOrderModal = () => {
+        setIsCreatePurchaseOrderModalOpen(false);
+        setCreatePurchaseOrderMode(null);
     };
 
     const handleViewRequest = (request: PurchaseRequest) => {
@@ -838,6 +846,40 @@ const PurchaseOrderPage: React.FC = () => {
                                         </div>
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Create Purchase Order Modal (Create form as popup) */}
+                {isCreatePurchaseOrderModalOpen && createPurchaseOrderMode && (
+                    <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
+                            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-slate-700">
+                                <div className="min-w-0">
+                                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white truncate">
+                                        Create Purchase Order
+                                    </h2>
+                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                        {createPurchaseOrderMode === 'vat' ? 'VAT Purchase Order' : 'Non‑VAT Purchase Order'}
+                                    </p>
+                                </div>
+                                <Tooltip content="Close">
+                                    <button
+                                        onClick={handleCloseCreatePurchaseOrderModal}
+                                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </Tooltip>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                                <CreatePurchaseOrderContent
+                                    variant="modal"
+                                    mode={createPurchaseOrderMode}
+                                    onClose={handleCloseCreatePurchaseOrderModal}
+                                    onCreated={fetchPurchaseOrders}
+                                />
                             </div>
                         </div>
                     </div>
