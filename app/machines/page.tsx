@@ -757,7 +757,7 @@ const MachineListPage: React.FC = () => {
     },
     {
       name: 'manufactureYear',
-      label: 'Manufact Year',
+      label: 'Manufacture Year',
       type: 'date',
       placeholder: 'Select date',
       required: true,
@@ -921,7 +921,7 @@ const MachineListPage: React.FC = () => {
     { name: 'currentLocationAddress', label: 'Location Address', type: 'textarea', placeholder: 'Full address if applicable', required: false, rows: 2 },
     {
       name: 'manufactureYear',
-      label: 'Manufact Year',
+      label: 'Manufacture Year',
       type: 'date',
       placeholder: 'Select date',
       required: false,

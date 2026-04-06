@@ -238,7 +238,12 @@ const fetchCustomers = async (): Promise<CustomerOption[]> => {
       id: customer.id,
       name: customer.name,
       type: mapApiTypeToFrontend(customer.type),
-      vatTinNic: customer.vatRegistrationNumber || customer.code,
+      // In this backend, INDIVIDUAL NIC is stored in `vatRegistrationNumber` (set from `nicNumber` on create/update).
+      // Fallback to `code` only for legacy records where NIC wasn't saved properly.
+      vatTinNic:
+        customer.type === 'INDIVIDUAL'
+          ? (customer.vatRegistrationNumber || customer.code)
+          : (customer.vatRegistrationNumber || customer.code),
       address: buildCustomerAddress(customer),
     }));
   } catch (error) {
@@ -663,10 +668,31 @@ const InvoicePage: React.FC = () => {
   const [selectedBrandIds, setSelectedBrandIds] = useState<Record<number, string>>({});
   const [availableModelsPerItem, setAvailableModelsPerItem] = useState<Record<number, Model[]>>({});
 
+  const getTodayISODate = () => new Date().toISOString().split('T')[0];
+
+  const isDateRangeValid = (from: string, to: string) => {
+    if (!from || !to) return true;
+    // Both are expected in YYYY-MM-DD format from <input type="date">
+    return to >= from;
+  };
+
+  const isDateWithinInclusiveRange = (date: string, from: string, to: string) => {
+    if (!date || !from || !to) return false;
+    // Normalize to YYYY-MM-DD (API might send ISO timestamps)
+    const d = date.split('T')[0];
+    return d >= from && d <= to;
+  };
+
   // Load initial data
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Default invoice date to today when create form opens (user can still change it).
+  useEffect(() => {
+    if (!isCreateModalOpen) return;
+    setInvoiceDate((prev) => (prev ? prev : getTodayISODate()));
+  }, [isCreateModalOpen]);
 
   // Load active rentals matching customer + period (optional feature; does not affect existing flows)
   useEffect(() => {
@@ -678,13 +704,22 @@ const InvoicePage: React.FC = () => {
         setSelectedRentalIds(new Set());
         return;
       }
+      if (!isDateRangeValid(periodFrom, periodTo)) {
+        setAvailableRentalsForPeriod([]);
+        setSelectedRentalIds(new Set());
+        return;
+      }
       setIsLoadingRentalsForPeriod(true);
       try {
         const rentals = await fetchActiveRentalsForInvoice(customerId, periodFrom, periodTo);
         if (cancelled) return;
-        setAvailableRentalsForPeriod(rentals);
+        // Requirement: only show agreements whose startDate is within Period From..Period To
+        const rentalsStartingInPeriod = rentals.filter((r) =>
+          isDateWithinInclusiveRange(r.startDate, periodFrom, periodTo)
+        );
+        setAvailableRentalsForPeriod(rentalsStartingInPeriod);
         // keep selected ids that still exist
-        setSelectedRentalIds(prev => new Set([...prev].filter(id => rentals.some(r => r.id === id))));
+        setSelectedRentalIds((prev) => new Set([...prev].filter((id) => rentalsStartingInPeriod.some((r) => r.id === id))));
       } finally {
         if (!cancelled) setIsLoadingRentalsForPeriod(false);
       }
@@ -777,6 +812,7 @@ const InvoicePage: React.FC = () => {
     setFormErrors({});
     setIsInvoiceTypeSelectOpen(false);
     setIsCreateModalOpen(true);
+    setInvoiceDate(getTodayISODate());
   };
 
   const handleCloseCreateModal = () => {
@@ -822,23 +858,45 @@ const InvoicePage: React.FC = () => {
     return { subtotal, vatAmount, totalAmount };
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = (): Record<string, string> => {
     const errors: Record<string, string> = {};
 
     if (!customerId) errors.customerId = 'Customer is required';
     if (!invoiceDate) errors.invoiceDate = 'Invoice Date is required';
   if (!periodFrom) errors.periodFrom = 'Period From is required';
   if (!periodTo) errors.periodTo = 'Period To is required';
+    if (periodFrom && periodTo && !isDateRangeValid(periodFrom, periodTo)) {
+      errors.periodTo = 'Period To cannot be earlier than Period From';
+    }
 
     if (!paymentMethod) errors.paymentMethod = 'Payment Method is required';
     if (!paymentDate) errors.paymentDate = 'Payment Date is required';
 
     setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    return errors;
+  };
+
+  const scrollToFirstErrorField = (errors: Record<string, string>) => {
+    const fieldOrder = ['invoiceDate', 'customerId', 'periodFrom', 'periodTo', 'paymentMethod', 'paymentDate'];
+    const firstKey = fieldOrder.find((k) => Boolean(errors[k])) || Object.keys(errors)[0];
+    if (!firstKey) return;
+
+    const el = document.getElementById(`create-invoice-${firstKey}`);
+    if (!el) return;
+
+    // Wait a tick so the error UI renders before scrolling.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        if (typeof (el as any).focus === 'function') (el as any).focus({ preventScroll: true });
+      });
+    });
   };
 
   const handleSubmitCreate = async () => {
-    if (!validateForm()) {
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      scrollToFirstErrorField(errors);
       return;
     }
 
@@ -1656,6 +1714,7 @@ const InvoicePage: React.FC = () => {
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Date: </span>
               <input
+                id="create-invoice-invoiceDate"
                 type="date"
                 value={invoiceDate}
                 onChange={(e) => setInvoiceDate(e.target.value)}
@@ -1675,6 +1734,7 @@ const InvoicePage: React.FC = () => {
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Customer: </span>
               <select
+                id="create-invoice-customerId"
                 value={customerId}
                 onChange={(e) => handleCustomerChange(e.target.value)}
                 className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
@@ -1699,9 +1759,17 @@ const InvoicePage: React.FC = () => {
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Period From: </span>
               <input
+                id="create-invoice-periodFrom"
                 type="date"
                 value={periodFrom}
-                onChange={(e) => setPeriodFrom(e.target.value)}
+                onChange={(e) => {
+                  const nextFrom = e.target.value;
+                  setPeriodFrom(nextFrom);
+                  // Keep date range valid; prevent "to" being earlier than "from"
+                  if (periodTo && nextFrom && periodTo < nextFrom) {
+                    setPeriodTo('');
+                  }
+                }}
                 className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
                   formErrors.periodFrom ? inputError : inputBorder
                 } ${focusRing}`}
@@ -1713,8 +1781,10 @@ const InvoicePage: React.FC = () => {
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Period To: </span>
               <input
+                id="create-invoice-periodTo"
                 type="date"
                 value={periodTo}
+                min={periodFrom || undefined}
                 onChange={(e) => setPeriodTo(e.target.value)}
                 className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
                   formErrors.periodTo ? inputError : inputBorder
@@ -1725,7 +1795,9 @@ const InvoicePage: React.FC = () => {
               )}
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Customer VAT No: </span>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">
+                {invoiceType === 'VAT' ? 'Customer VAT No: ' : 'Customer NIC: '}
+              </span>
               <span className="text-gray-900 dark:text-white">{selectedCustomer?.vatTinNic || '—'}</span>
             </div>
           </div>
@@ -1747,7 +1819,7 @@ const InvoicePage: React.FC = () => {
 
             {customerId && periodFrom && periodTo && availableRentalsForPeriod.length === 0 && !isLoadingRentalsForPeriod && (
               <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                No ACTIVE agreements overlap this period.
+                No ACTIVE agreements start within this period.
               </div>
             )}
 
@@ -1838,6 +1910,7 @@ const InvoicePage: React.FC = () => {
                   Payment Method<span className="text-red-500">*</span>
                 </label>
                 <select
+                  id="create-invoice-paymentMethod"
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   className={`w-full px-2 py-1.5 border rounded text-sm ${inputBase} ${
@@ -1859,6 +1932,7 @@ const InvoicePage: React.FC = () => {
                   Payment Date<span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="create-invoice-paymentDate"
                   type="date"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
@@ -2175,6 +2249,7 @@ const InvoicePage: React.FC = () => {
               itemsPerPage={10}
               searchable
               filterable
+              maxHeight="none"
               loading={isLoading}
               onCreateClick={handleCreateInvoice}
               createButtonLabel="Create Invoice"
@@ -2299,8 +2374,9 @@ const InvoicePage: React.FC = () => {
                 <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 dark:text-white truncate pr-2">Invoice Details</h2>
                 <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   <button
+                    type="button"
                     onClick={handlePrint}
-                    className="px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-indigo-400 border border-blue-600 dark:border-indigo-400 rounded hover:bg-blue-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-1.5"
+                    className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
                   >
                     <Printer className="w-4 h-4" />
                     Print
