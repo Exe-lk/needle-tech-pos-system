@@ -756,6 +756,20 @@ const MachineListPage: React.FC = () => {
       options: getMachineTypeOptions(),
     },
     {
+      name: 'serialNumber',
+      label: 'Serial Number',
+      type: 'text',
+      placeholder: 'Enter serial number',
+      required: true,
+    },
+    {
+      name: 'boxNumber',
+      label: 'Box Number',
+      type: 'text',
+      placeholder: 'Enter box number (optional)',
+      required: false,
+    },
+    {
       name: 'manufactureYear',
       label: 'Manufacture Year',
       type: 'date',
