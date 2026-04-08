@@ -438,7 +438,14 @@ const Table: React.FC<TableProps> = ({
               )}
             </div>
             {onCreateClick && (
-              <Tooltip content={`Add a new ${createButtonLabel.toLowerCase()}`} position="bottom">
+              <Tooltip
+                content={
+                  createButtonLabel.toLowerCase().startsWith('create')
+                    ? `Add a new ${createButtonLabel.toLowerCase()}`
+                    : createButtonLabel
+                }
+                position="bottom"
+              >
                 <button
                   onClick={onCreateClick}
                   className="w-full sm:w-auto mt-3 sm:mt-0 px-6 py-2.5 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:ring-offset-2 transition-colors duration-200"
