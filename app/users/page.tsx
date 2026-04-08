@@ -284,6 +284,7 @@ const updateUser = async (
     phone?: string;
     role?: string;
     isActive?: boolean;
+    password?: string;
   }
 ): Promise<{ success: boolean; error?: string }> => {
   try {
@@ -768,6 +769,25 @@ const UserManagementPage: React.FC = () => {
   const handleUserUpdate = async (data: Record<string, any>) => {
     if (!selectedUser || !selectedUserDetails) return;
 
+    // Password reset (optional)
+    const newPassword = (data.newPassword ?? '').toString();
+    const repeatNewPassword = (data.repeatNewPassword ?? '').toString();
+    const wantsPasswordReset = newPassword.trim().length > 0 || repeatNewPassword.trim().length > 0;
+    if (wantsPasswordReset) {
+      if (!newPassword.trim() || !repeatNewPassword.trim()) {
+        setError('Please fill both New Password and Repeat New Password.');
+        return;
+      }
+      if (newPassword !== repeatNewPassword) {
+        setError('New Password and Repeat New Password do not match.');
+        return;
+      }
+      if (newPassword.length < 8) {
+        setError('New Password must be at least 8 characters.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -799,6 +819,10 @@ const UserManagementPage: React.FC = () => {
       const isActive = data.status === 'Active';
       if (isActive !== selectedUserDetails.isActive) {
         payload.isActive = isActive;
+      }
+
+      if (wantsPasswordReset) {
+        payload.password = newPassword;
       }
 
       // Only send request if there are changes
@@ -974,6 +998,20 @@ const UserManagementPage: React.FC = () => {
       validation: validatePhoneNumber,
     },
     {
+      name: 'newPassword',
+      label: 'New Password',
+      type: 'password',
+      placeholder: 'Enter new password',
+      required: false,
+    },
+    {
+      name: 'repeatNewPassword',
+      label: 'Repeat New Password',
+      type: 'password',
+      placeholder: 'Re-enter new password',
+      required: false,
+    },
+    {
       name: 'role',
       label: 'Role',
       type: 'select',
@@ -1008,6 +1046,8 @@ const UserManagementPage: React.FC = () => {
       phone: selectedUserDetails.phone || '',
       role: selectedUserDetails.role,
       status: mapApiStatusToFrontend(selectedUserDetails.isActive),
+      newPassword: '',
+      repeatNewPassword: '',
     };
   };
 
