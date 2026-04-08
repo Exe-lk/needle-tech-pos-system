@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse, validationErrorResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import { toPrismaDecimalMoneyInput } from '@/lib/decimal-money';
 
 // Helper function to transform machine data for frontend
 const transformMachineForFrontend = (machine: any) => {
@@ -253,8 +254,18 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     if (body.power !== undefined) updateData.power = body.power;
     if (body.stitchType !== undefined) updateData.stitchType = body.stitchType;
     if (body.maxSpeedSpm !== undefined) updateData.maxSpeedSpm = body.maxSpeedSpm ? parseInt(body.maxSpeedSpm) : null;
-    if (body.unitPrice !== undefined) updateData.unitPrice = body.unitPrice != null && body.unitPrice !== '' ? parseFloat(body.unitPrice) : null;
-    if (body.monthlyRentalFee !== undefined) updateData.monthlyRentalFee = body.monthlyRentalFee != null && body.monthlyRentalFee !== '' ? parseFloat(body.monthlyRentalFee) : null;
+    if (body.unitPrice !== undefined) {
+      updateData.unitPrice =
+        body.unitPrice != null && body.unitPrice !== ''
+          ? toPrismaDecimalMoneyInput(body.unitPrice) ?? null
+          : null;
+    }
+    if (body.monthlyRentalFee !== undefined) {
+      updateData.monthlyRentalFee =
+        body.monthlyRentalFee != null && body.monthlyRentalFee !== ''
+          ? toPrismaDecimalMoneyInput(body.monthlyRentalFee) ?? null
+          : null;
+    }
     
     // Handle photos update
     if (body.referencePhoto || body.serialPlatePhoto) {

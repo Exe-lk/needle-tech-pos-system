@@ -37,6 +37,7 @@ interface RentalAgreement {
   id: number;
   agreementNo: string;
   customerId?: string;
+  customerType?: string;
   customerNo: string;
   customerName: string;
   customerAddress?: string;
@@ -79,6 +80,7 @@ interface RentalByNumberApiData {
   agreementNo: string;
   status: string;
   customerId?: string;
+  customerType?: string;
   customerName: string;
   customerAddress?: string;
   customerPhone?: string;
@@ -121,6 +123,7 @@ function transformByNumberToAgreement(data: RentalByNumberApiData): RentalAgreem
     id: 0,
     agreementNo: data.agreementNo,
     customerId: data.customerId,
+    customerType: data.customerType,
     customerNo: '',
     customerName: data.customerName,
     customerAddress: data.customerAddress,
@@ -599,6 +602,9 @@ const MachineAssignPage: React.FC = () => {
           return;
         }
 
+        const isVatCustomer = (selectedAgreement.customerType ?? '').toUpperCase() !== 'INDIVIDUAL';
+        const VAT_RATE = isVatCustomer ? 0.18 : 0;
+
         const monthlyRent = selectedAgreement.monthlyRent;
         const rentPerMachine = addedCount > 0 ? monthlyRent / addedCount : 0;
         const today = new Date().toISOString().split('T')[0];
@@ -639,7 +645,6 @@ const MachineAssignPage: React.FC = () => {
         // Clear calculation: subtotal = sum of line subtotals, VAT 18%, grandTotal = subtotal + vatAmount
         const subtotalRaw = invoiceItems.reduce((s, it) => s + it.subtotal, 0);
         const subtotal = Math.round(subtotalRaw * 100) / 100;
-        const VAT_RATE = 0.18;
         const vatAmount = Math.round(subtotal * VAT_RATE * 100) / 100;
         const totalAmount = Math.round((subtotal + vatAmount) * 100) / 100;
 
@@ -664,7 +669,7 @@ const MachineAssignPage: React.FC = () => {
           customerId,
           rentalId,
           type: 'RENTAL',
-          taxCategory: 'VAT',
+          taxCategory: isVatCustomer ? 'VAT' : 'NON_VAT',
           lineItems: lineItemsForApi,
           issueDate: today,
           dueDate: periodTo,

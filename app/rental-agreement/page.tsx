@@ -234,8 +234,22 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)))
     : 1;
   const total = Number(r.total);
-  // Use subtotal (before tax) for machine table so total = monthly rent for all machines (e.g. 15,000 for 5×3,000)
-  const monthlySubtotal = months > 0 ? Number(r.subtotal) / months : Number(r.subtotal);
+  // Monthly subtotal (before tax) for machine table.
+  //
+  // Important: In this codebase, `r.subtotal` is not consistently stored as "full-period subtotal".
+  // - Some flows store subtotal for the whole agreement period (monthlySubtotal * months)
+  // - Other flows (notably update/assignment flows) store subtotal as the *monthly* subtotal
+  //   while `r.total` continues to represent the full-period amount.
+  //
+  // If we always do `subtotal / months` we can incorrectly divide twice, producing values like
+  // 9000 -> 2250 when months=4. So we infer whether subtotal is already monthly.
+  const subtotal = Number(r.subtotal);
+  const vatAmount = Number((r as any).vatAmount ?? 0);
+  const almostEqual = (a: number, b: number) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+  const subtotalLooksMonthly =
+    months > 1 &&
+    (almostEqual(subtotal * months + vatAmount, total) || almostEqual(subtotal * months, total));
+  const monthlySubtotal = subtotalLooksMonthly ? subtotal : months > 0 ? subtotal / months : subtotal;
   const machineCount = (r.machines ?? []).length;
   const perMachineMonthly = machineCount > 0 ? monthlySubtotal / machineCount : 0;
   const addressParts = [

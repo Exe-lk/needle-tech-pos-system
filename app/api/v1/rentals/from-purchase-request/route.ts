@@ -98,8 +98,10 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
     const months = Math.max(1, Math.ceil(daysDiff / 30));
     const subtotal = monthlySubtotal * months;
 
-    const vatAmount = subtotal * 0.15; // 15% VAT
-    const total = subtotal + vatAmount;
+    // Hiring agreements created from a purchase order must match the purchase order amount.
+    // Do not add VAT here based on customer type (tax handling is managed elsewhere in the system).
+    const vatAmount = 0;
+    const total = subtotal;
     
     // Generate agreement number
     const count = await prisma.rental.count();

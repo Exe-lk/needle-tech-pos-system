@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, validationErrorResponse } from '@/lib/api-response';
 import { withAuthAndRole, AuthUser } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import { toPrismaDecimalMoneyInput } from '@/lib/decimal-money';
 
 /**
  * @swagger
@@ -83,6 +84,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
           type: typeName,
           stockType,
           quantity,
+          unitPrice: unitPriceRaw,
+          monthlyRentalFee: monthlyRentalFeeRaw,
           warrantyExpiry,
           condition,
           location,
@@ -91,6 +94,9 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
           performedBy,
           machines: machineUnits = [],
         } = transaction;
+
+        const unitPriceDecimal = toPrismaDecimalMoneyInput(unitPriceRaw);
+        const monthlyRentalFeeDecimal = toPrismaDecimalMoneyInput(monthlyRentalFeeRaw);
 
         // Find or create Brand
         let brand = await tx.brand.findFirst({
@@ -196,6 +202,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
               purchaseDate: transactionDateObj,
               notes: notes || null,
               onboardedByUserId: auth.id,
+              unitPrice: unitPriceDecimal ?? null,
+              monthlyRentalFee: monthlyRentalFeeDecimal ?? null,
             },
           });
 

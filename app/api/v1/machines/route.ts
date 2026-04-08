@@ -1,11 +1,53 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
-import { withAuthAndRole } from '@/lib/auth-middleware';
+import { withAuthAndRole, AuthUser } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import { Prisma, MachineStatus } from '@prisma/client';
+import { toPrismaDecimalMoneyInput } from '@/lib/decimal-money';
 
 // Helper function to transform machine data for frontend
-const transformMachineForFrontend = (machine: any) => {
+type MachineWithRelations = {
+  id: string;
+  serialNumber?: string | null;
+  boxNumber?: string | null;
+  status?: string;
+  photos?: string[] | null;
+  manufactureYear?: string | null;
+  country?: string | null;
+  conditionOnArrival?: string | null;
+  warrantyStatus?: string | null;
+  warrantyExpiryDate?: Date | string | null;
+  purchaseDate?: Date | string | null;
+  currentLocationName?: string | null;
+  notes?: string | null;
+  qrCodeValue?: string | null;
+  qrCodeImageUrl?: string | null;
+  voltage?: string | null;
+  power?: string | null;
+  stitchType?: string | null;
+  maxSpeedSpm?: number | null;
+  currentCustomer?: string | null;
+  unitPrice: unknown;
+  monthlyRentalFee: unknown;
+  brand?: { name: string | null } | null;
+  model?: { name: string | null } | null;
+  type?: { name: string | null } | null;
+};
+
+const toNumberOrNull = (v: unknown): number | null => {
+  if (v == null) return null;
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+  // Prisma Decimal sometimes serializes to string-ish objects; be defensive
+  if (typeof v === 'object' && v && 'toString' in v && typeof (v as { toString: () => string }).toString === 'function') {
+    const s = (v as { toString: () => string }).toString();
+    if (s.trim() !== '' && !Number.isNaN(Number(s))) return Number(s);
+  }
+  return null;
+};
+
+const transformMachineForFrontend = (machine: MachineWithRelations) => {
   // Generate barcode from brand-model-serialNumber if not present
   const barcode = machine.qrCodeValue || 
     `${machine.brand?.name || ''}-${machine.model?.name || ''}-${machine.serialNumber}`.replace(/\s+/g, '-').toUpperCase();
@@ -19,6 +61,8 @@ const transformMachineForFrontend = (machine: any) => {
     'DAMAGED': 'Maintenance'
   };
 
+  const backendStatus = machine.status || 'AVAILABLE';
+
   return {
     id: machine.id,
     barcode,
@@ -27,7 +71,7 @@ const transformMachineForFrontend = (machine: any) => {
     brand: machine.brand?.name || '',
     model: machine.model?.name || '',
     type: machine.type?.name || 'Other',
-    status: statusMap[machine.status] || 'Available',
+    status: statusMap[backendStatus] || 'Available',
     photos: machine.photos || [],
     manufactureYear: machine.manufactureYear || '',
     country: machine.country || '',
@@ -45,8 +89,8 @@ const transformMachineForFrontend = (machine: any) => {
     stitchType: machine.stitchType || '',
     maxSpeedSpm: machine.maxSpeedSpm || null,
     currentCustomer: machine.currentCustomer || null,
-    unitPrice: machine.unitPrice != null ? Number(machine.unitPrice) : null,
-    monthlyRentalFee: machine.monthlyRentalFee != null ? Number(machine.monthlyRentalFee) : null,
+    unitPrice: toNumberOrNull(machine.unitPrice),
+    monthlyRentalFee: toNumberOrNull(machine.monthlyRentalFee),
   };
 };
 
@@ -86,9 +130,10 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
 
     const statusFilter = searchParams.get('status');
     const brandIdFilter = searchParams.get('brandId');
+    const modelIdFilter = searchParams.get('modelId');
     const typeFilter = searchParams.get('type');
 
-    const where: any = {};
+    const where: Prisma.MachineWhereInput = {};
 
     if (search) {
       where.OR = [
@@ -100,8 +145,15 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
       ];
     }
 
-    if (statusFilter) where.status = statusFilter.toUpperCase();
+    if (statusFilter) {
+      const statusUpper = statusFilter.toUpperCase();
+      const allowed: MachineStatus[] = ['AVAILABLE', 'RENTED', 'DAMAGED', 'MAINTENANCE', 'RETIRED'];
+      if (allowed.includes(statusUpper as MachineStatus)) {
+        where.status = statusUpper as MachineStatus;
+      }
+    }
     if (brandIdFilter) where.brandId = brandIdFilter;
+    if (modelIdFilter) where.modelId = modelIdFilter;
     if (typeFilter) {
       where.type = { name: { equals: typeFilter, mode: 'insensitive' } };
     }
@@ -185,10 +237,11 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
       {
         ...(statusFilter && { status: statusFilter }),
         ...(brandIdFilter && { brandId: brandIdFilter }),
+        ...(modelIdFilter && { modelId: modelIdFilter }),
         ...(typeFilter && { type: typeFilter }),
       }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching machines:', error);
     return errorResponse('Failed to retrieve machines', 500);
   }
@@ -239,7 +292,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
  *               invoiceGrn:
  *                 type: array
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { 
@@ -254,7 +307,6 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
       warrantyExpiryDate,
       referencePhoto,
       serialPlatePhoto,
-      invoiceGrn,
       notes,
       voltage,
       power,
@@ -288,189 +340,243 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
     if (Object.keys(errors).length > 0) {
       return validationErrorResponse('Missing required fields', errors);
     }
-    
-    // Find or create Brand
-    let brand;
-    if (brandId) {
-      brand = await prisma.brand.findUnique({ where: { id: brandId } });
-      if (!brand) {
-        return validationErrorResponse('Invalid brand ID', {
-          brandId: ['Brand not found'],
-        });
-      }
-    } else {
-      brand = await prisma.brand.findFirst({
-        where: { name: { equals: brandName, mode: 'insensitive' } }
-      });
-      
-      if (!brand) {
-        // Create new brand
-        brand = await prisma.brand.create({
-          data: {
-            name: brandName,
-            code: brandName.toUpperCase().replace(/\s+/g, '_'),
-            isActive: true
-          }
-        });
-      }
-    }
-    
-    // Find or create Model
-    let model;
-    if (modelId) {
-      model = await prisma.model.findUnique({ where: { id: modelId } });
-      if (!model) {
-        return validationErrorResponse('Invalid model ID', {
-          modelId: ['Model not found'],
-        });
-      }
-    } else {
-      model = await prisma.model.findFirst({
-        where: { 
-          name: { equals: modelName, mode: 'insensitive' },
-          brandId: brand.id
+
+    const performedByUser = auth?.email || 'System';
+    const transactionDateObj = purchaseDate ? new Date(purchaseDate) : new Date();
+
+    type TxResult = { newMachine: MachineWithRelations } | { error: Response };
+
+    const result: TxResult = await prisma.$transaction(async (tx): Promise<TxResult> => {
+      // Find or create Brand
+      let brand;
+      if (brandId) {
+        brand = await tx.brand.findUnique({ where: { id: brandId } });
+        if (!brand) {
+          return { error: validationErrorResponse('Invalid brand ID', { brandId: ['Brand not found'] }) };
         }
-      });
-      
-      if (!model) {
-        // Create new model
-        model = await prisma.model.create({
-          data: {
-            name: modelName,
+      } else {
+        brand = await tx.brand.findFirst({
+          where: { name: { equals: brandName, mode: 'insensitive' } },
+        });
+
+        if (!brand) {
+          brand = await tx.brand.create({
+            data: {
+              name: brandName,
+              code: brandName.toUpperCase().replace(/\s+/g, '_'),
+              isActive: true,
+            },
+          });
+        }
+      }
+
+      // Find or create Model
+      let model;
+      if (modelId) {
+        model = await tx.model.findUnique({ where: { id: modelId } });
+        if (!model) {
+          return { error: validationErrorResponse('Invalid model ID', { modelId: ['Model not found'] }) };
+        }
+      } else {
+        model = await tx.model.findFirst({
+          where: {
+            name: { equals: modelName, mode: 'insensitive' },
             brandId: brand.id,
-            code: modelName.toUpperCase().replace(/\s+/g, '_'),
-            isActive: true
-          }
+          },
         });
+
+        if (!model) {
+          model = await tx.model.create({
+            data: {
+              name: modelName,
+              brandId: brand.id,
+              code: modelName.toUpperCase().replace(/\s+/g, '_'),
+              isActive: true,
+            },
+          });
+        }
       }
-    }
-    
-    // Find or create MachineType
-    let machineType;
-    if (machineTypeId) {
-      machineType = await prisma.machineType.findUnique({ where: { id: machineTypeId } });
-    } else if (typeName) {
-      machineType = await prisma.machineType.findFirst({
-        where: { name: { equals: typeName, mode: 'insensitive' } }
-      });
-      
-      if (!machineType) {
-        // Create new machine type
-        machineType = await prisma.machineType.create({
-          data: {
-            name: typeName,
-            code: typeName.toUpperCase().replace(/\s+/g, '_'),
-            isActive: true
-          }
+
+      // Find or create MachineType
+      let machineType;
+      if (machineTypeId) {
+        machineType = await tx.machineType.findUnique({ where: { id: machineTypeId } });
+      } else if (typeName) {
+        machineType = await tx.machineType.findFirst({
+          where: { name: { equals: typeName, mode: 'insensitive' } },
         });
+
+        if (!machineType) {
+          machineType = await tx.machineType.create({
+            data: {
+              name: typeName,
+              code: typeName.toUpperCase().replace(/\s+/g, '_'),
+              isActive: true,
+            },
+          });
+        }
       }
-    }
-    
-    // Generate serial number and box number if not provided
-    const serialNumber = providedSerialNumber || `SN-${Date.now().toString(36).toUpperCase()}`;
-    const boxNumber = providedBoxNumber || `BOX-${Date.now().toString(36).toUpperCase()}`;
-    
-    // Check if serial number already exists
-    const existingMachine = await prisma.machine.findFirst({
-      where: { serialNumber }
-    });
-    
-    if (existingMachine) {
-      return validationErrorResponse('Serial number already exists', {
-        serialNumber: ['This serial number is already in use'],
+
+      // Generate serial number and box number if not provided
+      const serialNumber = providedSerialNumber || `SN-${Date.now().toString(36).toUpperCase()}`;
+      const boxNumber = providedBoxNumber || `BOX-${Date.now().toString(36).toUpperCase()}`;
+
+      // Check if serial number already exists
+      const existingMachine = await tx.machine.findFirst({
+        where: { serialNumber },
       });
-    }
-    
-    // Generate QR code value (barcode)
-    const qrCodeValue = `${brand.name}-${model.name}-${serialNumber}`.replace(/\s+/g, '-').toUpperCase();
-    
-    // Map frontend status to backend status
-    const statusMap: Record<string, 'AVAILABLE' | 'RENTED' | 'MAINTENANCE' | 'RETIRED' | 'DAMAGED'> = {
-      'Available': 'AVAILABLE',
-      'Rented': 'RENTED',
-      'Maintenance': 'MAINTENANCE',
-      'Retired': 'RETIRED'
-    };
-    const backendStatus = statusMap[frontendStatus || 'Available'] || 'AVAILABLE' as const;
-    
-    // Collect all photos - filter valid strings only
-const allPhotos: string[] = [];
-
-// Extract valid photo URLs (strings only, ignore objects/files)
-const extractValidUrls = (data: any): string[] => {
-  if (!data) return [];
-  if (typeof data === 'string' && data.trim()) return [data];
-  if (Array.isArray(data)) {
-    return data.filter(item => typeof item === 'string' && item.trim() !== '');
-  }
-  return [];
-};
-
-allPhotos.push(...extractValidUrls(referencePhoto));
-allPhotos.push(...extractValidUrls(serialPlatePhoto));
-
-console.log('Photos to save:', allPhotos); // Debug log
-    
-    // Prepare machine data
-    const machineData: any = {
-      serialNumber,
-      boxNumber,
-      brandId: brand.id,
-      modelId: model.id,
-      typeId: machineType?.id,
-      qrCodeValue,
-      status: backendStatus,
-      photos: allPhotos,
-      voltage: voltage || null,
-      power: power || null,
-      stitchType: stitchType || null,
-      maxSpeedSpm: maxSpeedSpm ? parseInt(maxSpeedSpm) : null,
-      specsOther: null,
-      currentLocationName: location || null,
-    };
-
-    // Add additional fields (these require Prisma schema update and regeneration)
-    if (manufactureYear) machineData.manufactureYear = manufactureYear;
-    if (country) machineData.country = country;
-    if (conditionOnArrival) machineData.conditionOnArrival = conditionOnArrival;
-    if (warrantyStatus) machineData.warrantyStatus = warrantyStatus;
-    if (warrantyExpiryDate) machineData.warrantyExpiryDate = new Date(warrantyExpiryDate);
-    if (purchaseDate) machineData.purchaseDate = new Date(purchaseDate);
-    if (notes) machineData.notes = notes;
-    if (unitPrice != null && unitPrice !== '') machineData.unitPrice = parseFloat(unitPrice);
-    if (monthlyRentalFee != null && monthlyRentalFee !== '') machineData.monthlyRentalFee = parseFloat(monthlyRentalFee);
-
-    // Create machine with all fields
-    const newMachine = await prisma.machine.create({
-      data: machineData,
-      include: { 
-        brand: true, 
-        model: true, 
-        type: true 
+      if (existingMachine) {
+        return {
+          error: validationErrorResponse('Serial number already exists', {
+            serialNumber: ['This serial number is already in use'],
+          }),
+        };
       }
+
+      // Generate QR code value (barcode)
+      const qrCodeValue = `${brand.name}-${model.name}-${serialNumber}`.replace(/\s+/g, '-').toUpperCase();
+
+      // Map frontend status to backend status
+      const statusMap: Record<string, 'AVAILABLE' | 'RENTED' | 'MAINTENANCE' | 'RETIRED' | 'DAMAGED'> = {
+        Available: 'AVAILABLE',
+        Rented: 'RENTED',
+        Maintenance: 'MAINTENANCE',
+        Retired: 'RETIRED',
+      };
+      const backendStatus = statusMap[frontendStatus || 'Available'] || ('AVAILABLE' as const);
+
+      // Collect all photos - filter valid strings only
+      const allPhotos: string[] = [];
+      const extractValidUrls = (data: unknown): string[] => {
+        if (!data) return [];
+        if (typeof data === 'string' && data.trim()) return [data];
+        if (Array.isArray(data)) return data.filter((item) => typeof item === 'string' && item.trim() !== '');
+        return [];
+      };
+      allPhotos.push(...extractValidUrls(referencePhoto));
+      allPhotos.push(...extractValidUrls(serialPlatePhoto));
+
+      const resolvedLocation = (location && String(location).trim()) || 'Main Warehouse';
+
+      // Prepare machine data
+      const machineData: Prisma.MachineUncheckedCreateInput = {
+        serialNumber,
+        boxNumber,
+        brandId: brand.id,
+        modelId: model.id,
+        typeId: machineType?.id ?? null,
+        qrCodeValue,
+        status: backendStatus,
+        photos: allPhotos,
+        voltage: voltage || null,
+        power: power || null,
+        stitchType: stitchType || null,
+        maxSpeedSpm: maxSpeedSpm ? parseInt(maxSpeedSpm) : null,
+        specsOther: null,
+        currentLocationName: resolvedLocation,
+        onboardedByUserId: auth.id,
+      };
+
+      if (manufactureYear) machineData.manufactureYear = manufactureYear;
+      if (country) machineData.country = country;
+      if (conditionOnArrival) machineData.conditionOnArrival = conditionOnArrival;
+      if (warrantyStatus) machineData.warrantyStatus = warrantyStatus;
+      if (warrantyExpiryDate) machineData.warrantyExpiryDate = new Date(warrantyExpiryDate);
+      if (purchaseDate) machineData.purchaseDate = new Date(purchaseDate);
+      if (notes) machineData.notes = notes;
+      if (unitPrice != null && unitPrice !== '') {
+        const d = toPrismaDecimalMoneyInput(unitPrice);
+        if (d !== undefined) machineData.unitPrice = d;
+      }
+      if (monthlyRentalFee != null && monthlyRentalFee !== '') {
+        const d = toPrismaDecimalMoneyInput(monthlyRentalFee);
+        if (d !== undefined) machineData.monthlyRentalFee = d;
+      }
+
+      const newMachine = await tx.machine.create({
+        data: machineData,
+        include: { brand: true, model: true, type: true },
+      });
+
+      // ---- Inventory accounting for initial onboarding (bincard + transaction log)
+      const previousEntries = await tx.bincardEntry.findMany({
+        where: { brand: brand.name, model: model.name },
+        orderBy: { date: 'desc' },
+        take: 1,
+      });
+      const previousBalance = previousEntries.length > 0 ? previousEntries[0].balance : 0;
+      const newBalance = previousBalance + 1;
+
+      const warrantyExpiryDateObj = warrantyExpiryDate ? new Date(warrantyExpiryDate) : null;
+
+      const bincardEntry = await tx.bincardEntry.create({
+        data: {
+          date: transactionDateObj,
+          transactionType: 'STOCK_IN',
+          brand: brand.name,
+          model: model.name,
+          machineType: machineType?.name || null,
+          reference: `MACHINE-REG-${serialNumber}`,
+          quantityIn: 1,
+          quantityOut: 0,
+          balance: newBalance,
+          location: resolvedLocation,
+          stockType: conditionOnArrival || null,
+          warrantyExpiry: warrantyExpiryDateObj,
+          condition: conditionOnArrival || null,
+          performedBy: performedByUser,
+          notes: notes || null,
+        },
+      });
+
+      await tx.transactionLog.create({
+        data: {
+          transactionDate: transactionDateObj,
+          category: 'INVENTORY',
+          transactionType: 'STOCK_IN',
+          reference: bincardEntry.id,
+          description: `Machine registration (stock in): 1 unit of ${brand.name} ${model.name} (SN: ${serialNumber})`,
+          brand: brand.name,
+          model: model.name,
+          quantity: 1,
+          location: resolvedLocation,
+          performedBy: performedByUser,
+          status: 'SUCCESS',
+          notes: notes || null,
+        },
+      });
+
+      return { newMachine: newMachine as unknown as MachineWithRelations };
     });
+
+    if ('error' in result) {
+      return result.error;
+    }
+
+    const newMachine = result.newMachine;
     
     // Transform for frontend
     const transformedMachine = transformMachineForFrontend(newMachine);
     
     return successResponse(transformedMachine, 'Machine created successfully', 201);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating machine:', error);
     
     // Handle Prisma errors
-    if (error.code === 'P2002') {
+    const e = error as { code?: string; meta?: { target?: string[] }; message?: string };
+    if (e.code === 'P2002') {
       return validationErrorResponse('Duplicate entry', {
-        [error.meta?.target?.[0] || 'field']: ['This value already exists'],
+        [e.meta?.target?.[0] || 'field']: ['This value already exists'],
       });
     }
     
     // Handle missing fields error
-    if (error.code === 'P2003') {
+    if (e.code === 'P2003') {
       return validationErrorResponse('Invalid reference', {
         field: ['Referenced record does not exist'],
       });
     }
     
-    return errorResponse('Failed to create machine: ' + error.message, 500);
+    return errorResponse('Failed to create machine: ' + (e.message || 'Unknown error'), 500);
   }
 });

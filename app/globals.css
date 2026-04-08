@@ -98,3 +98,23 @@ body {
     padding: 1rem;
   }
 }
+
+/* Purchase order: print only the letterhead document from View modal */
+@media print {
+  body.purchase-order-printing * {
+    visibility: hidden;
+  }
+  body.purchase-order-printing #purchase-order-print,
+  body.purchase-order-printing #purchase-order-print * {
+    visibility: visible;
+  }
+  body.purchase-order-printing #purchase-order-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+}
