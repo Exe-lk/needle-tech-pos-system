@@ -33,6 +33,8 @@ export interface LetterheadDocumentProps {
   showChequeInstructions?: boolean;
   /** Additional footer content above the standard footer */
   footerContent?: React.ReactNode;
+  /** When true, hide the standard letterhead footer (used for VAT invoice to match official printed format). */
+  hideStandardFooter?: boolean;
   /** Custom class name for the container */
   className?: string;
   /** Override logo image path (e.g. /vat_logo.jpeg for tax invoice, /non_vat_logo.jpeg for normal invoice). When set, logo is shown in color. */
@@ -52,6 +54,7 @@ export function LetterheadDocument({
   footerStyle = 'simple',
   showChequeInstructions,
   footerContent,
+  hideStandardFooter = false,
   className = '',
   logoPath: logoPathOverride,
   hideTagline = false,
@@ -105,14 +108,15 @@ export function LetterheadDocument({
       {footerContent && <div className="mb-6 print:mb-4">{footerContent}</div>}
 
       {/* Footer - simple: address, tel/fax, email (Hiring Agreement); full: + cheque + importer */}
-      <div className="border-t border-gray-300 dark:border-slate-600 pt-4 mt-6 print:mt-4 print:border-gray-300">
-        
-        <div className="text-xs text-gray-700 dark:text-slate-300 text-center space-y-1 px-2 print:text-xs print:text-gray-700">
-          <div>{info.address}</div>
-          <div>Tel: {info.telephone.map((t) => t.replace(/-/g, '')).join(', ')} Fax: 2487623</div>
-          <div>Email: {info.email}</div>
+      {!hideStandardFooter && (
+        <div className="border-t border-gray-300 dark:border-slate-600 pt-4 mt-6 print:mt-4 print:border-gray-300">
+          <div className="text-xs text-gray-700 dark:text-slate-300 text-center space-y-1 px-2 print:text-xs print:text-gray-700">
+            <div>{info.address}</div>
+            <div>Tel: {info.telephone.map((t) => t.replace(/-/g, '')).join(', ')} Fax: 2487623</div>
+            <div>Email: {info.email}</div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

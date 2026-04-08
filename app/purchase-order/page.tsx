@@ -240,7 +240,19 @@ const PurchaseOrderPage: React.FC = () => {
         setSelectedRequest(null);
     };
 
-    const handlePrintPurchaseOrder = () => window.print();
+    const handlePrintPurchaseOrder = () => {
+        // Use a scoped body class so print CSS only affects this document.
+        document.body.classList.add('purchase-order-printing');
+        window.print();
+        // Some browsers don't reliably fire afterprint; still attempt cleanup there too.
+        window.setTimeout(() => document.body.classList.remove('purchase-order-printing'), 500);
+    };
+
+    React.useEffect(() => {
+        const cleanup = () => document.body.classList.remove('purchase-order-printing');
+        window.addEventListener('afterprint', cleanup);
+        return () => window.removeEventListener('afterprint', cleanup);
+    }, []);
 
     const handleCreateRentalAgreement = (request: PurchaseRequest) => {
         if (!hasAvailableMachinesForRental(request)) {
@@ -714,32 +726,32 @@ const PurchaseOrderPage: React.FC = () => {
                     <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">End Date:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.endDate ? new Date(request.endDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
                     <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Status:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.status}</span></div>
                 </div>
-                <div className="mb-4 flex-1 overflow-x-auto">
-                    <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 min-w-[28rem]">
+                <div className="mb-4 flex-1 overflow-x-auto print:overflow-visible">
+                    <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 min-w-[28rem] print:min-w-0">
                         <thead>
                             <tr className="bg-gray-100 dark:bg-slate-700/50 print:bg-gray-100">
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Brand</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Model</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Type</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Quantity</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-right text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Unit Price (Rs.)</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-right text-sm font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total (Rs.)</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-left text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Brand</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-left text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Model</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-left text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Type</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-center text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Quantity</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-right text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Unit Price (Rs.)</th>
+                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-right text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total (Rs.)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {request.machines?.map((m, i) => (
                                 <tr key={i}>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">{m.brand}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">{m.model}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">{m.type}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{m.quantity}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.unitPrice.toLocaleString('en-LK')}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-sm text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.totalPrice.toLocaleString('en-LK')}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{m.brand}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{m.model}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{m.type}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{m.quantity}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.unitPrice.toLocaleString('en-LK')}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.totalPrice.toLocaleString('en-LK')}</td>
                                 </tr>
                             ))}
                             <tr className="bg-gray-50 dark:bg-slate-700/30 print:bg-gray-50 font-semibold">
-                                <td colSpan={5} className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-right text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">Total Amount:</td>
-                                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 text-right text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">Rs. {request.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td colSpan={5} className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-right text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">Total Amount:</td>
+                                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-right text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">Rs. {request.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -767,7 +779,10 @@ const PurchaseOrderPage: React.FC = () => {
         <>
             {/* Print-only: purchase order in letterhead (shown when user clicks Print in view modal) */}
             {selectedRequest && (
-                <div className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white print:p-0 print:m-0">
+                <div
+                    id="purchase-order-print"
+                    className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white print:p-0 print:m-0"
+                >
                     {renderPurchaseOrderDocument(selectedRequest)}
                 </div>
             )}

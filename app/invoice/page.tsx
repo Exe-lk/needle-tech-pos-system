@@ -1185,8 +1185,84 @@ const InvoicePage: React.FC = () => {
     if (isVAT) {
       /* Tax Invoice format matching official layout: row1 Date | Invoice No, row2 TIN boxes, row3 bordered address boxes, row4 Period | PO, then bordered table and bordered summary */
       const fmt = (n: number) => `Rs.${n.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
+
+      const splitSerials = (serialNumber?: string) => {
+        const raw = (serialNumber ?? '').trim();
+        if (!raw) return [];
+        return raw
+          .split(/[\n,;/]+/g)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      };
+
+      const vatRows = (() => {
+        type VatRow = {
+          key: string;
+          serial: string;
+          description: string;
+          rate: number;
+          qty: number;
+          amountExVat: number;
+        };
+
+        const rows: VatRow[] = [];
+        invoice.items.forEach((item, index) => {
+          const qty = Number(item.numberOfMachines) || 1;
+          const unitRate = Number(item.monthlyRentPerMachine) || 0;
+          const serials = splitSerials(item.serialNumber);
+
+          const shouldExpand = qty > 1 || serials.length > 1;
+          if (!shouldExpand) {
+            rows.push({
+              key: `${index}-0`,
+              serial: item.serialNumber?.trim() || '—',
+              description: item.description,
+              rate: unitRate,
+              qty,
+              amountExVat: Number(item.subtotal) || unitRate * qty,
+            });
+            return;
+          }
+
+          const expandedCount = Math.max(qty, serials.length || 0) || qty;
+          for (let i = 0; i < expandedCount; i++) {
+            rows.push({
+              key: `${index}-${i}`,
+              serial: serials[i] || '—',
+              description: item.description,
+              rate: unitRate,
+              qty: 1,
+              amountExVat: unitRate,
+            });
+          }
+        });
+
+        return rows;
+      })();
+
       return (
         <div className="text-sm print:text-xs">
+          {/* Print page number (matches PDF layout) */}
+          <style jsx global>{`
+            @media print {
+              .print-page-number {
+                position: fixed;
+                bottom: 10mm;
+                left: 0;
+                right: 0;
+                text-align: center;
+                font-size: 10px;
+                color: #000;
+              }
+              .print-page-number::after {
+                content: counter(page);
+              }
+            }
+          `}</style>
+          <div className="hidden print:block print-page-number">
+            Page{' '}
+          </div>
+
           {/* Row 1: Date of Invoice (left) | Tax Invoice No (right) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
             <div>
@@ -1198,16 +1274,16 @@ const InvoicePage: React.FC = () => {
               <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.invoiceNumber}</span>
             </div>
           </div>
-          {/* Row 2: Supplier's TIN (left) | Purchaser's TIN (right) - bordered boxes */}
+          {/* Row 2: Supplier VAT No (left) | Purchaser VAT No (right) - bordered boxes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
             <div>
-              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN : </span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier VAT No : </span>
               <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
-                {company.tinNo}
+                {company.vatNo}
               </div>
             </div>
             <div>
-              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN : </span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser VAT No : </span>
               <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
                 {invoice.vatTinNic || '—'}
               </div>
@@ -1252,7 +1328,7 @@ const InvoicePage: React.FC = () => {
           <div className="overflow-x-auto -mx-1">
             <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 mb-4 print:mb-3 print:text-xs min-w-[32rem]">
               <thead>
-                <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800 bg-gray-100 dark:bg-slate-700 print:bg-gray-100">
                   <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
                   <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
                   <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Rate</th>
@@ -1261,13 +1337,13 @@ const InvoicePage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {invoice.items.map((item, index) => (
-                  <tr key={index}>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{String(index + 1).padStart(6, '0')}</td>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{item.description}</td>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{item.monthlyRentPerMachine.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{item.numberOfMachines}</td>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                {vatRows.map((row) => (
+                  <tr key={row.key}>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900 whitespace-pre-wrap break-words">{row.serial}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{row.description}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{row.rate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{row.qty}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{row.amountExVat.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1275,21 +1351,21 @@ const InvoicePage: React.FC = () => {
           </div>
 
           {/* Summary - three rows with thin borders (table-like) */}
-          <table className="w-full border-collapse max-w-md ml-auto mb-4 print:mb-3">
+          <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 mb-4 print:mb-3">
             <tbody>
-              <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
-                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Value of Supply</td>
-                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(subtotal)}</td>
+              <tr>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Value of Supply</td>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 w-[12rem]">{fmt(subtotal)}</td>
               </tr>
               {vatAmount > 0 && (
-                <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
-                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">VAT Amount (18.0%)</td>
-                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(vatAmount)}</td>
+                <tr>
+                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">VAT Amount (18.0%)</td>
+                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(vatAmount)}</td>
                 </tr>
               )}
-              <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
-                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
-                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">{fmt(totalAmount)}</td>
+              <tr>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2.5 px-2 font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2.5 px-2 text-right font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">{fmt(totalAmount)}</td>
               </tr>
             </tbody>
           </table>
@@ -1403,6 +1479,7 @@ const InvoicePage: React.FC = () => {
           footerContent={renderInvoiceSignatures(invoice)}
           logoPath={isVAT ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg'}
           hideTagline={isVAT}
+          hideStandardFooter={isVAT}
           className="print:p-0"
         >
           {renderInvoiceBodyContent(invoice)}
@@ -1433,11 +1510,74 @@ const InvoicePage: React.FC = () => {
           footerContent={renderInvoiceSignatures(invoice)}
           logoPath={isVAT ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg'}
           hideTagline={isVAT}
+          hideStandardFooter={isVAT}
           className="print:p-0"
         >
           {isVAT ? (
             /* VAT: same layout as view form — Date | Tax Invoice No, TIN row, Supplier/Purchaser boxes, Period | PO, then per-month bordered table + summary table, then grand total */
             <div className="text-sm print:text-xs">
+              <style jsx global>{`
+                @media print {
+                  .print-page-number {
+                    position: fixed;
+                    bottom: 10mm;
+                    left: 0;
+                    right: 0;
+                    text-align: center;
+                    font-size: 10px;
+                    color: #000;
+                  }
+                  .print-page-number::after {
+                    content: counter(page);
+                  }
+                }
+              `}</style>
+              <div className="hidden print:block print-page-number">
+                Page{' '}
+              </div>
+
+              {(() => {
+                const splitSerials = (serialNumber?: string) => {
+                  const raw = (serialNumber ?? '').trim();
+                  if (!raw) return [];
+                  return raw
+                    .split(/[\n,;/]+/g)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                };
+
+                const renderVatLineRows = (pi: { item: InvoiceItem; rate: number }) => {
+                  const qty = Number(pi.item.numberOfMachines) || 1;
+                  const unitRate = Number(pi.rate) || 0;
+                  const serials = splitSerials(pi.item.serialNumber);
+                  const shouldExpand = qty > 1 || serials.length > 1;
+
+                  if (!shouldExpand) {
+                    return [
+                      {
+                        key: `${pi.item.id}-0`,
+                        serial: pi.item.serialNumber?.trim() || '—',
+                        description: pi.item.description,
+                        rate: unitRate,
+                        qty,
+                        amountExVat: unitRate * qty,
+                      },
+                    ];
+                  }
+
+                  const expandedCount = Math.max(qty, serials.length || 0) || qty;
+                  return Array.from({ length: expandedCount }, (_, i) => ({
+                    key: `${pi.item.id}-${i}`,
+                    serial: serials[i] || '—',
+                    description: pi.item.description,
+                    rate: unitRate,
+                    qty: 1,
+                    amountExVat: unitRate,
+                  }));
+                };
+
+                return (
+                  <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
                 <div>
                   <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Date of Invoice : </span>
@@ -1450,13 +1590,13 @@ const InvoicePage: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
                 <div>
-                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN</span>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier VAT No</span>
                   <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
-                    {company.tinNo}
+                    {company.vatNo}
                   </div>
                 </div>
                 <div>
-                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN</span>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser VAT No</span>
                   <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
                     {invoice.vatTinNic || '—'}
                   </div>
@@ -1509,7 +1649,7 @@ const InvoicePage: React.FC = () => {
                   <div className="overflow-x-auto -mx-1">
                     <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 mb-4 print:mb-3 print:text-xs min-w-[32rem]">
                       <thead>
-                        <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                        <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800 bg-gray-100 dark:bg-slate-700 print:bg-gray-100">
                           <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
                           <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
                           <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Rate</th>
@@ -1518,15 +1658,17 @@ const InvoicePage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.proratedItems.map((pi, idx) => (
-                          <tr key={idx}>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{String(idx + 1).padStart(6, '0')}</td>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.item.description}</td>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.proratedRate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.item.numberOfMachines}</td>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.proratedSubtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
-                          </tr>
-                        ))}
+                        {preview.proratedItems.flatMap((pi) =>
+                          renderVatLineRows({ item: pi.item, rate: pi.proratedRate }).map((row) => (
+                            <tr key={`${preview.month}-${preview.year}-${row.key}`}>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900 whitespace-pre-wrap break-words">{row.serial}</td>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{row.description}</td>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{row.rate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{row.qty}</td>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{row.amountExVat.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -1573,6 +1715,9 @@ const InvoicePage: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+                  </>
+                );
+              })()}
             </div>
           ) : (
             /* Non-VAT: same layout as view form — Customer, Address, Period, NIC, then per-month table (Description | Serial No | Monthly Rental), Total Amount, then grand total */

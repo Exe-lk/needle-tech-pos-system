@@ -94,11 +94,30 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
         },
       },
     } as any));
+
+    // Backwards-compat normalization (response-only):
+    // Older invoices may have been saved with NON_VAT taxCategory but VAT-inclusive totals.
+    // Do not mutate DB here; only correct the payload to match taxCategory.
+    const normalizedInvoices = invoices.map((inv: any) => {
+      if (inv?.taxCategory === 'NON_VAT') {
+        const sub = Number(inv.subtotal) || 0;
+        return {
+          ...inv,
+          vatAmount: 0,
+          grandTotal: sub,
+          balance: typeof inv.balance === 'number' ? Math.min(Number(inv.balance) || 0, sub) : sub,
+          lineItems: Array.isArray(inv.lineItems)
+            ? inv.lineItems.map((li: any) => ({ ...li, vatRate: 0 }))
+            : inv.lineItems,
+        };
+      }
+      return inv;
+    });
     
     const pagination = buildPaginationMeta(totalItems, page, limit);
     
     return paginatedResponse(
-      invoices,
+      normalizedInvoices,
       pagination,
       'Invoices retrieved successfully',
       { sortBy, sortOrder: sortOrder_ },
@@ -366,6 +385,30 @@ export const POST = withAuthAndRole(
           rentalIds: rentalIdsArray ? ['Selected rentals have no machines assigned to invoice'] : [],
         });
       }
+    }
+
+    // Enforce VAT vs NON_VAT totals for rental invoices, even when client provides line items/totals.
+    // This protects machine-assign and any other client from accidentally adding VAT for INDIVIDUAL customers.
+    const isRentalInvoice = Boolean(type === 'RENTAL' || rentalId || (rentalIdsArray && rentalIdsArray.length > 0));
+    if (isRentalInvoice) {
+      const shouldApplyVat = taxCategoryFromCustomerType === 'VAT';
+      // Normalize line items vatRate so downstream UIs/exports don't show VAT on NON_VAT invoices.
+      if (Array.isArray(finalLineItems)) {
+        finalLineItems = finalLineItems.map((li: any) => ({
+          ...li,
+          vatRate: shouldApplyVat ? VAT_RATE : 0,
+        }));
+      }
+      finalSubtotal = round2(
+        Array.isArray(finalLineItems)
+          ? finalLineItems.reduce(
+              (sum: number, li: any) => sum + (Number(li.quantity) || 0) * (Number(li.unitPrice) || 0),
+              0
+            )
+          : finalSubtotal
+      );
+      finalVatAmount = shouldApplyVat ? round2(finalSubtotal * VAT_RATE) : 0;
+      finalGrandTotal = round2(finalSubtotal + finalVatAmount);
     }
 
     const invoiceRentalsCreate =

@@ -850,6 +850,51 @@ export const CreatePurchaseOrderContent: React.FC<{
         }));
     };
 
+    /** Load monthlyRentalFee from catalogued machines when brand/model/type match the machines table (via brandId + modelId + type name). */
+    const fetchAndApplyMonthlyRentalFee = useCallback(
+        async (machineId: string, brandName: string, modelName: string, typeName: string) => {
+            const brandObj = apiBrands.find((b) => b.name === brandName);
+            const modelObj = apiModels.find(
+                (m) => m.name === modelName && (!brandObj || m.brandId === brandObj.id)
+            );
+            if (!brandObj || !modelObj || !typeName.trim()) return;
+
+            try {
+                const params = new URLSearchParams({
+                    page: '1',
+                    limit: '10',
+                    brandId: brandObj.id,
+                    modelId: modelObj.id,
+                    type: typeName.trim(),
+                });
+                const response = await authFetch(`${API_BASE_URL}/machines?${params.toString()}`, {
+                    method: 'GET',
+                    credentials: 'include',
+                });
+                const json = await response.json();
+                const items = json?.data?.items;
+                if (!response.ok || !Array.isArray(items) || items.length === 0) return;
+
+                const raw = items[0]?.monthlyRentalFee;
+                if (raw == null || raw === '') return;
+                const fee = Number(raw);
+                if (Number.isNaN(fee)) return;
+
+                setMachines((prev) =>
+                    prev.map((m) => {
+                        if (m.id !== machineId) return m;
+                        if (m.brand !== brandName || m.model !== modelName || m.type !== typeName) return m;
+                        const qty = Math.max(0, Number(m.quantity) || 1);
+                        return { ...m, monthlyRentalFee: fee, unitPrice: fee, totalPrice: fee * qty };
+                    })
+                );
+            } catch {
+                /* manual monthly fee entry still works */
+            }
+        },
+        [apiBrands, apiModels]
+    );
+
     // Calculate pricing from monthly rental fee × quantity per line (read-only summary; row totals updated in handleMachineChange)
     const pricing = useMemo(() => {
         return machines.reduce((sum, m) => {
@@ -915,6 +960,15 @@ export const CreatePurchaseOrderContent: React.FC<{
     };
 
     const handleMachineChange = (id: string, field: keyof MachineRequestItem, value: any) => {
+        let fetchFeeSelection: { id: string; brand: string; model: string; type: string } | null = null;
+        if (field === 'type') {
+            const row = machines.find((x) => x.id === id);
+            const b = row?.brand ?? '';
+            const md = row?.model ?? '';
+            const t = String(value ?? '').trim();
+            if (b && md && t) fetchFeeSelection = { id, brand: b, model: md, type: t };
+        }
+
         setMachines(
             machines.map((m) => {
                 if (m.id !== id) return m;
@@ -924,15 +978,24 @@ export const CreatePurchaseOrderContent: React.FC<{
                     updated.model = '';
                     updated.type = '';
                     updated.availableStock = 0;
+                    updated.monthlyRentalFee = 0;
+                    updated.unitPrice = 0;
+                    updated.totalPrice = 0;
                 }
                 // Reset type when model changes
                 if (field === 'model') {
                     updated.type = '';
                     updated.availableStock = 0;
+                    updated.monthlyRentalFee = 0;
+                    updated.unitPrice = 0;
+                    updated.totalPrice = 0;
                 }
                 // Update available stock when type is selected (brand+model+type = inventory grain)
                 if (field === 'type' && updated.brand && updated.model) {
                     updated.availableStock = getAvailableStock(updated.brand, updated.model, value);
+                    updated.monthlyRentalFee = 0;
+                    updated.unitPrice = 0;
+                    updated.totalPrice = 0;
                 }
                 // Derive unitPrice/totalPrice from monthlyRentalFee and quantity
                 const fee = Number(updated.monthlyRentalFee) || 0;
@@ -942,6 +1005,15 @@ export const CreatePurchaseOrderContent: React.FC<{
                 return updated;
             })
         );
+
+        if (fetchFeeSelection) {
+            void fetchAndApplyMonthlyRentalFee(
+                fetchFeeSelection.id,
+                fetchFeeSelection.brand,
+                fetchFeeSelection.model,
+                fetchFeeSelection.type
+            );
+        }
     };
 
     const getPurchaseOrderValidationErrors = (): Record<string, string> => {

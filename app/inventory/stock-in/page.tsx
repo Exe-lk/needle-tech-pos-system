@@ -26,6 +26,13 @@ const MACHINE_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'Other', label: 'Other' },
 ];
 
+/** Prefer Domestic when present, else first option; empty list yields ''. */
+function pickDefaultMachineTypeName(opts: { value: string; label: string }[]): string {
+  if (opts.length === 0) return '';
+  if (opts.some((o) => o.value === 'Domestic')) return 'Domestic';
+  return opts[0]?.value || '';
+}
+
 interface BrandRecord {
   id: string;
   name: string;
@@ -245,6 +252,10 @@ interface StockModelEntry {
   type: MachineType;
   stockType: StockType;
   quantity: number;
+  /** Purchase / list unit price — applied to every machine in this line */
+  unitPrice: number;
+  /** Monthly rental fee — applied to every machine in this line */
+  monthlyRentalFee: number;
   warrantyExpiry: string;
   condition: string;
   location: string;
@@ -256,6 +267,8 @@ interface StockModelEntry {
     model?: string;
     stockType?: string;
     quantity?: string;
+    unitPrice?: string;
+    monthlyRentalFee?: string;
     warrantyExpiry?: string;
     condition?: string;
     location?: string;
@@ -274,6 +287,9 @@ const StockInPage: React.FC = () => {
   const [brandsModelsLoading, setBrandsModelsLoading] = useState(true);
   const [machineTypes, setMachineTypes] = useState<MachineTypeRecord[]>([]);
   const [machineTypesLoading, setMachineTypesLoading] = useState(true);
+  /** Types that already exist on machines for the selected brand + model (subset of catalog). */
+  const [typesForBrandModel, setTypesForBrandModel] = useState<MachineTypeRecord[]>([]);
+  const [typesForBrandModelLoading, setTypesForBrandModelLoading] = useState(false);
 
   // New model form state
   const [newModelBrand, setNewModelBrand] = useState('');
@@ -281,6 +297,8 @@ const StockInPage: React.FC = () => {
   const [newModelType, setNewModelType] = useState('');
   const [newModelStockType, setNewModelStockType] = useState('');
   const [newModelQuantity, setNewModelQuantity] = useState('');
+  const [newModelUnitPrice, setNewModelUnitPrice] = useState('');
+  const [newModelMonthlyRentalFee, setNewModelMonthlyRentalFee] = useState('');
   const [newModelWarrantyExpiry, setNewModelWarrantyExpiry] = useState('');
   const [newModelCondition, setNewModelCondition] = useState('');
   const [newModelLocation, setNewModelLocation] = useState('');
@@ -392,12 +410,65 @@ const StockInPage: React.FC = () => {
       : MACHINE_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
   }, [machineTypes]);
 
-  // Default machine type when brand/model selected
-  const getDefaultMachineType = (_brand: string, _model: string): MachineType => {
-    const hasDomestic = machineTypeOptions.some((o) => o.value === 'Domestic');
-    if (hasDomestic) return 'Domestic';
-    return (machineTypeOptions[0]?.value || '') as MachineType;
-  };
+  /**
+   * After brand + model are chosen, show only types already used for that pair in inventory.
+   * If none exist yet (first stock-in for this model), fall back to the full active type list.
+   * While resolving, keep options empty so the user does not pick from stale/wrong lists.
+   */
+  const effectiveMachineTypeOptions = useMemo(() => {
+    if (!newModelBrand || !newModelModel) return machineTypeOptions;
+    if (typesForBrandModelLoading) return [];
+    if (typesForBrandModel.length > 0) {
+      const names = [...new Set(typesForBrandModel.map((t) => t.name))].filter(Boolean).sort();
+      return names.map((name) => ({ value: name, label: name }));
+    }
+    return machineTypeOptions;
+  }, [
+    newModelBrand,
+    newModelModel,
+    machineTypeOptions,
+    typesForBrandModel,
+    typesForBrandModelLoading,
+  ]);
+
+  useEffect(() => {
+    if (!newModelBrand || !newModelModel) {
+      setTypesForBrandModel([]);
+      setTypesForBrandModelLoading(false);
+      return;
+    }
+    const brand = brands.find((b) => b.name === newModelBrand);
+    const modelRec = models.find((m) => m.brandId === brand?.id && m.name === newModelModel);
+    if (!brand || !modelRec) {
+      setTypesForBrandModel([]);
+      setTypesForBrandModelLoading(false);
+      return;
+    }
+
+    const ac = new AbortController();
+    setTypesForBrandModelLoading(true);
+    setTypesForBrandModel([]);
+
+    (async () => {
+      try {
+        const res = await authFetch(
+          `${API_BASE}/machines/types-for-model?brandId=${encodeURIComponent(brand.id)}&modelId=${encodeURIComponent(modelRec.id)}`,
+          { credentials: 'include', signal: ac.signal }
+        );
+        const json = await res.json();
+        const data = json?.data;
+        const list = Array.isArray(data) ? data : [];
+        setTypesForBrandModel(list);
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return;
+        setTypesForBrandModel([]);
+      } finally {
+        if (!ac.signal.aborted) setTypesForBrandModelLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+  }, [newModelBrand, newModelModel, brands, models]);
 
   // Prepare brand options
   const brandOptions = useMemo(() => {
@@ -427,6 +498,8 @@ const StockInPage: React.FC = () => {
       type: modelEntry.type,
       stockType: modelEntry.stockType,
       location: modelEntry.location,
+      unitPrice: modelEntry.unitPrice,
+      monthlyRentalFee: modelEntry.monthlyRentalFee,
       warrantyExpiry: modelEntry.stockType === 'New' ? modelEntry.warrantyExpiry : null,
       condition: modelEntry.stockType === 'Used' ? modelEntry.condition : null,
       notes: modelEntry.notes || null,
@@ -464,15 +537,29 @@ const StockInPage: React.FC = () => {
 ^XZ`;
   };
 
-  // Sync default type when brand/model change (only set when type is empty)
+  // Sync default type when brand/model or filtered type list changes
   useEffect(() => {
     if (newModelBrand && newModelModel) {
-      const defaultType = getDefaultMachineType(newModelBrand, newModelModel);
-      setNewModelType((prev) => (prev && machineTypeOptions.some((o) => o.value === prev) ? prev : defaultType));
+      const defaultType = pickDefaultMachineTypeName(effectiveMachineTypeOptions) as MachineType;
+      setNewModelType((prev) =>
+        prev && effectiveMachineTypeOptions.some((o) => o.value === prev) ? prev : defaultType
+      );
     } else {
       setNewModelType('');
     }
-  }, [newModelBrand, newModelModel, machineTypeOptions]);
+  }, [newModelBrand, newModelModel, effectiveMachineTypeOptions]);
+
+  const parseNonNegativeMoneyInput = (raw: string): number | null => {
+    const normalized = raw.trim().replace(/[\s,']/g, '');
+    if (normalized === '') return null;
+    try {
+      const n = Number(normalized);
+      if (Number.isNaN(n) || n < 0) return null;
+      return n;
+    } catch {
+      return null;
+    }
+  };
 
   // Validate new model form
   const validateNewModel = (): boolean => {
@@ -485,6 +572,10 @@ const StockInPage: React.FC = () => {
     if (!newModelQuantity || parseInt(newModelQuantity) < 1) {
       errors.quantity = 'Quantity must be at least 1';
     }
+    const unitPriceVal = parseNonNegativeMoneyInput(newModelUnitPrice);
+    if (unitPriceVal === null) errors.unitPrice = 'Unit price is required (0 or greater)';
+    const monthlyVal = parseNonNegativeMoneyInput(newModelMonthlyRentalFee);
+    if (monthlyVal === null) errors.monthlyRentalFee = 'Monthly rental fee is required (0 or greater)';
     if (newModelStockType === 'New' && !newModelWarrantyExpiry) {
       errors.warrantyExpiry = 'Warranty expiry date is required for new machines';
     }
@@ -502,6 +593,8 @@ const StockInPage: React.FC = () => {
     if (!validateNewModel()) return;
 
     const quantity = parseInt(newModelQuantity);
+    const unitPriceVal = parseNonNegativeMoneyInput(newModelUnitPrice)!;
+    const monthlyVal = parseNonNegativeMoneyInput(newModelMonthlyRentalFee)!;
     const machines: MachineEntry[] = Array.from({ length: quantity }, (_, index) => ({
       id: `${Date.now()}-${index}`,
       serialNumber: '',
@@ -516,6 +609,8 @@ const StockInPage: React.FC = () => {
       type: newModelType as MachineType,
       stockType: newModelStockType as StockType,
       quantity,
+      unitPrice: unitPriceVal,
+      monthlyRentalFee: monthlyVal,
       warrantyExpiry: newModelWarrantyExpiry,
       condition: newModelCondition,
       location: newModelLocation,
@@ -532,6 +627,8 @@ const StockInPage: React.FC = () => {
     setNewModelType('');
     setNewModelStockType('');
     setNewModelQuantity('');
+    setNewModelUnitPrice('');
+    setNewModelMonthlyRentalFee('');
     setNewModelWarrantyExpiry('');
     setNewModelCondition('');
     setNewModelLocation('');
@@ -697,6 +794,8 @@ const StockInPage: React.FC = () => {
         type: model.type,
         stockType: model.stockType,
         quantity: model.quantity,
+        unitPrice: model.unitPrice,
+        monthlyRentalFee: model.monthlyRentalFee,
         warrantyExpiry: model.warrantyExpiry || undefined,
         condition: model.condition || undefined,
         location: model.location,
@@ -1011,6 +1110,8 @@ const StockInPage: React.FC = () => {
       setNewModelType('');
       setNewModelStockType('');
       setNewModelQuantity('');
+      setNewModelUnitPrice('');
+      setNewModelMonthlyRentalFee('');
       setNewModelWarrantyExpiry('');
       setNewModelCondition('');
       setNewModelLocation('');
@@ -1157,9 +1258,18 @@ const StockInPage: React.FC = () => {
                 <SearchableSelect
                   value={newModelType}
                   onChange={setNewModelType}
-                  options={machineTypeOptions}
-                  placeholder={machineTypesLoading ? 'Loading...' : 'Select type'}
-                  disabled={!newModelBrand || !newModelModel || machineTypesLoading}
+                  options={effectiveMachineTypeOptions}
+                  placeholder={
+                    machineTypesLoading || typesForBrandModelLoading
+                      ? 'Loading...'
+                      : 'Select type'
+                  }
+                  disabled={
+                    !newModelBrand ||
+                    !newModelModel ||
+                    machineTypesLoading ||
+                    typesForBrandModelLoading
+                  }
                   error={newModelErrors.type}
                 />
               </div>
@@ -1200,6 +1310,48 @@ const StockInPage: React.FC = () => {
                 />
                 {newModelErrors.quantity && (
                   <p className="mt-1 text-sm text-red-500">{newModelErrors.quantity}</p>
+                )}
+              </div>
+
+              {/* Unit price & monthly rental (applied to each unit in this line) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Unit Price (Rs.) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={newModelUnitPrice}
+                  onChange={(e) => setNewModelUnitPrice(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                    newModelErrors.unitPrice
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-slate-600'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                  placeholder="e.g. 125000.00"
+                />
+                {newModelErrors.unitPrice && (
+                  <p className="mt-1 text-sm text-red-500">{newModelErrors.unitPrice}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Monthly Rental Fee (Rs.) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={newModelMonthlyRentalFee}
+                  onChange={(e) => setNewModelMonthlyRentalFee(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                    newModelErrors.monthlyRentalFee
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-slate-600'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
+                  placeholder="e.g. 8500.00"
+                />
+                {newModelErrors.monthlyRentalFee && (
+                  <p className="mt-1 text-sm text-red-500">{newModelErrors.monthlyRentalFee}</p>
                 )}
               </div>
 
@@ -1346,8 +1498,22 @@ const StockInPage: React.FC = () => {
                                 {model.stockType}
                               </span>
                             </div>
-                            <div className="mt-1 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-400">
                               <span>Quantity: {model.quantity}</span>
+                              <span>
+                                Unit: Rs.{' '}
+                                {model.unitPrice.toLocaleString('en-LK', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </span>
+                              <span>
+                                Monthly: Rs.{' '}
+                                {model.monthlyRentalFee.toLocaleString('en-LK', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </span>
                               <span>Location: {model.location}</span>
                               <span className={isComplete ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}>
                                 {completedCount}/{model.quantity} completed
@@ -1576,6 +1742,24 @@ const StockInPage: React.FC = () => {
                             </span>
                           </div>
                         )}
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Unit Price (Rs.):</span>
+                          <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                            {model.unitPrice.toLocaleString('en-LK', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Monthly Rental (Rs.):</span>
+                          <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                            {model.monthlyRentalFee.toLocaleString('en-LK', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
                         <div className="md:col-span-2">
                           <span className="text-gray-500 dark:text-gray-400">Barcode:</span>
                           <span className="ml-2 text-gray-900 dark:text-white font-medium font-mono text-xs">
