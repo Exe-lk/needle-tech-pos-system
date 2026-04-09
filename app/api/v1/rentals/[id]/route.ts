@@ -101,7 +101,17 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       where: { id },
       include: {
         purchaseOrder: true,
-        machines: true,
+        machines: {
+          include: {
+            machine: {
+              include: {
+                brand: true,
+                model: true,
+                type: true,
+              },
+            },
+          },
+        },
       } as any,
     }) as any;
     if (!existingRental) {
@@ -128,6 +138,54 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       );
     }
 
+    // Expected machine categories (brand/model/type + quantity). Used to validate scan-time assignment.
+    type ExpectedCategory = { id: string; brand: string; model: string; type: string; quantity: number };
+    const expectedMachineCategories: ExpectedCategory[] = (() => {
+      const req = existingRental.requestedMachineLines as any[] | null;
+      if (Array.isArray(req) && req.length > 0) {
+        return req.map((m: any, i: number) => ({
+          id: String(m.id ?? i),
+          brand: String(m.brand ?? ''),
+          model: String(m.model ?? ''),
+          type: String(m.type ?? ''),
+          quantity: typeof m.quantity === 'number' ? m.quantity : 1,
+        }));
+      }
+      const poMachines = existingRental.purchaseOrder?.machines as any[] | undefined;
+      if (Array.isArray(poMachines) && poMachines.length > 0) {
+        const map = new Map<string, ExpectedCategory>();
+        for (const m of poMachines) {
+          const brand = String(m.brand ?? '');
+          const model = String(m.model ?? '');
+          const type = String(m.type ?? '');
+          const qty = typeof m.quantity === 'number' ? m.quantity : Number(m.quantity) || 0;
+          const key = `${brand}||${model}||${type}`.toUpperCase().trim();
+          if (!map.has(key)) {
+            map.set(key, { id: String(m.id ?? key), brand, model, type, quantity: 0 });
+          }
+          map.get(key)!.quantity += qty;
+        }
+        return Array.from(map.values()).filter((c) => c.quantity > 0);
+      }
+      return [];
+    })();
+
+    const norm = (s: unknown) => String(s ?? '').trim().toUpperCase();
+    const machineToKey = (m: any) => `${norm(m?.brand?.name)}||${norm(m?.model?.name)}||${norm(m?.type?.name)}`;
+    const catToKey = (c: ExpectedCategory) => `${norm(c.brand)}||${norm(c.model)}||${norm(c.type)}`;
+
+    const expectedByKey = new Map<string, ExpectedCategory>();
+    for (const c of expectedMachineCategories) expectedByKey.set(catToKey(c), c);
+
+    const currentAssignedCountsByKey = new Map<string, number>();
+    const existingAssigned = Array.isArray(existingRental.machines) ? existingRental.machines : [];
+    for (const rm of existingAssigned) {
+      const m = rm.machine;
+      if (!m) continue;
+      const key = machineToKey(m);
+      currentAssignedCountsByKey.set(key, (currentAssignedCountsByKey.get(key) ?? 0) + 1);
+    }
+
     // Handle machine assignment from QR scans
     if (body.machines && Array.isArray(body.machines)) {
       const machinesToAdd: any[] = [];
@@ -135,6 +193,9 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       // Per-machine monthly = subtotal / expected count (e.g. 15000/5 = 3000); dailyRate = that / 30
       const perMachineDailyRate =
         expectedCount > 0 ? subtotalNum / expectedCount / 30 : subtotalNum / 30;
+
+      // Track counts while processing this request so we can enforce per-category quantities.
+      const nextCountsByKey = new Map(currentAssignedCountsByKey);
 
       for (const machineData of body.machines) {
         const serialNo = machineData.serialNo || machineData.serialNumber;
@@ -145,6 +206,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
         // Find machine by serial number
         const machine = await prisma.machine.findUnique({
           where: { serialNumber: serialNo },
+          include: { brand: true, model: true, type: true },
         });
         
         if (!machine) {
@@ -176,6 +238,30 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
           return validationErrorResponse('Machine is reserved for another agreement', {
             machines: [`Machine with serial ${serialNo} is already assigned to agreement ${otherAgreementNo ?? 'another'}. It cannot be assigned to a different agreement.`],
           });
+        }
+
+        // Validate machine belongs to the expected agreement categories, and enforce per-category quantities.
+        if (expectedMachineCategories.length > 0) {
+          const key = machineToKey(machine);
+          const expectedCat = expectedByKey.get(key);
+          if (!expectedCat) {
+            const readable = [machine.brand?.name, machine.model?.name, machine.type?.name].filter(Boolean).join(' ');
+            return validationErrorResponse('Machine is not part of this agreement', {
+              machines: [
+                `Machine ${serialNo} (${readable || 'Unknown category'}) is not included in this agreement's machine plan.`,
+              ],
+            });
+          }
+          const nextCount = (nextCountsByKey.get(key) ?? 0) + 1;
+          if (nextCount > expectedCat.quantity) {
+            const readableExpected = [expectedCat.brand, expectedCat.model, expectedCat.type].filter(Boolean).join(' ');
+            return validationErrorResponse('Category is already complete', {
+              machines: [
+                `Cannot add ${serialNo}. Category "${readableExpected || 'Machine'}" already has ${expectedCat.quantity} machine(s) assigned for this agreement.`,
+              ],
+            });
+          }
+          nextCountsByKey.set(key, nextCount);
         }
         
         // Use per-machine daily rate so agreement total = subtotal (e.g. 5 machines × 3000 = 15000)
