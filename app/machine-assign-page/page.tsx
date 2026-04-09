@@ -426,7 +426,7 @@ const MachineAssignPage: React.FC = () => {
   };
 
   /** QR code contains only serial number and box number. No brand/model/type. */
-  const handleInlineQRScanSuccess = (decodedText: string) => {
+  const handleInlineQRScanSuccess = async (decodedText: string) => {
     const categoryIndex = activeScanCategoryIndexRef.current;
     if (categoryIndex == null || !selectedAgreement) return;
 
@@ -439,6 +439,66 @@ const MachineAssignPage: React.FC = () => {
 
     const serialNumber = extracted.serial.trim();
     const boxNumber = (extracted.box || '').trim();
+
+    // Validate machine belongs to the agreement plan (and correct category) at scan-time.
+    // Stock keeper role may not have access to /api/v1/machines, so we use /api/v1/inventory/machines.
+    try {
+      const categories = getExpectedCategories(selectedAgreement);
+      const expected = categories[categoryIndex];
+      if (expected) {
+        const res = await authFetch(`/api/v1/inventory/machines?search=${encodeURIComponent(serialNumber)}`);
+        const json = await res.json();
+        if (!res.ok) {
+          alert(json?.message ?? 'Failed to validate machine. Please try again.');
+          setScannerKey((k) => k + 1);
+          return;
+        }
+        const machines = Array.isArray(json?.data?.machines) ? json.data.machines : [];
+        const match = machines.find(
+          (m: { serialNumber?: string }) =>
+            String(m?.serialNumber ?? '').trim().toLowerCase() === serialNumber.toLowerCase()
+        );
+        if (!match) {
+          alert(`Machine with serial "${serialNumber}" not found in inventory.`);
+          setScannerKey((k) => k + 1);
+          return;
+        }
+
+        const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
+        const scannedKey = `${norm(match.brand)}|${norm(match.model)}|${norm(match.type)}`;
+        const expectedKey = `${norm(expected.brand)}|${norm(expected.model)}|${norm(expected.type)}`;
+
+        // First: ensure scanned machine is part of ANY expected category in this agreement.
+        const allowedKeys = new Set(
+          categories.map((c) => `${norm(c.brand)}|${norm(c.model)}|${norm(c.type)}`)
+        );
+        if (!allowedKeys.has(scannedKey)) {
+          const scannedLabel = [match.brand, match.model, match.type].filter(Boolean).join(' ');
+          alert(
+            `This machine is not included in this agreement.\n\nScanned: ${scannedLabel || 'Unknown'}\nExpected categories: ${categories
+              .map((c) => [c.brand, c.model, c.type].filter(Boolean).join(' ') || 'Machine')
+              .join(' | ')}`
+          );
+          setScannerKey((k) => k + 1);
+          return;
+        }
+
+        // Second: enforce "current category" matching, so user can't overfill a completed category.
+        if (scannedKey !== expectedKey) {
+          const scannedLabel = [match.brand, match.model, match.type].filter(Boolean).join(' ');
+          const expectedLabel = [expected.brand, expected.model, expected.type].filter(Boolean).join(' ') || 'Machine';
+          alert(
+            `Wrong machine category.\n\nYou are currently scanning for: ${expectedLabel}\nBut scanned: ${scannedLabel || 'Unknown'}\n\nPlease scan a machine from the expected category.`
+          );
+          setScannerKey((k) => k + 1);
+          return;
+        }
+      }
+    } catch {
+      alert('Network error while validating the machine. Please try again.');
+      setScannerKey((k) => k + 1);
+      return;
+    }
 
     setMachinesForAgreement((prev) => {
       const isDuplicate = prev.some(
