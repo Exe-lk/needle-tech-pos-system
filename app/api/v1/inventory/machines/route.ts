@@ -5,8 +5,8 @@ import prisma from '@/lib/prisma';
 
 /**
  * GET /api/v1/inventory/machines
- * Returns a flat list of all machines with serialNumber and boxNumber exactly as stored in the database.
- * Used by the inventory page view modal and QR codes so displayed/encoded values match the DB.
+ * Returns a flat list of non-retired machines with serialNumber and boxNumber as stored in the database.
+ * Retired machines (e.g. sold) are excluded. Used by the inventory view modal, QR generate, and machine search.
  */
 export const GET = withAuthAndRole(
   ['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER', 'Stock_Keeper'],
@@ -16,7 +16,9 @@ export const GET = withAuthAndRole(
       const search = searchParams.get('search')?.trim();
       const typeFilter = searchParams.get('type');
 
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = {
+        status: { not: 'RETIRED' },
+      };
 
       if (search) {
         where.OR = [

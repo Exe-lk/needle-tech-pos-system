@@ -1,15 +1,13 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import Script from 'next/script';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import type { FormField } from '@/src/components/form-popup/update';
-import { Eye, Clock, Pencil, X, QrCode, Printer } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { Eye, Clock, Pencil, X } from 'lucide-react';
 import { authFetch } from '@/lib/auth-client';
 import { Swal } from '@/src/lib/swal';
 
@@ -74,16 +72,15 @@ const InventoryManagementPage: React.FC = () => {
   const [inventoryLoading, setInventoryLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
-  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const [selectedMachineForQR, setSelectedMachineForQR] = useState<MachineUnit | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [machineUnits, setMachineUnits] = useState<MachineUnit[]>([]);
   const [machineUnitsLoading, setMachineUnitsLoading] = useState(true);
   const [machineUnitsError, setMachineUnitsError] = useState<string | null>(null);
-  const [isBrowserPrintLoaded, setIsBrowserPrintLoaded] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState<any>(null);
-  const [devices, setDevices] = useState<any[]>([]);
-  const qrCodeRef = useRef<HTMLDivElement>(null);
+  const [isSoldModalOpen, setIsSoldModalOpen] = useState(false);
+  const [machineForSale, setMachineForSale] = useState<MachineUnit | null>(null);
+  const [sellSerialInput, setSellSerialInput] = useState('');
+  const [sellBoxInput, setSellBoxInput] = useState('');
+  const [sellSubmitting, setSellSubmitting] = useState(false);
 
   // Fetch inventory from API
   const fetchInventory = useCallback(async () => {
@@ -112,7 +109,7 @@ const InventoryManagementPage: React.FC = () => {
     fetchInventory();
   }, [fetchInventory]);
 
-  // Fetch machine units (real serialNumber, boxNumber from DB) for view modal and QR codes
+  // Fetch machine units (real serialNumber, boxNumber from DB) for view modal
   const fetchMachineUnits = useCallback(async () => {
     setMachineUnitsLoading(true);
     setMachineUnitsError(null);
@@ -148,35 +145,6 @@ const InventoryManagementPage: React.FC = () => {
   useEffect(() => {
     fetchMachineUnits();
   }, [fetchMachineUnits]);
-
-  // BrowserPrint (Zebra): init default/local printers after SDK loads (Script onLoad sets isBrowserPrintLoaded)
-  useEffect(() => {
-    if (!isBrowserPrintLoaded || typeof window === 'undefined') return;
-    const wp = (window as any).BrowserPrint;
-    if (!wp) return;
-    wp.getDefaultDevice(
-      'printer',
-      (device: any) => {
-        setSelectedDevice(device);
-        setDevices((prev) => (device ? [...prev, device] : prev));
-        wp.getLocalDevices(
-          (list: any[]) => {
-            const others = (list || []).filter((d: any) => d.uid !== device?.uid);
-            setDevices((prev) => {
-              const seen = new Set(prev.map((d: any) => d.uid));
-              const added = others.filter((d: any) => !seen.has(d.uid));
-              return added.length ? [...prev, ...added] : prev;
-            });
-            const zebra = others.find((d: any) => d.manufacturer === 'Zebra Technologies');
-            if (zebra) setSelectedDevice(zebra);
-          },
-          () => {},
-          'printer'
-        );
-      },
-      () => {}
-    );
-  }, [isBrowserPrintLoaded]);
 
   // Fetch transactions for history modal (filtered by brand/model)
   const fetchTransactionsForItem = useCallback(async (brand: string, model: string) => {
@@ -214,6 +182,16 @@ const InventoryManagementPage: React.FC = () => {
   /** All individual machine units from database (real serialNumber, boxNumber). */
   const allMachineUnits = machineUnits;
 
+  /** Machines matching the selected inventory row (brand+model+type). */
+  const selectedMachineUnits = selectedItem
+    ? allMachineUnits.filter(
+        (m) =>
+          m.brand === selectedItem.brand &&
+          m.model === selectedItem.model &&
+          m.type === selectedItem.type
+      )
+    : [];
+
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
   };
@@ -240,118 +218,61 @@ const InventoryManagementPage: React.FC = () => {
     setSelectedItem(null);
   };
 
-  /** QR code payload: only serial number and box number (for scanning in gatepass/returns). */
-  const getQRCodePayload = (machine: MachineUnit | null): string => {
-    if (!machine) return '';
-    return JSON.stringify({
-      serialNumber: machine.serialNumber,
-      boxNo: machine.boxNumber,
-    });
+  const handleOpenSoldModal = (machine: MachineUnit) => {
+    setMachineForSale(machine);
+    setSellSerialInput(machine.serialNumber ?? '');
+    setSellBoxInput(machine.boxNumber ?? '');
+    setIsSoldModalOpen(true);
   };
 
-  /** ZPL from ZPL.txt: same structure and dimensions; only line 14 (QR), 18 (serial), 21 (box) are dynamic. */
-  const getZPLForMachine = (serialNumber: string, boxNumber: string): string => {
-    const qrData = JSON.stringify({ serialNumber, boxNo: boxNumber });
-    return `^XA
-^CI27
-^PW464
-^LL320
-
-### Header: Company Name ###
-^FO20,20^GB424,55,3^FS
-^FO20,32^A0N,30,30^FB424,1,0,C^FDNeedle Technologies^FS
-
-### LEFT SIDE: JSON Formatted QR Code ###
-# Magnification 5 provides the best density for this much data
-# Error Correction H (High) matches the look of your uploaded image
-^FO50,100^BQN,2,5,H
-^FDQA,${qrData}^FS
-
-### RIGHT SIDE: Label Data ###
-^FO250,135^A0N,22,22^FDS/N:^FS
-^FO250,165^A0N,28,28^FD${serialNumber}^FS
-
-^FO250,225^A0N,22,22^FDB/N:^FS
-^FO250,255^A0N,28,28^FD${boxNumber}^FS
-
-^XZ`;
+  const handleCloseSoldModal = () => {
+    setIsSoldModalOpen(false);
+    setMachineForSale(null);
+    setSellSerialInput('');
+    setSellBoxInput('');
   };
 
-  const handleGenerateQR = (machine: MachineUnit) => {
-    setSelectedMachineForQR(machine);
-    setIsQRModalOpen(true);
-  };
-
-  const handleCloseQRModal = () => {
-    setIsQRModalOpen(false);
-    setSelectedMachineForQR(null);
-  };
-
-  const handlePrintQR = () => {
-    const m = selectedMachineForQR;
-    if (!m) return;
-
-    const zplString = getZPLForMachine(m.serialNumber, m.boxNumber);
-
-    if (isBrowserPrintLoaded && selectedDevice && typeof selectedDevice.send === 'function') {
-      selectedDevice.send(zplString, undefined, (err: string) => {
-        if (err) console.error('Print error:', err);
+  const handleSubmitSold = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!machineForSale) return;
+    const serial = sellSerialInput.trim();
+    const box = sellBoxInput.trim();
+    if (!serial) {
+      await Swal.fire({ icon: 'warning', title: 'Serial required', text: 'Please enter the serial number.' });
+      return;
+    }
+    setSellSubmitting(true);
+    try {
+      const res = await authFetch(`${API_BASE}/inventory/sell`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          machineId: machineForSale.id,
+          serialNumber: serial,
+          boxNumber: box,
+        }),
       });
-      return;
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.message || 'Failed to record sale');
+      }
+      await Swal.fire({
+        icon: 'success',
+        title: 'Sale recorded',
+        text: json?.message || 'Machine removed from active inventory. Bincard and transaction log updated.',
+      });
+      handleCloseSoldModal();
+      await Promise.all([fetchMachineUnits(), fetchInventory()]);
+    } catch (err: unknown) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Cannot complete sale',
+        text: err instanceof Error ? err.message : 'Something went wrong.',
+      });
+    } finally {
+      setSellSubmitting(false);
     }
-
-    // Fallback: print in-place via hidden iframe (no new tab)
-    if (!qrCodeRef.current) return;
-    const svg = qrCodeRef.current.querySelector('svg');
-    if (!svg) return;
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const iframe = document.createElement('iframe');
-    iframe.setAttribute('style', 'position:absolute;width:0;height:0;border:0;');
-    document.body.appendChild(iframe);
-    const doc = iframe.contentWindow?.document;
-    if (!doc) {
-      document.body.removeChild(iframe);
-      return;
-    }
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>QR Label - ${m.serialNumber}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
-            .label { width: 464px; min-height: 320px; border: 2px solid #000; padding: 0; display: flex; flex-direction: column; }
-            .header { border-bottom: 3px solid #000; padding: 12px; text-align: center; font-weight: bold; font-size: 22px; }
-            .body { display: flex; flex: 1; }
-            .left { padding: 16px; }
-            .right { flex: 1; padding: 16px; display: flex; flex-direction: column; justify-content: center; gap: 24px; }
-            .row { font-size: 14px; color: #333; }
-            .row .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
-          </style>
-        </head>
-        <body>
-          <div class="label">
-            <div class="header">Needle Technologies</div>
-            <div class="body">
-              <div class="left">${svgData}</div>
-              <div class="right">
-                <div class="row">Serial Number:<div class="value">${m.serialNumber}</div></div>
-                <div class="row">Box Number:<div class="value">${m.boxNumber}</div></div>
-              </div>
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-    doc.close();
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
-    // Remove iframe after print dialog closes (user can cancel or print)
-    setTimeout(() => {
-      if (iframe.parentNode) document.body.removeChild(iframe);
-    }, 1000);
   };
 
   const handleViewHistory = (item: InventoryItem) => {
@@ -771,22 +692,17 @@ const InventoryManagementPage: React.FC = () => {
 
   const viewDetailsActions: ActionButton[] = [
     {
-      label: '',
-      icon: <QrCode className="w-4 h-4" />,
-      variant: 'secondary',
-      onClick: (row: MachineUnit) => handleGenerateQR(row),
-      tooltip: 'Generate QR Code',
-      className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+      label: 'Sell',
+      variant: 'warning',
+      onClick: (row: MachineUnit) => handleOpenSoldModal(row),
+      tooltip: 'Record sale (removes from inventory if not on a hiring agreement)',
+      className:
+        'px-2.5 py-1 min-w-[4.5rem] text-xs font-semibold rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
     },
   ];
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-      <Script
-        src="/browser-print/BrowserPrint-3.1.250.min.js"
-        strategy="afterInteractive"
-        onLoad={() => setIsBrowserPrintLoaded(true)}
-      />
       {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
 
@@ -854,7 +770,14 @@ const InventoryManagementPage: React.FC = () => {
                   Inventory Details
                 </h2>
                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  All machines ({allMachineUnits.length} total)
+                  {selectedItem ? (
+                    <>
+                      {selectedItem.brand} {selectedItem.model} &middot; {selectedItem.type} (
+                      {selectedMachineUnits.length} machines)
+                    </>
+                  ) : (
+                    <>All machines ({allMachineUnits.length} total)</>
+                  )}
                 </p>
               </div>
               <button
@@ -882,7 +805,7 @@ const InventoryManagementPage: React.FC = () => {
                 </div>
               ) : (
                 <Table
-                  data={allMachineUnits}
+                  data={selectedItem ? selectedMachineUnits : allMachineUnits}
                   columns={viewDetailsColumns}
                   actions={viewDetailsActions}
                   itemsPerPage={10}
@@ -971,94 +894,73 @@ const InventoryManagementPage: React.FC = () => {
         </div>
       )}
 
-      {/* QR Code Modal - label preview matching ZPL (Needle Technologies, QR, S/N, B/N) */}
-      {isQRModalOpen && selectedMachineForQR && (
-        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                Generate QR Code
-              </h2>
+      {/* Record sale — confirm serial & box; server blocks if machine is on a pending/active hiring agreement */}
+      {isSoldModalOpen && machineForSale && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-slate-700">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Record sale</h2>
               <button
-                onClick={handleCloseQRModal}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                type="button"
+                onClick={handleCloseSoldModal}
+                disabled={sellSubmitting}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 disabled:opacity-50"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              {/* Label preview: matches ZPL layout (Needle Technologies, QR left, Serial/Box right) */}
-              <div
-                ref={qrCodeRef}
-                className="mx-auto w-[464px] min-h-[320px] border-2 border-black bg-white dark:bg-slate-900 flex flex-col overflow-hidden rounded"
-              >
-                <div className="border-b-2 border-black py-2 text-center font-bold text-lg text-gray-900 dark:text-white">
-                  Needle Technologies
-                </div>
-                <div className="flex flex-1 p-4 gap-6">
-                  <div className="flex items-center justify-center shrink-0 p-2 bg-white dark:bg-slate-800 rounded">
-                    <QRCodeSVG
-                      value={getQRCodePayload(selectedMachineForQR)}
-                      size={180}
-                      level="H"
-                    />
-                  </div>
-                  <div className="flex flex-col justify-center gap-6 text-gray-900 dark:text-white">
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Serial Number:</p>
-                      <p className="text-xl font-bold mt-0.5">{selectedMachineForQR.serialNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Box Number:</p>
-                      <p className="text-xl font-bold mt-0.5">{selectedMachineForQR.boxNumber}</p>
-                    </div>
-                  </div>
-                </div>
+            <form onSubmit={handleSubmitSold} className="p-5 space-y-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Re-enter the serial and box number for{' '}
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {machineForSale.brand} {machineForSale.model}
+                </span>
+                . The machine is removed from active inventory only if it is not on a pending or active hiring agreement.
+              </p>
+              <div>
+                <label htmlFor="sell-serial" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Serial number
+                </label>
+                <input
+                  id="sell-serial"
+                  type="text"
+                  value={sellSerialInput}
+                  onChange={(e) => setSellSerialInput(e.target.value)}
+                  autoComplete="off"
+                  className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                />
               </div>
-              {/* <p className="text-sm text-gray-600 dark:text-gray-400">
-                QR encodes serial and box number for gatepass/returns. Print sends ZPL to Zebra or opens preview.
-              </p> */}
-              {isBrowserPrintLoaded && (
-                <div className="rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800/50 p-4 space-y-2">
-                  <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                    Select Printer
-                  </label>
-                  <select
-                    value={selectedDevice?.uid ?? ''}
-                    onChange={(e) => {
-                      const uid = e.target.value;
-                      if (uid) setSelectedDevice(devices.find((d: any) => d.uid === uid) ?? null);
-                    }}
-                    className="w-full rounded-lg border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white px-3 py-2.5 text-sm font-medium focus:border-blue-500 dark:focus:border-indigo-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-indigo-500/20 outline-none"
-                  >
-                    {devices.length > 0 ? (
-                      devices.map((d: any, i: number) => (
-                        <option key={d.uid ?? i} value={d.uid}>
-                          {[d.name, d.manufacturer, d.model].filter(Boolean).join(' — ') || d.uid || `Printer ${i + 1}`}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="" disabled>
-                        No printers available — connect a printer or start Browser Print service
-                      </option>
-                    )}
-                  </select>
-                  {devices.length === 0 && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Ensure the Browser Print service is running on this machine. Refresh after connecting a printer.
-                    </p>
-                  )}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={handlePrintQR}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-slate-800 transition-colors"
-              >
-                <Printer className="w-4 h-4" />
-                Print
-              </button>
-            </div>
+              <div>
+                <label htmlFor="sell-box" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Box number
+                </label>
+                <input
+                  id="sell-box"
+                  type="text"
+                  value={sellBoxInput}
+                  onChange={(e) => setSellBoxInput(e.target.value)}
+                  autoComplete="off"
+                  className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseSoldModal}
+                  disabled={sellSubmitting}
+                  className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 text-sm font-medium disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sellSubmitting}
+                  className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-semibold disabled:opacity-50"
+                >
+                  {sellSubmitting ? 'Submitting…' : 'Submit sell'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
