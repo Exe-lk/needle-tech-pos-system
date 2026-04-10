@@ -323,6 +323,8 @@ interface AddOnItem {
   price: number;
 }
 
+type AddOnOption = { id: string; name: string; price: number };
+
 // Machine interface for update form (adding machines to agreement)
 interface MachineForAgreement {
   id: string;
@@ -490,7 +492,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     <div ref={containerRef} className={`relative ${className}`}>
       <div
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between ${error ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
+        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between min-w-0 ${error ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-500 dark:hover:border-indigo-500'} focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-indigo-500 transition-colors`}
       >
         {isOpen ? (
@@ -501,12 +503,15 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             onChange={(e) => { setSearchTerm(e.target.value); setHighlightedIndex(0); }}
             onKeyDown={handleKeyDown}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+            className="flex-1 min-w-0 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
             placeholder={placeholder}
             disabled={disabled}
           />
         ) : (
-          <span className={`flex-1 ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+          <span
+            className={`flex-1 min-w-0 pr-2 truncate ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}
+            title={selectedOption ? selectedOption.label : undefined}
+          >
             {selectedOption ? selectedOption.label : placeholder}
           </span>
         )}
@@ -572,7 +577,7 @@ const mockMachineModels = [
 ];
 const mockMachineTypes = ['Industrial', 'Domestic', 'Embroidery', 'Overlock', 'Buttonhole', 'Other'];
 
-// Mock add-ons data
+// Mock add-ons data (fallback when tools API is unavailable)
 const mockAddOns = [
   { id: 'ADDON-001', name: 'Thread Stand', price: 5000 },
   { id: 'ADDON-002', name: 'Extension Table', price: 8000 },
@@ -1016,6 +1021,12 @@ const RentalAgreementPage: React.FC = () => {
   const [agreementNo, setAgreementNo] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  // DB-backed machine options for cascading selects (with mock fallback)
+  const [dbMachineBrands, setDbMachineBrands] = useState<string[]>([]);
+  const [dbModelsByBrand, setDbModelsByBrand] = useState<Record<string, string[]>>({});
+  const [dbTypesByBrandModel, setDbTypesByBrandModel] = useState<Record<string, string[]>>({});
+  // DB-backed add-ons (tools) for add-ons dropdown (with mock fallback)
+  const [dbToolAddOns, setDbToolAddOns] = useState<AddOnOption[]>([]);
 
   // Machine management state for update form
   const [machinesForAgreement, setMachinesForAgreement] = useState<MachineForAgreement[]>([]);
@@ -1199,27 +1210,146 @@ const RentalAgreementPage: React.FC = () => {
 
   // Brand options for SearchableSelect
   const brandOptions = useMemo(() => {
-    return mockMachineBrands.map((brand) => ({
+    const brands = dbMachineBrands.length > 0 ? dbMachineBrands : mockMachineBrands;
+    return brands.map((brand) => ({
       value: brand,
       label: brand,
     }));
-  }, []);
+  }, [dbMachineBrands]);
 
   // Model options for a given brand (used per machine row)
   const getModelOptions = (brand: string) => {
-    return getAvailableModels(brand).map((model) => ({
+    const models = (dbModelsByBrand[brand] && dbModelsByBrand[brand].length > 0)
+      ? dbModelsByBrand[brand]
+      : getAvailableModels(brand);
+    return models.map((model) => ({
       value: model,
       label: model,
     }));
   };
 
-  // Type options for SearchableSelect
-  const typeOptions = useMemo(() => {
-    return mockMachineTypes.map((type) => ({
+  const getTypeOptions = (brand: string, model: string) => {
+    const key = `${brand}|||${model}`;
+    const types = (dbTypesByBrandModel[key] && dbTypesByBrandModel[key].length > 0)
+      ? dbTypesByBrandModel[key]
+      : mockMachineTypes;
+    return types.map((type) => ({
       value: type,
       label: type,
     }));
+  };
+
+  const fetchMachineBrands = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/machines/options?kind=brands`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+      const brands = (json?.data?.brands ?? json?.brands ?? []) as unknown;
+      if (Array.isArray(brands)) {
+        const list = brands.map(String).map((s) => s.trim()).filter(Boolean);
+        setDbMachineBrands(list);
+      }
+    } catch {
+      // keep mock fallback
+    }
   }, []);
+
+  const fetchToolAddOns = useCallback(async () => {
+    // Cache: if we already have it, don't refetch
+    if (dbToolAddOns.length) return;
+    try {
+      // Note: backend caps limit to 100. Keep it simple and unfiltered.
+      const params = new URLSearchParams({ page: '1', limit: '100' });
+      const res = await authFetch(`${API_BASE}/tools?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+
+      // `GET /api/v1/tools` returns a paginated response: { data: { items: Tool[] } }
+      const tools = (json?.data?.items ?? json?.data ?? json?.tools ?? []) as unknown;
+      if (!Array.isArray(tools)) return;
+
+      const options: AddOnOption[] = tools
+        .map((t: any) => {
+          const id = String(t?.id ?? '').trim();
+          const name = String(t?.toolName ?? t?.name ?? '').trim();
+          const priceNum = Number(t?.unitPrice ?? 0);
+          const price = Number.isFinite(priceNum) ? priceNum : 0;
+          if (!id || !name) return null;
+          return { id, name, price };
+        })
+        .filter(Boolean) as AddOnOption[];
+
+      if (options.length > 0) setDbToolAddOns(options);
+    } catch {
+      // keep mock fallback
+    }
+  }, [dbToolAddOns.length]);
+
+  const fetchModelsForBrand = useCallback(async (brand: string) => {
+    const b = (brand || '').trim();
+    if (!b) return;
+    // Cache: if we already have it, don't refetch
+    if (dbModelsByBrand[b]?.length) return;
+    try {
+      const params = new URLSearchParams({ kind: 'models', brand: b });
+      const res = await authFetch(`${API_BASE}/machines/options?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+      const models = (json?.data?.models ?? json?.models ?? []) as unknown;
+      if (Array.isArray(models)) {
+        const list = models.map(String).map((s) => s.trim()).filter(Boolean);
+        setDbModelsByBrand((prev) => ({ ...prev, [b]: list }));
+      }
+    } catch {
+      // keep mock fallback
+    }
+  }, [dbModelsByBrand]);
+
+  const fetchTypesForBrandModel = useCallback(async (brand: string, model: string) => {
+    const b = (brand || '').trim();
+    const m = (model || '').trim();
+    if (!b || !m) return;
+    const key = `${b}|||${m}`;
+    // Cache: if we already have it, don't refetch
+    if (dbTypesByBrandModel[key]?.length) return;
+    try {
+      const params = new URLSearchParams({ kind: 'types', brand: b, model: m });
+      const res = await authFetch(`${API_BASE}/machines/options?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+      const types = (json?.data?.types ?? json?.types ?? []) as unknown;
+      if (Array.isArray(types)) {
+        const list = types.map(String).map((s) => s.trim()).filter(Boolean);
+        setDbTypesByBrandModel((prev) => ({ ...prev, [key]: list }));
+      }
+    } catch {
+      // keep mock fallback
+    }
+  }, [dbTypesByBrandModel]);
+
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      fetchMachineBrands();
+      fetchToolAddOns();
+    }
+  }, [isCreateModalOpen, fetchMachineBrands, fetchToolAddOns]);
+
+  const addOnOptions: AddOnOption[] = useMemo(() => {
+    if (dbToolAddOns.length > 0) return dbToolAddOns;
+    return mockAddOns;
+  }, [dbToolAddOns]);
 
   // Get available machine IDs for add-ons
   const getAvailableMachineIds = () => {
@@ -1331,12 +1461,21 @@ const RentalAgreementPage: React.FC = () => {
   };
 
   const handleMachineChange = (id: string, field: keyof MachineItem, value: any) => {
-    setMachines(
-      machines.map((m) => {
+    // Keep this as a functional update to avoid stale state.
+    setMachines((prev) =>
+      prev.map((m) => {
         if (m.id === id) {
           const updated = { ...m, [field]: value };
           if (field === 'brand') {
             updated.model = '';
+            updated.type = '';
+            // Prefetch models for this brand
+            fetchModelsForBrand(String(value || ''));
+          }
+          if (field === 'model') {
+            updated.type = '';
+            // Prefetch types for this brand+model
+            fetchTypesForBrandModel(updated.brand, String(value || ''));
           }
           if (field === 'type') {
             updated.standardPrice = standardPrices[value] || 0;
@@ -1371,7 +1510,7 @@ const RentalAgreementPage: React.FC = () => {
         if (a.id === id) {
           const updated = { ...a, [field]: value };
           if (field === 'addOnId') {
-            const addOnData = mockAddOns.find((ao) => ao.id === value);
+            const addOnData = addOnOptions.find((ao) => ao.id === value);
             updated.price = addOnData?.price || 0;
           }
           return updated;
@@ -2905,8 +3044,9 @@ const RentalAgreementPage: React.FC = () => {
                                     <SearchableSelect
                                       value={machine.type}
                                       onChange={(v) => handleMachineChange(machine.id, 'type', v)}
-                                      options={typeOptions}
+                                      options={getTypeOptions(machine.brand, machine.model)}
                                       placeholder="Type"
+                                      disabled={!machine.brand || !machine.model}
                                       error={formErrors[`machine_type_${index}`]}
                                       className="w-full"
                                       dropdownClassName="z-[100]"
@@ -3021,7 +3161,7 @@ const RentalAgreementPage: React.FC = () => {
                                 }`}
                               >
                                 <option value="">Select add-on</option>
-                                {mockAddOns.map((ao) => (
+                                {addOnOptions.map((ao) => (
                                   <option key={ao.id} value={ao.id}>{ao.name} - Rs. {ao.price.toLocaleString('en-LK')}</option>
                                 ))}
                               </select>

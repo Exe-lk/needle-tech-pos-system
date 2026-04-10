@@ -320,17 +320,20 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                         }}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                        className="flex-1 min-w-0 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                         placeholder={placeholder}
                         disabled={disabled}
                     />
                 ) : (
-                    <span className={`flex-1 ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                    <span
+                        className={`flex-1 min-w-0 truncate whitespace-nowrap ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}
+                        title={selectedOption?.label}
+                    >
                         {selectedOption ? selectedOption.label : placeholder}
                     </span>
                 )}
                 <ChevronDown
-                    className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
+                    className={`w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
                 />
             </div>
 
