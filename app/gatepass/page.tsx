@@ -37,6 +37,7 @@ interface ApiRental {
     id: string;
     name: string;
     code: string;
+    type?: string;
     billingAddressLine1?: string;
     billingAddressLine2?: string;
     billingCity?: string;
@@ -142,6 +143,7 @@ interface RentalOption {
   agreementNumber: string;
   customerName: string;
   customerAddress: string;
+  customerType?: string;
   machines: GatePassMachine[];
 }
 
@@ -226,6 +228,7 @@ const fetchRentals = async (): Promise<RentalOption[]> => {
       agreementNumber: rental.agreementNumber,
       customerName: rental.customer?.name || '',
       customerAddress: rental.customer ? buildCustomerAddress(rental.customer) : '',
+      customerType: rental.customer?.type,
       machines: (rental.machines || []).map(mapRentalMachineToGatePassItem),
     }));
   } catch (error) {
@@ -253,6 +256,7 @@ const fetchRentalById = async (rentalId: string): Promise<RentalOption | null> =
       agreementNumber: rental.agreementNumber,
       customerName: rental.customer?.name || '',
       customerAddress: rental.customer ? buildCustomerAddress(rental.customer) : '',
+      customerType: rental.customer?.type,
       machines: (rental.machines || []).map(mapRentalMachineToGatePassItem),
     };
   } catch (error) {
@@ -501,6 +505,8 @@ const GatePassPage: React.FC = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateTypeSelectOpen, setIsCreateTypeSelectOpen] = useState(false);
+  const [createGatePassMode, setCreateGatePassMode] = useState<'vat' | 'non_vat' | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedGatePass, setSelectedGatePass] = useState<GatePass | null>(null);
@@ -610,6 +616,31 @@ const GatePassPage: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  const eligibleRentalAgreements = useMemo(() => {
+    if (createGatePassMode === 'vat') {
+      return rentalAgreements.filter((r) => String(r.customerType || '').toUpperCase() !== 'INDIVIDUAL');
+    }
+    if (createGatePassMode === 'non_vat') {
+      return rentalAgreements.filter((r) => String(r.customerType || '').toUpperCase() === 'INDIVIDUAL');
+    }
+    return rentalAgreements;
+  }, [rentalAgreements, createGatePassMode]);
+
+  const handleOpenCreateTypeSelect = () => {
+    setIsCreateTypeSelectOpen(true);
+    setCreateGatePassMode(null);
+  };
+
+  const handleCloseCreateTypeSelect = () => {
+    setIsCreateTypeSelectOpen(false);
+  };
+
+  const handleCreateTypeSelect = (mode: 'vat' | 'non_vat') => {
+    setIsCreateTypeSelectOpen(false);
+    setCreateGatePassMode(mode);
+    handleCreateGatePass();
+  };
+
   const handleCreateGatePass = () => {
     setIsCreateModalOpen(true);
     // Reset form with 1 item row
@@ -633,6 +664,7 @@ const GatePassPage: React.FC = () => {
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
+    setCreateGatePassMode(null);
     setAgreementReference('');
     setDateOfIssue('');
     setReturnable(true);
@@ -720,6 +752,17 @@ const GatePassPage: React.FC = () => {
     if (!dateOfIssue) errors.dateOfIssue = 'Date of Issue is required';
     if (!vehicleNumber.trim()) errors.vehicleNumber = 'Vehicle Number is required';
     if (!driverName.trim()) errors.driverName = 'Driver Name is required';
+
+    if (agreementReference && createGatePassMode) {
+      const rental = rentalAgreements.find((r) => r.id === agreementReference);
+      const type = String(rental?.customerType || '').toUpperCase();
+      if (createGatePassMode === 'vat' && type === 'INDIVIDUAL') {
+        errors.agreementReference = 'VAT gate pass is allowed only for non-individual customers';
+      }
+      if (createGatePassMode === 'non_vat' && type !== 'INDIVIDUAL') {
+        errors.agreementReference = 'Non‑VAT gate pass is allowed only for individual customers';
+      }
+    }
 
     // Filter out empty items for validation
     const filledItems = items.filter((item) => item.description.trim() !== '');
@@ -1446,13 +1489,73 @@ const GatePassPage: React.FC = () => {
                 searchable
                 filterable
                 loading={isLoadingData}
-                onCreateClick={handleCreateGatePass}
+                onCreateClick={handleOpenCreateTypeSelect}
                 createButtonLabel="Create Gate Pass"
                 emptyMessage={isLoadingData ? "Loading gate passes..." : "No gate passes found."}
               />
             </div>
           </div>
         </main>
+
+        {/* Create Gate Pass Type Select Modal (VAT / Non-VAT) */}
+        {isCreateTypeSelectOpen && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Create Gate Pass
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    Select VAT type to continue.
+                  </p>
+                </div>
+                <Tooltip content="Close">
+                  <button
+                    onClick={handleCloseCreateTypeSelect}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </Tooltip>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handleCreateTypeSelect('vat')}
+                    className="rounded-xl border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors text-left p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-14 w-28 bg-white rounded-md border border-gray-200 dark:border-slate-600 overflow-hidden flex items-center justify-center">
+                        <img src="/vat_logo.jpeg" alt="VAT" className="h-full w-full object-contain" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">VAT Gate Pass</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Non‑individual customers only</div>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateTypeSelect('non_vat')}
+                    className="rounded-xl border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors text-left p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-14 w-28 bg-white rounded-md border border-gray-200 dark:border-slate-600 overflow-hidden flex items-center justify-center">
+                        <img src="/non_vat_logo.jpeg" alt="Non VAT" className="h-full w-full object-contain" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">Non‑VAT Gate Pass</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">All customers</div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create Gate Pass Modal - Document-style form (matches print layout) */}
         {isCreateModalOpen && (
@@ -1461,9 +1564,16 @@ const GatePassPage: React.FC = () => {
             <div className="relative bg-white dark:bg-slate-800 rounded-lg sm:rounded-xl shadow-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
               {/* Modal Header - compact */}
               <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-200 dark:border-slate-700 shrink-0">
-                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                  Create Gate Pass
-                </h2>
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                    Create Gate Pass
+                  </h2>
+                  {createGatePassMode && (
+                    <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                      {createGatePassMode === 'vat' ? 'VAT' : 'Non‑VAT'}
+                    </p>
+                  )}
+                </div>
                 <button
                   onClick={handleCloseCreateModal}
                   className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
@@ -1511,7 +1621,7 @@ const GatePassPage: React.FC = () => {
                             className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-700 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 ${formErrors.agreementReference ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-slate-600'} focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500`}
                           >
                             <option value="">Select Agreement</option>
-                            {rentalAgreements.map((rental) => (
+                            {eligibleRentalAgreements.map((rental) => (
                               <option key={rental.id} value={rental.id}>
                                 {rental.agreementNumber} - {rental.customerName}
                               </option>

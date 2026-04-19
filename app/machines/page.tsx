@@ -192,6 +192,14 @@ interface ToolRecord {
   toolType: string;
   brand: string | null;
   model: string | null;
+  serialNumber?: string | null;
+  quantity?: number;
+  unitPrice?: number | string | null;
+  status?: string;
+  location?: string;
+  purchaseDate?: string | null;
+  condition?: string;
+  notes?: string | null;
   [key: string]: any;
 }
 
@@ -328,6 +336,16 @@ const updateMachine = async (machineId: string, machineData: Record<string, any>
   }
 };
 
+/** Keep unit/monthly amounts as plain decimal strings in JSON so values are not rounded by IEEE floats before Prisma DECIMAL storage. */
+function normalizeMoneyFieldsForApi(payload: Record<string, any>) {
+  for (const key of ['unitPrice', 'monthlyRentalFee'] as const) {
+    const v = payload[key];
+    if (v === undefined || v === null || v === '') continue;
+    const s = String(v).trim().replace(/[\s,']/g, '');
+    if (s !== '') payload[key] = s;
+  }
+}
+
 // Delete machine
 const deleteMachine = async (machineId: string): Promise<{ success: boolean; error?: string }> => {
   try {
@@ -421,8 +439,11 @@ const MachineListPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [activeCreateTab, setActiveCreateTab] = useState<'machine' | 'tool'>('machine');
+  const [activeMainTab, setActiveMainTab] = useState<'machines' | 'tools'>('machines');
   const [machines, setMachines] = useState<Machine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [tools, setTools] = useState<ToolRecord[]>([]);
+  const [isLoadingTools, setIsLoadingTools] = useState(false);
   
   // New state for dropdown options
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -445,6 +466,13 @@ const MachineListPage: React.FC = () => {
   useEffect(() => {
     loadMachines();
   }, []);
+
+  // Lazy-load tools only when the Tools tab is opened
+  useEffect(() => {
+    if (activeMainTab === 'tools' && tools.length === 0) {
+      loadTools();
+    }
+  }, [activeMainTab]);
 
   // Fetch dropdown data when create modal opens (machine tab)
   useEffect(() => {
@@ -478,6 +506,18 @@ const MachineListPage: React.FC = () => {
       console.error('Error loading machines:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadTools = async () => {
+    setIsLoadingTools(true);
+    try {
+      const data = await fetchTools();
+      setTools(data);
+    } catch (error) {
+      console.error('Error loading tools:', error);
+    } finally {
+      setIsLoadingTools(false);
     }
   };
 
@@ -555,9 +595,9 @@ const MachineListPage: React.FC = () => {
     console.log('Logout clicked');
   };
 
-  const handleCreateMachine = () => {
+  const handleOpenRegister = () => {
     setIsCreateModalOpen(true);
-    setActiveCreateTab('machine');
+    setActiveCreateTab(activeMainTab === 'tools' ? 'tool' : 'machine');
     setSelectedBrandId(''); // Reset brand selection
     setMachineFormWarrantyStatus(''); // Reset warranty-based field visibility
   };
@@ -756,8 +796,22 @@ const MachineListPage: React.FC = () => {
       options: getMachineTypeOptions(),
     },
     {
+      name: 'serialNumber',
+      label: 'Serial Number',
+      type: 'text',
+      placeholder: 'Enter serial number',
+      required: true,
+    },
+    {
+      name: 'boxNumber',
+      label: 'Box Number',
+      type: 'text',
+      placeholder: 'Enter box number (optional)',
+      required: false,
+    },
+    {
       name: 'manufactureYear',
-      label: 'Manufact Year',
+      label: 'Manufacture Year',
       type: 'date',
       placeholder: 'Select date',
       required: true,
@@ -921,7 +975,7 @@ const MachineListPage: React.FC = () => {
     { name: 'currentLocationAddress', label: 'Location Address', type: 'textarea', placeholder: 'Full address if applicable', required: false, rows: 2 },
     {
       name: 'manufactureYear',
-      label: 'Manufact Year',
+      label: 'Manufacture Year',
       type: 'date',
       placeholder: 'Select date',
       required: false,
@@ -1181,6 +1235,8 @@ const MachineListPage: React.FC = () => {
         delete payload.machineTypeId;
       }
 
+      normalizeMoneyFieldsForApi(payload);
+
       const result = await createMachine(payload);
 
       if (result.success) {
@@ -1239,6 +1295,7 @@ const MachineListPage: React.FC = () => {
         });
         handleCloseCreateModal();
         await loadToolOptions(); // Refresh tool options for next time
+        await loadTools(); // Refresh tool list (Tools tab)
       } else {
         await Swal.fire({
           icon: 'error',
@@ -1288,6 +1345,8 @@ const MachineListPage: React.FC = () => {
           delete payload.machineTypeId;
         }
       }
+
+      normalizeMoneyFieldsForApi(payload);
 
       const result = await updateMachine(selectedMachine.id.toString(), payload);
 
@@ -1351,6 +1410,50 @@ const MachineListPage: React.FC = () => {
       tooltip: 'Delete Machine',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
     },
+  ];
+
+  const toolColumns: TableColumn[] = [
+    { key: 'toolName', label: 'Tool Name', sortable: true, filterable: true },
+    { key: 'toolType', label: 'Tool Type', sortable: true, filterable: true },
+    { key: 'brand', label: 'Brand', sortable: true, filterable: true },
+    { key: 'model', label: 'Model', sortable: true, filterable: true },
+    { key: 'serialNumber', label: 'Serial Number', sortable: true, filterable: true },
+    { key: 'quantity', label: 'Qty', sortable: true, filterable: true },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      filterable: true,
+      render: (value: string) => {
+        const v = (value || '').toUpperCase();
+        const base =
+          'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
+        const colors: Record<string, string> = {
+          AVAILABLE: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+          IN_USE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+          MAINTENANCE: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+          RETIRED: 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200',
+        };
+        return <span className={`${base} ${colors[v] || colors.RETIRED}`}>{v || '-'}</span>;
+      },
+    },
+    { key: 'location', label: 'Location', sortable: true, filterable: true },
+    {
+      key: 'purchaseDate',
+      label: 'Purchase Date',
+      sortable: true,
+      filterable: true,
+      render: (value: string | null) => {
+        if (!value) return <span className="text-gray-500 dark:text-gray-400">-</span>;
+        const d = new Date(value);
+        return (
+          <span className="text-gray-900 dark:text-white font-medium">
+            {isNaN(d.getTime()) ? String(value) : d.toLocaleDateString('en-LK')}
+          </span>
+        );
+      },
+    },
+    { key: 'condition', label: 'Condition', sortable: true, filterable: true },
   ];
 
   // Rental History Table Columns
@@ -1659,23 +1762,66 @@ const MachineListPage: React.FC = () => {
                 Machine & Tool Management
               </h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Overview of all sewing machines with their details, brand, model, and type.
+                Overview of all sewing machines and tools with searchable tables, filters, and pagination.
               </p>
             </div>
           </div>
 
-          <Table
-            data={machines}
-            columns={columns}
-            actions={actions}
-            itemsPerPage={10}
-            searchable
-            filterable
-            loading={isLoading}
-            onCreateClick={handleCreateMachine}
-            createButtonLabel="Register"
-            emptyMessage={isLoading ? "Loading machines..." : "No machines found."}
-          />
+          <div className="border-b border-gray-200 dark:border-slate-700">
+            <div className="flex space-x-4">
+              <Tooltip content="Machines">
+                <button
+                  onClick={() => setActiveMainTab('machines')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeMainTab === 'machines'
+                      ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Machines
+                </button>
+              </Tooltip>
+              <Tooltip content="Tools">
+                <button
+                  onClick={() => setActiveMainTab('tools')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeMainTab === 'tools'
+                      ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Tools
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+
+          {activeMainTab === 'machines' ? (
+            <Table
+              data={machines}
+              columns={columns}
+              actions={actions}
+              itemsPerPage={10}
+              searchable
+              filterable
+              loading={isLoading}
+              onCreateClick={handleOpenRegister}
+              createButtonLabel="Register"
+              emptyMessage={isLoading ? "Loading machines..." : "No machines found."}
+            />
+          ) : (
+            <Table
+              data={tools}
+              columns={toolColumns}
+              itemsPerPage={10}
+              searchable
+              filterable
+              loading={isLoadingTools}
+              onCreateClick={handleOpenRegister}
+              createButtonLabel="Register"
+              emptyMessage={isLoadingTools ? "Loading tools..." : "No tools found."}
+            />
+          )}
         </div>
       </main>
 

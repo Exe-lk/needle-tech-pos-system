@@ -136,6 +136,7 @@ export const GET = withAuthAndRole(
       agreementNo: rental.agreementNumber,
       status: rental.status,
       customerId: rental.customerId,
+      customerType: rental.customer.type,
       customerName: rental.customer.name,
       customerAddress: [
         rental.customer.billingAddressLine1,

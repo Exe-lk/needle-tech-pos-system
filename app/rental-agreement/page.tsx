@@ -28,6 +28,8 @@ interface RentalAgreement {
   agreementNo: string;
   customerNo: string;
   customerName: string;
+  /** Used for table filtering; derived from customers list (Business/Customer). */
+  customerType?: string;
   serialNo: string;
   startDate: string;
   endDate: string | null;
@@ -232,8 +234,22 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)))
     : 1;
   const total = Number(r.total);
-  // Use subtotal (before tax) for machine table so total = monthly rent for all machines (e.g. 15,000 for 5×3,000)
-  const monthlySubtotal = months > 0 ? Number(r.subtotal) / months : Number(r.subtotal);
+  // Monthly subtotal (before tax) for machine table.
+  //
+  // Important: In this codebase, `r.subtotal` is not consistently stored as "full-period subtotal".
+  // - Some flows store subtotal for the whole agreement period (monthlySubtotal * months)
+  // - Other flows (notably update/assignment flows) store subtotal as the *monthly* subtotal
+  //   while `r.total` continues to represent the full-period amount.
+  //
+  // If we always do `subtotal / months` we can incorrectly divide twice, producing values like
+  // 9000 -> 2250 when months=4. So we infer whether subtotal is already monthly.
+  const subtotal = Number(r.subtotal);
+  const vatAmount = Number((r as any).vatAmount ?? 0);
+  const almostEqual = (a: number, b: number) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+  const subtotalLooksMonthly =
+    months > 1 &&
+    (almostEqual(subtotal * months + vatAmount, total) || almostEqual(subtotal * months, total));
+  const monthlySubtotal = subtotalLooksMonthly ? subtotal : months > 0 ? subtotal / months : subtotal;
   const machineCount = (r.machines ?? []).length;
   const perMachineMonthly = machineCount > 0 ? monthlySubtotal / machineCount : 0;
   const addressParts = [
@@ -306,6 +322,8 @@ interface AddOnItem {
   quantity: number;
   price: number;
 }
+
+type AddOnOption = { id: string; name: string; price: number };
 
 // Machine interface for update form (adding machines to agreement)
 interface MachineForAgreement {
@@ -474,7 +492,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     <div ref={containerRef} className={`relative ${className}`}>
       <div
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between ${error ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
+        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white cursor-pointer flex items-center justify-between min-w-0 ${error ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-500 dark:hover:border-indigo-500'} focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-indigo-500 transition-colors`}
       >
         {isOpen ? (
@@ -485,12 +503,15 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             onChange={(e) => { setSearchTerm(e.target.value); setHighlightedIndex(0); }}
             onKeyDown={handleKeyDown}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+            className="flex-1 min-w-0 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
             placeholder={placeholder}
             disabled={disabled}
           />
         ) : (
-          <span className={`flex-1 ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+          <span
+            className={`flex-1 min-w-0 pr-2 truncate ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}
+            title={selectedOption ? selectedOption.label : undefined}
+          >
             {selectedOption ? selectedOption.label : placeholder}
           </span>
         )}
@@ -538,12 +559,12 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
 // Mock customer data
 const mockCustomers = [
-  { id: 'CUST-001', name: 'ABC Holdings (Pvt) Ltd', address: '123 Main Street, Colombo 05' },
-  { id: 'CUST-002', name: 'John Perera', address: '456 Galle Road, Mount Lavinia' },
-  { id: 'CUST-003', name: 'XYZ Engineering', address: '789 Kandy Road, Peradeniya' },
-  { id: 'CUST-004', name: 'Kamal Silva', address: '321 Negombo Road, Wattala' },
-  { id: 'CUST-005', name: 'Mega Constructions', address: '654 High Level Road, Maharagama' },
-  { id: 'CUST-006', name: 'VIHANGA SHADE STRUCTURES', address: '317/2, NEW KANDY ROAD, BIYAGAMA' },
+  { id: 'CUST-001', name: 'ABC Holdings (Pvt) Ltd', address: '123 Main Street, Colombo 05', type: 'Business' as const },
+  { id: 'CUST-002', name: 'John Perera', address: '456 Galle Road, Mount Lavinia', type: 'Customer' as const },
+  { id: 'CUST-003', name: 'XYZ Engineering', address: '789 Kandy Road, Peradeniya', type: 'Business' as const },
+  { id: 'CUST-004', name: 'Kamal Silva', address: '321 Negombo Road, Wattala', type: 'Customer' as const },
+  { id: 'CUST-005', name: 'Mega Constructions', address: '654 High Level Road, Maharagama', type: 'Business' as const },
+  { id: 'CUST-006', name: 'VIHANGA SHADE STRUCTURES', address: '317/2, NEW KANDY ROAD, BIYAGAMA', type: 'Business' as const },
 ];
 
 // Mock machine data
@@ -556,7 +577,7 @@ const mockMachineModels = [
 ];
 const mockMachineTypes = ['Industrial', 'Domestic', 'Embroidery', 'Overlock', 'Buttonhole', 'Other'];
 
-// Mock add-ons data
+// Mock add-ons data (fallback when tools API is unavailable)
 const mockAddOns = [
   { id: 'ADDON-001', name: 'Thread Stand', price: 5000 },
   { id: 'ADDON-002', name: 'Extension Table', price: 8000 },
@@ -834,6 +855,13 @@ const columns: TableColumn[] = [
     filterable: true,
   },
   {
+    key: 'customerType',
+    label: 'Customer Type',
+    sortable: false,
+    filterable: true,
+    hidden: true,
+  },
+  {
     key: 'purchaseRequestNumber',
     label: 'Purchase Order',
     sortable: true,
@@ -960,6 +988,7 @@ const columns: TableColumn[] = [
 const RentalAgreementPage: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isCreateTypeSelectOpen, setIsCreateTypeSelectOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -992,6 +1021,12 @@ const RentalAgreementPage: React.FC = () => {
   const [agreementNo, setAgreementNo] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  // DB-backed machine options for cascading selects (with mock fallback)
+  const [dbMachineBrands, setDbMachineBrands] = useState<string[]>([]);
+  const [dbModelsByBrand, setDbModelsByBrand] = useState<Record<string, string[]>>({});
+  const [dbTypesByBrandModel, setDbTypesByBrandModel] = useState<Record<string, string[]>>({});
+  // DB-backed add-ons (tools) for add-ons dropdown (with mock fallback)
+  const [dbToolAddOns, setDbToolAddOns] = useState<AddOnOption[]>([]);
 
   // Machine management state for update form
   const [machinesForAgreement, setMachinesForAgreement] = useState<MachineForAgreement[]>([]);
@@ -1001,7 +1036,8 @@ const RentalAgreementPage: React.FC = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [rentalDetail, setRentalDetail] = useState<RentalAgreementInfo | null>(null);
   const [rentalDetailLoading, setRentalDetailLoading] = useState(false);
-  const [customers, setCustomers] = useState<{ id: string; name: string; address?: string }[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string; address?: string; type?: 'Business' | 'Customer' }[]>([]);
+  const [createAgreementVariant, setCreateAgreementVariant] = useState<'vat' | 'nonVat' | null>(null);
   /** When set, inline QR scanner is shown for this category (gatepass-style, no navigation). */
   const [activeScanCategoryIndex, setActiveScanCategoryIndex] = useState<number | null>(null);
   const [scannerKey, setScannerKey] = useState(1);
@@ -1059,11 +1095,21 @@ const RentalAgreementPage: React.FC = () => {
       if (!res.ok) return;
       const items = json?.data?.items ?? json?.data ?? [];
       const list = Array.isArray(items)
-        ? items.map((c: { id: string; name: string; billingAddressLine1?: string; billingCity?: string; billingRegion?: string; billingPostalCode?: string; billingCountry?: string }) => ({
-          id: c.id,
-          name: c.name,
-          address: [c.billingAddressLine1, c.billingCity, c.billingRegion, c.billingPostalCode, c.billingCountry].filter(Boolean).join(', '),
-        }))
+        ? items.map((c: { id: string; name: string; billingAddressLine1?: string; billingCity?: string; billingRegion?: string; billingPostalCode?: string; billingCountry?: string; type?: string }) => {
+          const raw = (c.type ?? '').toString().trim().toUpperCase();
+          const mappedType: 'Business' | 'Customer' | undefined =
+            raw === 'GARMENT_FACTORY' || raw === 'BUSINESS' || raw === 'COMPANY'
+              ? 'Business'
+              : raw === 'INDIVIDUAL' || raw === 'CUSTOMER' || raw === 'PERSON'
+                ? 'Customer'
+                : undefined;
+          return {
+            id: c.id,
+            name: c.name,
+            address: [c.billingAddressLine1, c.billingCity, c.billingRegion, c.billingPostalCode, c.billingCountry].filter(Boolean).join(', '),
+            type: mappedType,
+          };
+        })
         : [];
       setCustomers(list);
     } catch {
@@ -1074,6 +1120,11 @@ const RentalAgreementPage: React.FC = () => {
   useEffect(() => {
     fetchRentals();
   }, [fetchRentals]);
+
+  // Needed for Customer Type filter (safe: if it fails, filter will just have no options)
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   useEffect(() => {
     if (isViewModalOpen && selectedAgreement) {
@@ -1090,8 +1141,20 @@ const RentalAgreementPage: React.FC = () => {
   }, [isViewModalOpen, selectedAgreement?.id, fetchRentalById]);
 
   useEffect(() => {
-    if (isCreateModalOpen && customers.length === 0) fetchCustomers();
-  }, [isCreateModalOpen, customers.length, fetchCustomers]);
+    if ((isCreateModalOpen || isCreateTypeSelectOpen) && customers.length === 0) fetchCustomers();
+  }, [isCreateModalOpen, isCreateTypeSelectOpen, customers.length, fetchCustomers]);
+
+  const agreementsForTable = useMemo(() => {
+    const list = customers.length > 0 ? customers : mockCustomers;
+    const typeById = new Map<string, string>();
+    list.forEach((c: any) => {
+      if (c?.id && c?.type) typeById.set(String(c.id), String(c.type));
+    });
+    return agreements.map((a) => ({
+      ...a,
+      customerType: typeById.get(a.customerNo) || '',
+    }));
+  }, [agreements, customers]);
 
   // Calculate pricing
   const pricing = useMemo(() => {
@@ -1130,36 +1193,163 @@ const RentalAgreementPage: React.FC = () => {
 
   // Customer options for SearchableSelect (API customers with fallback to mock)
   const customerOptions = useMemo(() => {
-    const list = customers.length > 0 ? customers : mockCustomers;
-    return list.map((customer) => ({
+    const list = (customers.length > 0 ? customers : mockCustomers) as Array<{ id: string; name: string; address?: string; type?: 'Business' | 'Customer' }>;
+    const filtered =
+      createAgreementVariant === 'vat'
+        ? list.filter((c) => c.type === 'Business')
+        : createAgreementVariant === 'nonVat'
+          ? list.filter((c) => c.type === 'Customer')
+          : list;
+    // If API data doesn't include type for some reason, don't accidentally hide everything.
+    const safeList = filtered.length > 0 ? filtered : list;
+    return safeList.map((customer) => ({
       value: customer.id,
       label: `${customer.name}${customer.address ? ` - ${customer.address}` : ''}`,
     }));
-  }, [customers]);
+  }, [customers, createAgreementVariant]);
 
   // Brand options for SearchableSelect
   const brandOptions = useMemo(() => {
-    return mockMachineBrands.map((brand) => ({
+    const brands = dbMachineBrands.length > 0 ? dbMachineBrands : mockMachineBrands;
+    return brands.map((brand) => ({
       value: brand,
       label: brand,
     }));
-  }, []);
+  }, [dbMachineBrands]);
 
   // Model options for a given brand (used per machine row)
   const getModelOptions = (brand: string) => {
-    return getAvailableModels(brand).map((model) => ({
+    const models = (dbModelsByBrand[brand] && dbModelsByBrand[brand].length > 0)
+      ? dbModelsByBrand[brand]
+      : getAvailableModels(brand);
+    return models.map((model) => ({
       value: model,
       label: model,
     }));
   };
 
-  // Type options for SearchableSelect
-  const typeOptions = useMemo(() => {
-    return mockMachineTypes.map((type) => ({
+  const getTypeOptions = (brand: string, model: string) => {
+    const key = `${brand}|||${model}`;
+    const types = (dbTypesByBrandModel[key] && dbTypesByBrandModel[key].length > 0)
+      ? dbTypesByBrandModel[key]
+      : mockMachineTypes;
+    return types.map((type) => ({
       value: type,
       label: type,
     }));
+  };
+
+  const fetchMachineBrands = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/machines/options?kind=brands`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+      const brands = (json?.data?.brands ?? json?.brands ?? []) as unknown;
+      if (Array.isArray(brands)) {
+        const list = brands.map(String).map((s) => s.trim()).filter(Boolean);
+        setDbMachineBrands(list);
+      }
+    } catch {
+      // keep mock fallback
+    }
   }, []);
+
+  const fetchToolAddOns = useCallback(async () => {
+    // Cache: if we already have it, don't refetch
+    if (dbToolAddOns.length) return;
+    try {
+      // Note: backend caps limit to 100. Keep it simple and unfiltered.
+      const params = new URLSearchParams({ page: '1', limit: '100' });
+      const res = await authFetch(`${API_BASE}/tools?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+
+      // `GET /api/v1/tools` returns a paginated response: { data: { items: Tool[] } }
+      const tools = (json?.data?.items ?? json?.data ?? json?.tools ?? []) as unknown;
+      if (!Array.isArray(tools)) return;
+
+      const options: AddOnOption[] = tools
+        .map((t: any) => {
+          const id = String(t?.id ?? '').trim();
+          const name = String(t?.toolName ?? t?.name ?? '').trim();
+          const priceNum = Number(t?.unitPrice ?? 0);
+          const price = Number.isFinite(priceNum) ? priceNum : 0;
+          if (!id || !name) return null;
+          return { id, name, price };
+        })
+        .filter(Boolean) as AddOnOption[];
+
+      if (options.length > 0) setDbToolAddOns(options);
+    } catch {
+      // keep mock fallback
+    }
+  }, [dbToolAddOns.length]);
+
+  const fetchModelsForBrand = useCallback(async (brand: string) => {
+    const b = (brand || '').trim();
+    if (!b) return;
+    // Cache: if we already have it, don't refetch
+    if (dbModelsByBrand[b]?.length) return;
+    try {
+      const params = new URLSearchParams({ kind: 'models', brand: b });
+      const res = await authFetch(`${API_BASE}/machines/options?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+      const models = (json?.data?.models ?? json?.models ?? []) as unknown;
+      if (Array.isArray(models)) {
+        const list = models.map(String).map((s) => s.trim()).filter(Boolean);
+        setDbModelsByBrand((prev) => ({ ...prev, [b]: list }));
+      }
+    } catch {
+      // keep mock fallback
+    }
+  }, [dbModelsByBrand]);
+
+  const fetchTypesForBrandModel = useCallback(async (brand: string, model: string) => {
+    const b = (brand || '').trim();
+    const m = (model || '').trim();
+    if (!b || !m) return;
+    const key = `${b}|||${m}`;
+    // Cache: if we already have it, don't refetch
+    if (dbTypesByBrandModel[key]?.length) return;
+    try {
+      const params = new URLSearchParams({ kind: 'types', brand: b, model: m });
+      const res = await authFetch(`${API_BASE}/machines/options?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (!res.ok) return;
+      const types = (json?.data?.types ?? json?.types ?? []) as unknown;
+      if (Array.isArray(types)) {
+        const list = types.map(String).map((s) => s.trim()).filter(Boolean);
+        setDbTypesByBrandModel((prev) => ({ ...prev, [key]: list }));
+      }
+    } catch {
+      // keep mock fallback
+    }
+  }, [dbTypesByBrandModel]);
+
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      fetchMachineBrands();
+      fetchToolAddOns();
+    }
+  }, [isCreateModalOpen, fetchMachineBrands, fetchToolAddOns]);
+
+  const addOnOptions: AddOnOption[] = useMemo(() => {
+    if (dbToolAddOns.length > 0) return dbToolAddOns;
+    return mockAddOns;
+  }, [dbToolAddOns]);
 
   // Get available machine IDs for add-ons
   const getAvailableMachineIds = () => {
@@ -1192,7 +1382,7 @@ const RentalAgreementPage: React.FC = () => {
     return `RA${yy}${mm}${seq}`;
   };
 
-  const handleCreateAgreement = () => {
+  const beginCreateAgreement = () => {
     setIsCreateModalOpen(true);
     setAgreementNo(generateAgreementNo());
     setCustomerId('');
@@ -1207,6 +1397,20 @@ const RentalAgreementPage: React.FC = () => {
     setCustomerSignatureDate(new Date().toISOString().split('T')[0]);
     setCustomerAddress('');
     setFormErrors({});
+  };
+
+  const handleCreateAgreement = () => {
+    setIsCreateTypeSelectOpen(true);
+  };
+
+  const handleCloseCreateTypeSelectModal = () => {
+    setIsCreateTypeSelectOpen(false);
+  };
+
+  const handleCreateVariantSelect = (variant: 'vat' | 'nonVat') => {
+    setCreateAgreementVariant(variant);
+    setIsCreateTypeSelectOpen(false);
+    beginCreateAgreement();
   };
 
   const handleCloseCreateModal = () => {
@@ -1224,6 +1428,7 @@ const RentalAgreementPage: React.FC = () => {
     setCustomerSignatureDate('');
     setCustomerAddress('');
     setFormErrors({});
+    setCreateAgreementVariant(null);
   };
 
   // Auto-fill customer full name and address when customer is selected (signature stays empty for user to enter/print)
@@ -1256,12 +1461,21 @@ const RentalAgreementPage: React.FC = () => {
   };
 
   const handleMachineChange = (id: string, field: keyof MachineItem, value: any) => {
-    setMachines(
-      machines.map((m) => {
+    // Keep this as a functional update to avoid stale state.
+    setMachines((prev) =>
+      prev.map((m) => {
         if (m.id === id) {
           const updated = { ...m, [field]: value };
           if (field === 'brand') {
             updated.model = '';
+            updated.type = '';
+            // Prefetch models for this brand
+            fetchModelsForBrand(String(value || ''));
+          }
+          if (field === 'model') {
+            updated.type = '';
+            // Prefetch types for this brand+model
+            fetchTypesForBrandModel(updated.brand, String(value || ''));
           }
           if (field === 'type') {
             updated.standardPrice = standardPrices[value] || 0;
@@ -1296,7 +1510,7 @@ const RentalAgreementPage: React.FC = () => {
         if (a.id === id) {
           const updated = { ...a, [field]: value };
           if (field === 'addOnId') {
-            const addOnData = mockAddOns.find((ao) => ao.id === value);
+            const addOnData = addOnOptions.find((ao) => ao.id === value);
             updated.price = addOnData?.price || 0;
           }
           return updated;
@@ -2552,7 +2766,7 @@ const RentalAgreementPage: React.FC = () => {
               </div>
             )}
             <Table
-              data={agreements}
+              data={agreementsForTable}
               columns={columns}
               actions={actions}
               itemsPerPage={10}
@@ -2606,8 +2820,47 @@ const RentalAgreementPage: React.FC = () => {
           </div>
         )}
 
-
-
+        {/* Create Agreement Type Select Modal (VAT vs Non-VAT) */}
+        {isCreateTypeSelectOpen && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create Hiring Machine Agreement</h2>
+                <Tooltip content="Close">
+                  <button
+                    onClick={handleCloseCreateTypeSelectModal}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </Tooltip>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Select what you want to create.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleCreateVariantSelect('nonVat')}
+                    className="px-4 py-3 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <img src="/non_vat_logo.jpeg" alt="Non-VAT logo" className="h-10 w-auto mb-2" />
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white">Non-VAT</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Individual customers</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateVariantSelect('vat')}
+                    className="px-4 py-3 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <img src="/vat_logo.jpeg" alt="VAT logo" className="h-10 w-auto mb-2" />
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white">VAT</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Business customers</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create Rental Agreement Modal - Document-style (matches print Hiring Machine Agreement) */}
         {isCreateModalOpen && (
@@ -2630,8 +2883,18 @@ const RentalAgreementPage: React.FC = () => {
                   <div className="mb-6">
                     <div className="flex flex-row items-center justify-between gap-4 mb-2">
                       <div className="flex-shrink-0">
-                        <div className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white">NEEDLE</div>
-                        <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mt-0.5">TECHNOLOGIES CO.(PVT) LTD.</div>
+                        {createAgreementVariant ? (
+                          <img
+                            src={createAgreementVariant === 'vat' ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg'}
+                            alt={createAgreementVariant === 'vat' ? 'VAT logo' : 'Non-VAT logo'}
+                            className="h-12 sm:h-14 w-auto"
+                          />
+                        ) : (
+                          <>
+                            <div className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white">NEEDLE</div>
+                            <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mt-0.5">TECHNOLOGIES CO.(PVT) LTD.</div>
+                          </>
+                        )}
                       </div>
                       <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-400 text-right flex-1">
                         {LETTERHEAD_COMPANY_INFO.tagline}
@@ -2781,8 +3044,9 @@ const RentalAgreementPage: React.FC = () => {
                                     <SearchableSelect
                                       value={machine.type}
                                       onChange={(v) => handleMachineChange(machine.id, 'type', v)}
-                                      options={typeOptions}
+                                      options={getTypeOptions(machine.brand, machine.model)}
                                       placeholder="Type"
+                                      disabled={!machine.brand || !machine.model}
                                       error={formErrors[`machine_type_${index}`]}
                                       className="w-full"
                                       dropdownClassName="z-[100]"
@@ -2897,7 +3161,7 @@ const RentalAgreementPage: React.FC = () => {
                                 }`}
                               >
                                 <option value="">Select add-on</option>
-                                {mockAddOns.map((ao) => (
+                                {addOnOptions.map((ao) => (
                                   <option key={ao.id} value={ao.id}>{ao.name} - Rs. {ao.price.toLocaleString('en-LK')}</option>
                                 ))}
                               </select>

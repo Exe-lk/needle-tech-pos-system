@@ -147,6 +147,28 @@ interface ApiInvoice {
       requestNumber: string;
     } | null;
   } | null;
+  invoiceRentals?: {
+    rental?: {
+      id: string;
+      agreementNumber: string;
+      startDate: string;
+      expectedEndDate: string | null;
+      status: string;
+      purchaseOrder?: {
+        id: string;
+        requestNumber: string;
+      } | null;
+    } | null;
+  }[];
+}
+
+interface ApiRentalLite {
+  id: string;
+  agreementNumber: string;
+  startDate: string;
+  expectedEndDate: string | null;
+  status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  purchaseOrder?: { id: string; requestNumber: string } | null;
 }
 
 // Customer dropdown type
@@ -216,7 +238,12 @@ const fetchCustomers = async (): Promise<CustomerOption[]> => {
       id: customer.id,
       name: customer.name,
       type: mapApiTypeToFrontend(customer.type),
-      vatTinNic: customer.vatRegistrationNumber || customer.code,
+      // In this backend, INDIVIDUAL NIC is stored in `vatRegistrationNumber` (set from `nicNumber` on create/update).
+      // Fallback to `code` only for legacy records where NIC wasn't saved properly.
+      vatTinNic:
+        customer.type === 'INDIVIDUAL'
+          ? (customer.vatRegistrationNumber || customer.code)
+          : (customer.vatRegistrationNumber || customer.code),
       address: buildCustomerAddress(customer),
     }));
   } catch (error) {
@@ -286,6 +313,33 @@ const fetchMachineTypes = async (): Promise<MachineTypeData[]> => {
   }
 };
 
+const fetchActiveRentalsForInvoice = async (customerId: string, periodFrom: string, periodTo: string): Promise<ApiRentalLite[]> => {
+  if (!customerId || !periodFrom || !periodTo) return [];
+  try {
+    const url = `${API_BASE_URL}/rentals?customerId=${encodeURIComponent(customerId)}&status=ACTIVE&periodFrom=${encodeURIComponent(periodFrom)}&periodTo=${encodeURIComponent(periodTo)}&limit=1000`;
+    const response = await authFetch(url, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch rentals');
+    }
+    const data = await response.json();
+    const rentals: any[] = data.data?.items || [];
+    return rentals.map((r: any) => ({
+      id: r.id,
+      agreementNumber: r.agreementNumber,
+      startDate: r.startDate,
+      expectedEndDate: r.expectedEndDate ?? null,
+      status: r.status,
+      purchaseOrder: r.purchaseOrder ? { id: r.purchaseOrder.id, requestNumber: r.purchaseOrder.requestNumber } : null,
+    }));
+  } catch (error) {
+    console.error('Error fetching rentals:', error);
+    return [];
+  }
+};
+
 const fetchInvoices = async (): Promise<Invoice[]> => {
   try {
     const response = await authFetch(`${API_BASE_URL}/invoices?limit=1000`, {
@@ -304,6 +358,12 @@ const fetchInvoices = async (): Promise<Invoice[]> => {
       const customer = invoice.customer;
       const lineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
       const purchaseOrderNumber = invoice.rental?.purchaseOrder?.requestNumber || '';
+      const agreementNumbers =
+        Array.isArray(invoice.invoiceRentals)
+          ? invoice.invoiceRentals
+              .map((ir: any) => ir?.rental?.agreementNumber)
+              .filter(Boolean)
+          : [];
       
       return {
         id: invoice.id,
@@ -312,7 +372,7 @@ const fetchInvoices = async (): Promise<Invoice[]> => {
         customerName: customer?.name || 'Unknown Customer',
         customerAddress: customer ? buildCustomerAddress(customer) : '',
         vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-        purchaseOrderNumber,
+        purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
         invoiceDate: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
         periodFrom: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
         periodTo: invoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -364,6 +424,12 @@ const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
     const customer = apiInvoice.customer;
     const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
     const purchaseOrderNumber = apiInvoice.rental?.purchaseOrder?.requestNumber || '';
+    const agreementNumbers =
+      Array.isArray(apiInvoice.invoiceRentals)
+        ? apiInvoice.invoiceRentals
+            .map((ir: any) => ir?.rental?.agreementNumber)
+            .filter(Boolean)
+        : [];
 
     return {
       id: apiInvoice.id,
@@ -372,7 +438,7 @@ const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
       customerName: customer?.name || 'Unknown Customer',
       customerAddress: customer ? buildCustomerAddress(customer) : '',
       vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-      purchaseOrderNumber,
+      purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
       invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -423,6 +489,12 @@ const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoic
     const customer = apiInvoice.customer;
     const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
     const purchaseOrderNumber = apiInvoice.rental?.purchaseOrder?.requestNumber || '';
+    const agreementNumbers =
+      Array.isArray(apiInvoice.invoiceRentals)
+        ? apiInvoice.invoiceRentals
+            .map((ir: any) => ir?.rental?.agreementNumber)
+            .filter(Boolean)
+        : [];
 
     return {
       id: apiInvoice.id,
@@ -431,7 +503,7 @@ const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoic
       customerName: customer?.name || 'Unknown Customer',
       customerAddress: customer ? buildCustomerAddress(customer) : '',
       vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-      purchaseOrderNumber,
+      purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
       invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
       periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -548,6 +620,7 @@ const columns: TableColumn[] = [
 const InvoicePage: React.FC = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isInvoiceTypeSelectOpen, setIsInvoiceTypeSelectOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -572,10 +645,15 @@ const InvoicePage: React.FC = () => {
 
   // Create form state
   const [customerId, setCustomerId] = useState('');
+  const [createInvoiceMode, setCreateInvoiceMode] = useState<'VAT' | 'Non-VAT' | null>(null);
   const [invoiceType, setInvoiceType] = useState<'VAT' | 'Non-VAT'>('VAT');
   const [invoiceDate, setInvoiceDate] = useState('');
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
+  const [availableRentalsForPeriod, setAvailableRentalsForPeriod] = useState<ApiRentalLite[]>([]);
+  const [selectedRentalIds, setSelectedRentalIds] = useState<Set<string>>(new Set());
+  const [isLoadingRentalsForPeriod, setIsLoadingRentalsForPeriod] = useState(false);
+  // Manual itemised item entry removed; invoice line items come from backend based on rentals
   const [items, setItems] = useState<Omit<InvoiceItem, 'id' | 'subtotal'>[]>([]);
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
@@ -590,10 +668,67 @@ const InvoicePage: React.FC = () => {
   const [selectedBrandIds, setSelectedBrandIds] = useState<Record<number, string>>({});
   const [availableModelsPerItem, setAvailableModelsPerItem] = useState<Record<number, Model[]>>({});
 
+  const getTodayISODate = () => new Date().toISOString().split('T')[0];
+
+  const isDateRangeValid = (from: string, to: string) => {
+    if (!from || !to) return true;
+    // Both are expected in YYYY-MM-DD format from <input type="date">
+    return to >= from;
+  };
+
+  const isDateWithinInclusiveRange = (date: string, from: string, to: string) => {
+    if (!date || !from || !to) return false;
+    // Normalize to YYYY-MM-DD (API might send ISO timestamps)
+    const d = date.split('T')[0];
+    return d >= from && d <= to;
+  };
+
   // Load initial data
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Default invoice date to today when create form opens (user can still change it).
+  useEffect(() => {
+    if (!isCreateModalOpen) return;
+    setInvoiceDate((prev) => (prev ? prev : getTodayISODate()));
+  }, [isCreateModalOpen]);
+
+  // Load active rentals matching customer + period (optional feature; does not affect existing flows)
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!isCreateModalOpen) return;
+      if (!customerId || !periodFrom || !periodTo) {
+        setAvailableRentalsForPeriod([]);
+        setSelectedRentalIds(new Set());
+        return;
+      }
+      if (!isDateRangeValid(periodFrom, periodTo)) {
+        setAvailableRentalsForPeriod([]);
+        setSelectedRentalIds(new Set());
+        return;
+      }
+      setIsLoadingRentalsForPeriod(true);
+      try {
+        const rentals = await fetchActiveRentalsForInvoice(customerId, periodFrom, periodTo);
+        if (cancelled) return;
+        // Requirement: only show agreements whose startDate is within Period From..Period To
+        const rentalsStartingInPeriod = rentals.filter((r) =>
+          isDateWithinInclusiveRange(r.startDate, periodFrom, periodTo)
+        );
+        setAvailableRentalsForPeriod(rentalsStartingInPeriod);
+        // keep selected ids that still exist
+        setSelectedRentalIds((prev) => new Set([...prev].filter((id) => rentalsStartingInPeriod.some((r) => r.id === id))));
+      } finally {
+        if (!cancelled) setIsLoadingRentalsForPeriod(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreateModalOpen, customerId, periodFrom, periodTo]);
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -648,10 +783,11 @@ const InvoicePage: React.FC = () => {
   };
 
   const handleCreateInvoice = () => {
-    setIsCreateModalOpen(true);
-    // Reset form
+    setIsInvoiceTypeSelectOpen(true);
+    // Reset form (invoice type is chosen next)
     setCustomerId('');
     setInvoiceType('VAT');
+    setCreateInvoiceMode(null);
     setInvoiceDate('');
     setPeriodFrom('');
     setPeriodTo('');
@@ -665,14 +801,31 @@ const InvoicePage: React.FC = () => {
     setAvailableModelsPerItem({});
   };
 
+  const handleCloseInvoiceTypeSelectModal = () => {
+    setIsInvoiceTypeSelectOpen(false);
+  };
+
+  const handleInvoiceTypeSelect = (mode: 'VAT' | 'Non-VAT') => {
+    setCreateInvoiceMode(mode);
+    setInvoiceType(mode);
+    setCustomerId('');
+    setFormErrors({});
+    setIsInvoiceTypeSelectOpen(false);
+    setIsCreateModalOpen(true);
+    setInvoiceDate(getTodayISODate());
+  };
+
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
     setCustomerId('');
     setInvoiceType('VAT');
+    setCreateInvoiceMode(null);
     setInvoiceDate('');
     setPeriodFrom('');
     setPeriodTo('');
-    setItems([]);
+  setAvailableRentalsForPeriod([]);
+  setSelectedRentalIds(new Set());
+  setItems([]);
     setPaymentMethod('');
     setPaymentDate('');
     setReceiptNumber('');
@@ -684,84 +837,14 @@ const InvoicePage: React.FC = () => {
 
   const handleCustomerChange = (customerId: string) => {
     setCustomerId(customerId);
+    if (createInvoiceMode) {
+      setInvoiceType(createInvoiceMode);
+      return;
+    }
     const customer = customers.find((c) => c.id === customerId);
     if (customer) {
       setInvoiceType(customer.type === 'Company' ? 'VAT' : 'Non-VAT');
     }
-  };
-
-  const generateItemCode = (index: number): string => {
-    return `212WG${String(index + 1).padStart(5, '0')}`;
-  };
-
-  const generateDescription = (brandName: string, modelName: string, typeName: string): string => {
-    if (brandName && modelName && typeName) {
-      return `${brandName.toUpperCase()} ${modelName} - ${typeName.toUpperCase()}`;
-    }
-    return '';
-  };
-
-  const addItem = () => {
-    setItems([
-      ...items,
-      {
-        itemCode: generateItemCode(items.length),
-        description: '',
-        brand: '',
-        model: '',
-        type: 'Industrial',
-        numberOfMachines: 1,
-        monthlyRentPerMachine: 0,
-      },
-    ]);
-  };
-
-  const removeItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
-    // Clean up brand/model state for this item
-    const newSelectedBrandIds = { ...selectedBrandIds };
-    const newAvailableModels = { ...availableModelsPerItem };
-    delete newSelectedBrandIds[index];
-    delete newAvailableModels[index];
-    setSelectedBrandIds(newSelectedBrandIds);
-    setAvailableModelsPerItem(newAvailableModels);
-    
-    // Regenerate item codes
-    const updatedItems = items.filter((_, i) => i !== index).map((item, idx) => ({
-      ...item,
-      itemCode: generateItemCode(idx),
-    }));
-    setItems(updatedItems);
-  };
-
-  const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
-    const updatedItems = [...items];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
-    
-    // Handle brand change
-    if (field === 'brand') {
-      const brand = brands.find(b => b.name === value);
-      if (brand) {
-        setSelectedBrandIds(prev => ({ ...prev, [index]: brand.id }));
-        loadModelsForBrand(brand.id, index);
-        // Reset model when brand changes
-        updatedItems[index].model = '';
-        updatedItems[index].description = '';
-      }
-    }
-    
-    // Handle model or type change - update description
-    if (field === 'model' || field === 'type') {
-      if (updatedItems[index].brand && updatedItems[index].model && updatedItems[index].type) {
-        updatedItems[index].description = generateDescription(
-          updatedItems[index].brand,
-          updatedItems[index].model,
-          updatedItems[index].type
-        );
-      }
-    }
-    
-    setItems(updatedItems);
   };
 
   const calculateItemSubtotal = (item: Omit<InvoiceItem, 'id' | 'subtotal'>): number => {
@@ -775,73 +858,65 @@ const InvoicePage: React.FC = () => {
     return { subtotal, vatAmount, totalAmount };
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = (): Record<string, string> => {
     const errors: Record<string, string> = {};
 
     if (!customerId) errors.customerId = 'Customer is required';
     if (!invoiceDate) errors.invoiceDate = 'Invoice Date is required';
-    if (!periodFrom) errors.periodFrom = 'Period From is required';
-    if (!periodTo) errors.periodTo = 'Period To is required';
-    if (items.length === 0) errors.items = 'At least one item is required';
-    
-    items.forEach((item, index) => {
-      if (!item.brand) errors[`item_${index}_brand`] = 'Brand is required';
-      if (!item.model) errors[`item_${index}_model`] = 'Model is required';
-      if (!item.type) errors[`item_${index}_type`] = 'Type is required';
-      if (item.numberOfMachines <= 0) errors[`item_${index}_machines`] = 'Number of machines must be greater than 0';
-      if (item.monthlyRentPerMachine <= 0) errors[`item_${index}_rent`] = 'Monthly rent must be greater than 0';
-    });
+  if (!periodFrom) errors.periodFrom = 'Period From is required';
+  if (!periodTo) errors.periodTo = 'Period To is required';
+    if (periodFrom && periodTo && !isDateRangeValid(periodFrom, periodTo)) {
+      errors.periodTo = 'Period To cannot be earlier than Period From';
+    }
 
     if (!paymentMethod) errors.paymentMethod = 'Payment Method is required';
     if (!paymentDate) errors.paymentDate = 'Payment Date is required';
 
     setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    return errors;
+  };
+
+  const scrollToFirstErrorField = (errors: Record<string, string>) => {
+    const fieldOrder = ['invoiceDate', 'customerId', 'periodFrom', 'periodTo', 'paymentMethod', 'paymentDate'];
+    const firstKey = fieldOrder.find((k) => Boolean(errors[k])) || Object.keys(errors)[0];
+    if (!firstKey) return;
+
+    const el = document.getElementById(`create-invoice-${firstKey}`);
+    if (!el) return;
+
+    // Wait a tick so the error UI renders before scrolling.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        if (typeof (el as any).focus === 'function') (el as any).focus({ preventScroll: true });
+      });
+    });
   };
 
   const handleSubmitCreate = async () => {
-    if (!validateForm()) {
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      scrollToFirstErrorField(errors);
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const customer = customers.find((c) => c.id === customerId);
       const { subtotal, vatAmount, totalAmount } = calculateTotals();
       
-      // Prepare line items for API
-      const lineItems = items.map((item, index) => {
-        const brand = brands.find(b => b.name === item.brand);
-        const model = availableModelsPerItem[index]?.find(m => m.name === item.model);
-        const type = machineTypes.find(t => t.name === item.type);
-        
-        return {
-          description: item.description,
-          quantity: item.numberOfMachines,
-          unitPrice: item.monthlyRentPerMachine,
-          machineId: null, // Optional, can be set if you have machine IDs
-          brand: item.brand,
-          model: item.model,
-          type: item.type,
-          brandId: brand?.id,
-          modelId: model?.id,
-          machineTypeId: type?.id,
-          itemCode: item.itemCode,
-          serialNumber: item.serialNumber,
-          vatRate: invoiceType === 'VAT' ? 0.18 : 0,
-        };
-      });
-
       const invoicePayload = {
         customerId: customerId,
         type: 'RENTAL', // or appropriate invoice type
         taxCategory: invoiceType === 'VAT' ? 'VAT' : 'NON_VAT',
-        lineItems: lineItems,
+  // Line items are derived from linked rentals on the backend
         issueDate: invoiceDate,
         dueDate: periodTo,
+        periodFrom,
+        periodTo,
         subtotal: subtotal,
         vatAmount: vatAmount,
         grandTotal: totalAmount,
+        ...(selectedRentalIds.size > 0 ? { rentalIds: Array.from(selectedRentalIds) } : {}),
       };
 
       const newInvoice = await createInvoice(invoicePayload);
@@ -1110,8 +1185,84 @@ const InvoicePage: React.FC = () => {
     if (isVAT) {
       /* Tax Invoice format matching official layout: row1 Date | Invoice No, row2 TIN boxes, row3 bordered address boxes, row4 Period | PO, then bordered table and bordered summary */
       const fmt = (n: number) => `Rs.${n.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`;
+
+      const splitSerials = (serialNumber?: string) => {
+        const raw = (serialNumber ?? '').trim();
+        if (!raw) return [];
+        return raw
+          .split(/[\n,;/]+/g)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      };
+
+      const vatRows = (() => {
+        type VatRow = {
+          key: string;
+          serial: string;
+          description: string;
+          rate: number;
+          qty: number;
+          amountExVat: number;
+        };
+
+        const rows: VatRow[] = [];
+        invoice.items.forEach((item, index) => {
+          const qty = Number(item.numberOfMachines) || 1;
+          const unitRate = Number(item.monthlyRentPerMachine) || 0;
+          const serials = splitSerials(item.serialNumber);
+
+          const shouldExpand = qty > 1 || serials.length > 1;
+          if (!shouldExpand) {
+            rows.push({
+              key: `${index}-0`,
+              serial: item.serialNumber?.trim() || '—',
+              description: item.description,
+              rate: unitRate,
+              qty,
+              amountExVat: Number(item.subtotal) || unitRate * qty,
+            });
+            return;
+          }
+
+          const expandedCount = Math.max(qty, serials.length || 0) || qty;
+          for (let i = 0; i < expandedCount; i++) {
+            rows.push({
+              key: `${index}-${i}`,
+              serial: serials[i] || '—',
+              description: item.description,
+              rate: unitRate,
+              qty: 1,
+              amountExVat: unitRate,
+            });
+          }
+        });
+
+        return rows;
+      })();
+
       return (
         <div className="text-sm print:text-xs">
+          {/* Print page number (matches PDF layout) */}
+          <style jsx global>{`
+            @media print {
+              .print-page-number {
+                position: fixed;
+                bottom: 10mm;
+                left: 0;
+                right: 0;
+                text-align: center;
+                font-size: 10px;
+                color: #000;
+              }
+              .print-page-number::after {
+                content: counter(page);
+              }
+            }
+          `}</style>
+          <div className="hidden print:block print-page-number">
+            Page{' '}
+          </div>
+
           {/* Row 1: Date of Invoice (left) | Tax Invoice No (right) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
             <div>
@@ -1123,16 +1274,16 @@ const InvoicePage: React.FC = () => {
               <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{invoice.invoiceNumber}</span>
             </div>
           </div>
-          {/* Row 2: Supplier's TIN (left) | Purchaser's TIN (right) - bordered boxes */}
+          {/* Row 2: Supplier VAT No (left) | Purchaser VAT No (right) - bordered boxes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
             <div>
-              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN : </span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier VAT No : </span>
               <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
-                {company.tinNo}
+                {company.vatNo}
               </div>
             </div>
             <div>
-              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN : </span>
+              <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser VAT No : </span>
               <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
                 {invoice.vatTinNic || '—'}
               </div>
@@ -1177,7 +1328,7 @@ const InvoicePage: React.FC = () => {
           <div className="overflow-x-auto -mx-1">
             <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 mb-4 print:mb-3 print:text-xs min-w-[32rem]">
               <thead>
-                <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800 bg-gray-100 dark:bg-slate-700 print:bg-gray-100">
                   <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
                   <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
                   <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Rate</th>
@@ -1186,13 +1337,13 @@ const InvoicePage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {invoice.items.map((item, index) => (
-                  <tr key={index}>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{String(index + 1).padStart(6, '0')}</td>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{item.description}</td>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{item.monthlyRentPerMachine.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{item.numberOfMachines}</td>
-                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{item.subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                {vatRows.map((row) => (
+                  <tr key={row.key}>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900 whitespace-pre-wrap break-words">{row.serial}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{row.description}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{row.rate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{row.qty}</td>
+                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{row.amountExVat.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1200,21 +1351,21 @@ const InvoicePage: React.FC = () => {
           </div>
 
           {/* Summary - three rows with thin borders (table-like) */}
-          <table className="w-full border-collapse max-w-md ml-auto mb-4 print:mb-3">
+          <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 mb-4 print:mb-3">
             <tbody>
-              <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
-                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Value of Supply</td>
-                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(subtotal)}</td>
+              <tr>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total Value of Supply</td>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 w-[12rem]">{fmt(subtotal)}</td>
               </tr>
               {vatAmount > 0 && (
-                <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
-                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">VAT Amount (18.0%)</td>
-                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-1.5 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(vatAmount)}</td>
+                <tr>
+                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">VAT Amount (18.0%)</td>
+                  <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">{fmt(vatAmount)}</td>
                 </tr>
               )}
-              <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
-                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
-                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">{fmt(totalAmount)}</td>
+              <tr>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2.5 px-2 font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">Total Amount including VAT</td>
+                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2.5 px-2 text-right font-bold text-gray-900 dark:text-slate-100 print:text-gray-900 text-base print:text-sm">{fmt(totalAmount)}</td>
               </tr>
             </tbody>
           </table>
@@ -1328,6 +1479,7 @@ const InvoicePage: React.FC = () => {
           footerContent={renderInvoiceSignatures(invoice)}
           logoPath={isVAT ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg'}
           hideTagline={isVAT}
+          hideStandardFooter={isVAT}
           className="print:p-0"
         >
           {renderInvoiceBodyContent(invoice)}
@@ -1358,11 +1510,74 @@ const InvoicePage: React.FC = () => {
           footerContent={renderInvoiceSignatures(invoice)}
           logoPath={isVAT ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg'}
           hideTagline={isVAT}
+          hideStandardFooter={isVAT}
           className="print:p-0"
         >
           {isVAT ? (
             /* VAT: same layout as view form — Date | Tax Invoice No, TIN row, Supplier/Purchaser boxes, Period | PO, then per-month bordered table + summary table, then grand total */
             <div className="text-sm print:text-xs">
+              <style jsx global>{`
+                @media print {
+                  .print-page-number {
+                    position: fixed;
+                    bottom: 10mm;
+                    left: 0;
+                    right: 0;
+                    text-align: center;
+                    font-size: 10px;
+                    color: #000;
+                  }
+                  .print-page-number::after {
+                    content: counter(page);
+                  }
+                }
+              `}</style>
+              <div className="hidden print:block print-page-number">
+                Page{' '}
+              </div>
+
+              {(() => {
+                const splitSerials = (serialNumber?: string) => {
+                  const raw = (serialNumber ?? '').trim();
+                  if (!raw) return [];
+                  return raw
+                    .split(/[\n,;/]+/g)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                };
+
+                const renderVatLineRows = (pi: { item: InvoiceItem; rate: number }) => {
+                  const qty = Number(pi.item.numberOfMachines) || 1;
+                  const unitRate = Number(pi.rate) || 0;
+                  const serials = splitSerials(pi.item.serialNumber);
+                  const shouldExpand = qty > 1 || serials.length > 1;
+
+                  if (!shouldExpand) {
+                    return [
+                      {
+                        key: `${pi.item.id}-0`,
+                        serial: pi.item.serialNumber?.trim() || '—',
+                        description: pi.item.description,
+                        rate: unitRate,
+                        qty,
+                        amountExVat: unitRate * qty,
+                      },
+                    ];
+                  }
+
+                  const expandedCount = Math.max(qty, serials.length || 0) || qty;
+                  return Array.from({ length: expandedCount }, (_, i) => ({
+                    key: `${pi.item.id}-${i}`,
+                    serial: serials[i] || '—',
+                    description: pi.item.description,
+                    rate: unitRate,
+                    qty: 1,
+                    amountExVat: unitRate,
+                  }));
+                };
+
+                return (
+                  <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
                 <div>
                   <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Date of Invoice : </span>
@@ -1375,13 +1590,13 @@ const InvoicePage: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-2">
                 <div>
-                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier&apos;s TIN</span>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Supplier VAT No</span>
                   <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
-                    {company.tinNo}
+                    {company.vatNo}
                   </div>
                 </div>
                 <div>
-                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser&apos;s TIN</span>
+                  <span className="font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Purchaser VAT No</span>
                   <div className="border border-gray-800 dark:border-slate-500 print:border-gray-800 inline-block px-3 py-1.5 mt-0.5 min-w-[8rem] leading-tight text-gray-900 dark:text-slate-100 print:text-gray-900">
                     {invoice.vatTinNic || '—'}
                   </div>
@@ -1434,7 +1649,7 @@ const InvoicePage: React.FC = () => {
                   <div className="overflow-x-auto -mx-1">
                     <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 mb-4 print:mb-3 print:text-xs min-w-[32rem]">
                       <thead>
-                        <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800">
+                        <tr className="border border-gray-800 dark:border-slate-500 print:border-gray-800 bg-gray-100 dark:bg-slate-700 print:bg-gray-100">
                           <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
                           <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-left py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
                           <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 text-right py-2 px-2 text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Rate</th>
@@ -1443,15 +1658,17 @@ const InvoicePage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.proratedItems.map((pi, idx) => (
-                          <tr key={idx}>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{String(idx + 1).padStart(6, '0')}</td>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.item.description}</td>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.proratedRate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.item.numberOfMachines}</td>
-                            <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{pi.proratedSubtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
-                          </tr>
-                        ))}
+                        {preview.proratedItems.flatMap((pi) =>
+                          renderVatLineRows({ item: pi.item, rate: pi.proratedRate }).map((row) => (
+                            <tr key={`${preview.month}-${preview.year}-${row.key}`}>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900 whitespace-pre-wrap break-words">{row.serial}</td>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-gray-900 dark:text-slate-100 print:text-gray-900">{row.description}</td>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{row.rate.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{row.qty}</td>
+                              <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 py-2 px-2 text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{row.amountExVat.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -1498,6 +1715,9 @@ const InvoicePage: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+                  </>
+                );
+              })()}
             </div>
           ) : (
             /* Non-VAT: same layout as view form — Customer, Address, Period, NIC, then per-month table (Description | Serial No | Monthly Rental), Total Amount, then grand total */
@@ -1607,7 +1827,15 @@ const InvoicePage: React.FC = () => {
   // Create form content — layout matches printed TAX INVOICE for familiar UX
   const renderInvoiceForm = () => {
     const { subtotal, vatAmount, totalAmount } = calculateTotals();
-    const selectedCustomer = customers.find((c) => c.id === customerId);
+    const filteredCustomers =
+      createInvoiceMode === 'VAT'
+        ? customers.filter((c) => c.type === 'Company')
+        : createInvoiceMode === 'Non-VAT'
+          ? customers.filter((c) => c.type === 'Individual')
+          : customers;
+
+    const selectedCustomer =
+      filteredCustomers.find((c) => c.id === customerId) || customers.find((c) => c.id === customerId);
 
     const inputBase = 'bg-white dark:bg-slate-700 dark:border-slate-500 dark:text-white dark:placeholder-gray-400';
     const inputError = 'border-red-500 dark:border-red-400';
@@ -1631,6 +1859,7 @@ const InvoicePage: React.FC = () => {
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Date: </span>
               <input
+                id="create-invoice-invoiceDate"
                 type="date"
                 value={invoiceDate}
                 onChange={(e) => setInvoiceDate(e.target.value)}
@@ -1650,6 +1879,7 @@ const InvoicePage: React.FC = () => {
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Customer: </span>
               <select
+                id="create-invoice-customerId"
                 value={customerId}
                 onChange={(e) => handleCustomerChange(e.target.value)}
                 className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
@@ -1657,7 +1887,7 @@ const InvoicePage: React.FC = () => {
                 } ${focusRing}`}
               >
                 <option value="">Select Customer</option>
-                {customers.map((c) => (
+                {filteredCustomers.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -1674,9 +1904,17 @@ const InvoicePage: React.FC = () => {
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Period From: </span>
               <input
+                id="create-invoice-periodFrom"
                 type="date"
                 value={periodFrom}
-                onChange={(e) => setPeriodFrom(e.target.value)}
+                onChange={(e) => {
+                  const nextFrom = e.target.value;
+                  setPeriodFrom(nextFrom);
+                  // Keep date range valid; prevent "to" being earlier than "from"
+                  if (periodTo && nextFrom && periodTo < nextFrom) {
+                    setPeriodTo('');
+                  }
+                }}
                 className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
                   formErrors.periodFrom ? inputError : inputBorder
                 } ${focusRing}`}
@@ -1688,8 +1926,10 @@ const InvoicePage: React.FC = () => {
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Period To: </span>
               <input
+                id="create-invoice-periodTo"
                 type="date"
                 value={periodTo}
+                min={periodFrom || undefined}
                 onChange={(e) => setPeriodTo(e.target.value)}
                 className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
                   formErrors.periodTo ? inputError : inputBorder
@@ -1700,223 +1940,97 @@ const InvoicePage: React.FC = () => {
               )}
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Customer VAT No: </span>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">
+                {invoiceType === 'VAT' ? 'Customer VAT No: ' : 'Customer NIC: '}
+              </span>
               <span className="text-gray-900 dark:text-white">{selectedCustomer?.vatTinNic || '—'}</span>
             </div>
           </div>
           <div className="border-b border-gray-800 dark:border-slate-600 my-3" />
 
-          {/* Itemized table — matches print: Item | Description | Rate | Qty | Amount */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Itemised details</span>
-              <button
-                type="button"
-                onClick={addItem}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-500 hover:bg-blue-700 dark:hover:bg-indigo-600 rounded border border-blue-700 dark:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-400"
-              >
-                <Plus className="w-4 h-4" />
-                Add Item
-              </button>
+          {/* Optional: link multiple active hiring agreements (rentals) to this invoice */}
+          <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="text-gray-600 dark:text-gray-400 font-medium">Hiring Agreements (optional): </span>
+                <span className="text-gray-900 dark:text-white">
+                  {selectedRentalIds.size > 0 ? `${selectedRentalIds.size} selected` : 'None selected'}
+                </span>
+              </div>
+              {isLoadingRentalsForPeriod && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">Loading agreements…</span>
+              )}
             </div>
-            {formErrors.items && (
-              <p className="mb-2 text-sm text-red-500 dark:text-red-400">{formErrors.items}</p>
+
+            {customerId && periodFrom && periodTo && availableRentalsForPeriod.length === 0 && !isLoadingRentalsForPeriod && (
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                No ACTIVE agreements start within this period.
+              </div>
             )}
 
-            {items.length === 0 ? (
-              <div className="text-center py-6 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-slate-500 rounded-lg bg-gray-50/50 dark:bg-slate-700/30">
-                No items added. Click &quot;Add Item&quot; to add items to the invoice.
-              </div>
-            ) : (
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-gray-800 dark:border-slate-600">
-                    <th className="text-left py-2 pr-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Item</th>
-                    <th className="text-left py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Description</th>
-                    <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Rate</th>
-                    <th className="text-center py-2 px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Qty</th>
-                    <th className="text-right py-2 pl-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Amount</th>
-                    <th className="w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, index) => (
-                    <React.Fragment key={index}>
-                      <tr className="border-b border-gray-200 dark:border-slate-700">
-                        <td className="py-2 pr-2 align-top">
-                          <input
-                            type="text"
-                            value={item.itemCode}
-                            readOnly
-                            className="w-full bg-gray-50 dark:bg-slate-700/50 border-0 p-0 text-gray-900 dark:text-white text-sm"
-                          />
-                        </td>
-                        <td className="py-2 px-2 align-top">
-                          <input
-                            type="text"
-                            value={item.description}
-                            readOnly
-                            className="w-full bg-gray-50 dark:bg-slate-700/50 border-0 p-0 text-gray-900 dark:text-white text-sm"
-                          />
-                          <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                            <select
-                              value={item.brand}
-                              onChange={(e) => updateItem(index, 'brand', e.target.value)}
-                              className={`px-1.5 py-0.5 border rounded ${inputBase} ${
-                                formErrors[`item_${index}_brand`] ? inputError : inputBorder
-                              } ${focusRing}`}
-                            >
-                              <option value="">Brand</option>
-                              {brands.map((b) => (
-                                <option key={b.id} value={b.name}>{b.name}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={item.model}
-                              onChange={(e) => updateItem(index, 'model', e.target.value)}
-                              disabled={!item.brand}
-                              className={`px-1.5 py-0.5 border rounded ${inputBase} ${inputBorder} ${focusRing} disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:opacity-70`}
-                            >
-                              <option value="">Model</option>
-                              {item.brand && availableModelsPerItem[index]?.map((m) => (
-                                <option key={m.id} value={m.name}>{m.name}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={item.type}
-                              onChange={(e) => updateItem(index, 'type', e.target.value as MachineType)}
-                              className={`px-1.5 py-0.5 border rounded ${inputBase} ${
-                                formErrors[`item_${index}_type`] ? inputError : inputBorder
-                              } ${focusRing}`}
-                            >
-                              {machineTypes.map((t) => (
-                                <option key={t.id} value={t.name}>{t.name}</option>
-                              ))}
-                            </select>
-                            {invoiceType === 'Non-VAT' && (
-                              <input
-                                type="text"
-                                value={item.serialNumber || ''}
-                                onChange={(e) => updateItem(index, 'serialNumber', e.target.value)}
-                                placeholder="Serial No"
-                                className={`px-1.5 py-0.5 border rounded ${inputBase} ${inputBorder} ${focusRing}`}
-                              />
+            {availableRentalsForPeriod.length > 0 && (
+              <div className="mt-2 border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden">
+                <div className="max-h-48 overflow-auto">
+                  {availableRentalsForPeriod.map((r) => {
+                    const checked = selectedRentalIds.has(r.id);
+                    return (
+                      <label
+                        key={r.id}
+                        className="flex items-start gap-3 px-3 py-2 border-b border-gray-100 dark:border-slate-700 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/30"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedRentalIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(r.id)) next.delete(r.id);
+                              else next.add(r.id);
+                              return next;
+                            });
+                          }}
+                          className="mt-1"
+                        />
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                              {r.agreementNumber}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+                              {r.status}
+                            </span>
+                            {r.purchaseOrder?.requestNumber && (
+                              <span className="text-xs text-gray-600 dark:text-gray-400">
+                                PO: {r.purchaseOrder.requestNumber}
+                              </span>
                             )}
                           </div>
-                        </td>
-                        <td className="py-2 px-2 text-center align-top">
-                          <div className="relative inline-block">
-                            <input
-                              type="number"
-                              value={item.monthlyRentPerMachine}
-                              onChange={(e) => updateItem(index, 'monthlyRentPerMachine', Number(e.target.value))}
-                              className={`w-20 px-1.5 py-0.5 pl-6 pr-6 border rounded text-center ${inputBase} ${
-                                formErrors[`item_${index}_rent`] ? inputError : inputBorder
-                              } ${focusRing} appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                              min="0"
-                              step="0.01"
-                            />
-                            <button
-                              type="button"
-                              aria-label="Decrease rate"
-                              onClick={() => {
-                                const next = Math.max(0, Number(((Number(item.monthlyRentPerMachine) || 0) - 0.01).toFixed(2)));
-                                updateItem(index, 'monthlyRentPerMachine', next);
-                              }}
-                              className="absolute inset-y-0 left-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
-                            >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Increase rate"
-                              onClick={() => {
-                                const next = Number(((Number(item.monthlyRentPerMachine) || 0) + 0.01).toFixed(2));
-                                updateItem(index, 'monthlyRentPerMachine', next);
-                              }}
-                              className="absolute inset-y-0 right-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
+                          <div className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                            {new Date(r.startDate).toLocaleDateString('en-LK')} →{' '}
+                            {r.expectedEndDate ? new Date(r.expectedEndDate).toLocaleDateString('en-LK') : 'Open-ended'}
                           </div>
-                        </td>
-                        <td className="py-2 px-2 text-center align-top">
-                          <div className="relative inline-block">
-                            <input
-                              type="number"
-                              value={item.numberOfMachines}
-                              onChange={(e) => updateItem(index, 'numberOfMachines', Number(e.target.value))}
-                              className={`w-16 px-1.5 py-0.5 pl-6 pr-6 border rounded text-center ${inputBase} ${
-                                formErrors[`item_${index}_machines`] ? inputError : inputBorder
-                              } ${focusRing} appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                              min="1"
-                            />
-                            <button
-                              type="button"
-                              aria-label="Decrease quantity"
-                              onClick={() => {
-                                const next = Math.max(1, (Number(item.numberOfMachines) || 1) - 1);
-                                updateItem(index, 'numberOfMachines', next);
-                              }}
-                              className="absolute inset-y-0 left-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
-                            >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Increase quantity"
-                              onClick={() => {
-                                const next = (Number(item.numberOfMachines) || 1) + 1;
-                                updateItem(index, 'numberOfMachines', next);
-                              }}
-                              className="absolute inset-y-0 right-0.5 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="py-2 pl-2 text-right align-top text-gray-900 dark:text-white">
-                          {calculateItemSubtotal(item).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 text-center align-top">
-                          <button
-                            type="button"
-                            onClick={() => removeItem(index)}
-                            className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            aria-label="Remove item"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            )}
-
-            {/* Totals — matches print: Total Amount left label, value right */}
-            {items.length > 0 && (
-              <div className="mt-3 space-y-1">
-                <div className="flex justify-between items-baseline">
-                  <span className="font-bold text-gray-900 dark:text-white">Total Amount</span>
-                  <span className="font-bold text-gray-900 dark:text-white text-lg">
-                    {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                  </span>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
-                {invoiceType === 'VAT' && vatAmount > 0 && (
-                  <>
-                    <div className="flex justify-end text-sm text-gray-700 dark:text-gray-300">
-                      Sub Amount: Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="flex justify-end text-sm text-gray-700 dark:text-gray-300">
-                      VAT (18%): Rs. {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                    </div>
-                  </>
-                )}
+                <div className="px-3 py-2 bg-gray-50 dark:bg-slate-700/20 flex items-center justify-between">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    Selected agreements will be linked to the invoice (no automatic line item changes).
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRentalIds(new Set())}
+                    className="text-xs font-medium text-blue-700 dark:text-indigo-300 hover:underline"
+                  >
+                    Clear selection
+                  </button>
+                </div>
               </div>
             )}
           </div>
+
+          {/* Itemised details section removed; amounts will be calculated from rentals/backend. */}
           <div className="border-b border-gray-800 dark:border-slate-600 my-3" />
 
           {/* Authorized By / Received By — matches print */}
@@ -1941,6 +2055,7 @@ const InvoicePage: React.FC = () => {
                   Payment Method<span className="text-red-500">*</span>
                 </label>
                 <select
+                  id="create-invoice-paymentMethod"
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   className={`w-full px-2 py-1.5 border rounded text-sm ${inputBase} ${
@@ -1962,6 +2077,7 @@ const InvoicePage: React.FC = () => {
                   Payment Date<span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="create-invoice-paymentDate"
                   type="date"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
@@ -2278,6 +2394,7 @@ const InvoicePage: React.FC = () => {
               itemsPerPage={10}
               searchable
               filterable
+              maxHeight="none"
               loading={isLoading}
               onCreateClick={handleCreateInvoice}
               createButtonLabel="Create Invoice"
@@ -2285,6 +2402,61 @@ const InvoicePage: React.FC = () => {
             />
           </div>
         </main>
+
+        {/* Invoice Type Selection Modal (VAT vs Non-VAT) */}
+        {isInvoiceTypeSelectOpen && (
+          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-slate-700">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create Invoice</h2>
+                <button
+                  onClick={handleCloseInvoiceTypeSelectModal}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Select invoice type to continue. This sets the letterhead logo and filters customers.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handleInvoiceTypeSelect('VAT')}
+                    className="px-4 py-4 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-20 h-12 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                        <img src="/vat_logo.jpeg" alt="VAT logo" className="w-full h-full object-contain" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">VAT Invoice</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Business customers only</div>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInvoiceTypeSelect('Non-VAT')}
+                    className="px-4 py-4 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-20 h-12 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                        <img src="/non_vat_logo.jpeg" alt="Non-VAT logo" className="w-full h-full object-contain" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white">Non‑VAT Invoice</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Individual customers only</div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create Invoice Modal — document-style layout matching printed TAX INVOICE */}
         {isCreateModalOpen && (
@@ -2347,8 +2519,9 @@ const InvoicePage: React.FC = () => {
                 <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 dark:text-white truncate pr-2">Invoice Details</h2>
                 <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   <button
+                    type="button"
                     onClick={handlePrint}
-                    className="px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-indigo-400 border border-blue-600 dark:border-indigo-400 rounded hover:bg-blue-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-1.5"
+                    className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 flex items-center space-x-2"
                   >
                     <Printer className="w-4 h-4" />
                     Print

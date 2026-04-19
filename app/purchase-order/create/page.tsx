@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import CreateForm, { FormField, CreateFormRef } from '@/src/components/form-popup/create';
@@ -320,17 +320,20 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                         }}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                        className="flex-1 min-w-0 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                         placeholder={placeholder}
                         disabled={disabled}
                     />
                 ) : (
-                    <span className={`flex-1 ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                    <span
+                        className={`flex-1 min-w-0 truncate whitespace-nowrap ${!selectedOption ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}
+                        title={selectedOption?.label}
+                    >
                         {selectedOption ? selectedOption.label : placeholder}
                     </span>
                 )}
                 <ChevronDown
-                    className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
+                    className={`w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
                 />
             </div>
 
@@ -502,8 +505,41 @@ const mockMachineModels = [
 ];
 const mockMachineTypes = ['Industrial', 'Domestic', 'Embroidery', 'Overlock', 'Buttonhole', 'Other'];
 
-const CreatePurchaseRequestPage: React.FC = () => {
+function PurchaseModeFromSearchParams({
+    onModeChange,
+}: {
+    onModeChange: (mode: 'vat' | 'non_vat' | null) => void;
+}) {
+    const searchParams = useSearchParams();
+
+    const mode = useMemo(() => {
+        const raw = (searchParams?.get('mode') || '').toLowerCase();
+        if (raw === 'vat') return 'vat' as const;
+        if (raw === 'non_vat') return 'non_vat' as const;
+        return null;
+    }, [searchParams]);
+
+    useEffect(() => {
+        onModeChange(mode);
+    }, [mode, onModeChange]);
+
+    return null;
+}
+
+export type PurchaseOrderCreateMode = 'vat' | 'non_vat';
+type CreatePurchaseOrderVariant = 'page' | 'modal';
+
+export const CreatePurchaseOrderContent: React.FC<{
+    variant?: CreatePurchaseOrderVariant;
+    /** When provided, overrides querystring mode and locks the experience to this mode (used by modal). */
+    mode?: PurchaseOrderCreateMode;
+    /** Used by modal variant to close without navigation. */
+    onClose?: () => void;
+    /** Called after a successful create (before close/navigation). */
+    onCreated?: () => void;
+}> = ({ variant = 'page', mode, onClose, onCreated }) => {
     const router = useRouter();
+    const [purchaseMode, setPurchaseMode] = useState<'vat' | 'non_vat' | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -621,6 +657,19 @@ const CreatePurchaseRequestPage: React.FC = () => {
         fetchMasterData();
     }, [fetchCustomers, fetchInventory, fetchMasterData]);
 
+    // In modal variant we force a mode, bypassing querystring.
+    useEffect(() => {
+        if (variant !== 'modal') return;
+        if (!mode) return;
+        setPurchaseMode(mode);
+    }, [variant, mode]);
+
+    const desiredCustomerApiType = useMemo(() => {
+        if (purchaseMode === 'vat') return 'GARMENT_FACTORY';
+        if (purchaseMode === 'non_vat') return 'INDIVIDUAL';
+        return null;
+    }, [purchaseMode]);
+
     // Selected customer from API or mock (for type check)
     const selectedCustomer = useMemo(() => {
         if (!selectedCustomerId) return null;
@@ -632,6 +681,24 @@ const CreatePurchaseRequestPage: React.FC = () => {
     }, [selectedCustomerId, customers]);
 
     const isBusinessCustomer = selectedCustomer?.type === 'GARMENT_FACTORY';
+
+    // If mode is forced (VAT/non-VAT) and selected customer doesn't match, clear selection safely.
+    useEffect(() => {
+        if (!desiredCustomerApiType) return;
+        if (!selectedCustomerId) return;
+        if (!selectedCustomer) return;
+        if (selectedCustomer.type !== desiredCustomerApiType) {
+            setSelectedCustomerId('');
+            setSelectedCustomerLocationId('');
+            setCustomerLocations([]);
+            setFormErrors((prev) => {
+                const next = { ...prev };
+                delete next.selectedCustomerId;
+                delete next.selectedCustomerLocationId;
+                return next;
+            });
+        }
+    }, [desiredCustomerApiType, selectedCustomerId, selectedCustomer]);
 
     // When customer changes: clear location; if business, fetch locations for that customer
     useEffect(() => {
@@ -744,6 +811,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
         if (customers.length > 0) {
             return customers
                 .filter((c) => c.status !== 'INACTIVE')
+                .filter((c) => (desiredCustomerApiType ? c.type === desiredCustomerApiType : true))
                 .map((customer) => ({
                     value: customer.id,
                     label: `${customer.name} (${customer.type === 'GARMENT_FACTORY' ? 'Business' : 'Customer'})`,
@@ -751,11 +819,15 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }
         return mockCustomers
             .filter((c) => c.status === 'Active')
+            .filter((c) => {
+                if (!desiredCustomerApiType) return true;
+                return desiredCustomerApiType === 'GARMENT_FACTORY' ? c.type === 'Company' : c.type === 'Individual';
+            })
             .map((customer) => ({
                 value: customer.id.toString(),
                 label: `${customer.name} (${getCustomerTypeLabel(customer.type)})`,
             }));
-    }, [customers]);
+    }, [customers, desiredCustomerApiType]);
 
     // Prepare brand options (from inventory API when loaded)
     const brandOptions = useMemo(() => {
@@ -781,6 +853,51 @@ const CreatePurchaseRequestPage: React.FC = () => {
         }));
     };
 
+    /** Load monthlyRentalFee from catalogued machines when brand/model/type match the machines table (via brandId + modelId + type name). */
+    const fetchAndApplyMonthlyRentalFee = useCallback(
+        async (machineId: string, brandName: string, modelName: string, typeName: string) => {
+            const brandObj = apiBrands.find((b) => b.name === brandName);
+            const modelObj = apiModels.find(
+                (m) => m.name === modelName && (!brandObj || m.brandId === brandObj.id)
+            );
+            if (!brandObj || !modelObj || !typeName.trim()) return;
+
+            try {
+                const params = new URLSearchParams({
+                    page: '1',
+                    limit: '10',
+                    brandId: brandObj.id,
+                    modelId: modelObj.id,
+                    type: typeName.trim(),
+                });
+                const response = await authFetch(`${API_BASE_URL}/machines?${params.toString()}`, {
+                    method: 'GET',
+                    credentials: 'include',
+                });
+                const json = await response.json();
+                const items = json?.data?.items;
+                if (!response.ok || !Array.isArray(items) || items.length === 0) return;
+
+                const raw = items[0]?.monthlyRentalFee;
+                if (raw == null || raw === '') return;
+                const fee = Number(raw);
+                if (Number.isNaN(fee)) return;
+
+                setMachines((prev) =>
+                    prev.map((m) => {
+                        if (m.id !== machineId) return m;
+                        if (m.brand !== brandName || m.model !== modelName || m.type !== typeName) return m;
+                        const qty = Math.max(0, Number(m.quantity) || 1);
+                        return { ...m, monthlyRentalFee: fee, unitPrice: fee, totalPrice: fee * qty };
+                    })
+                );
+            } catch {
+                /* manual monthly fee entry still works */
+            }
+        },
+        [apiBrands, apiModels]
+    );
+
     // Calculate pricing from monthly rental fee × quantity per line (read-only summary; row totals updated in handleMachineChange)
     const pricing = useMemo(() => {
         return machines.reduce((sum, m) => {
@@ -804,7 +921,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     const handleOpenRegisterModal = () => {
         setIsRegisterModalOpen(true);
-        setActiveCreateTab('company');
+        setActiveCreateTab(desiredCustomerApiType === 'INDIVIDUAL' ? 'individual' : 'company');
     };
 
     const handleCloseRegisterModal = () => {
@@ -846,6 +963,15 @@ const CreatePurchaseRequestPage: React.FC = () => {
     };
 
     const handleMachineChange = (id: string, field: keyof MachineRequestItem, value: any) => {
+        let fetchFeeSelection: { id: string; brand: string; model: string; type: string } | null = null;
+        if (field === 'type') {
+            const row = machines.find((x) => x.id === id);
+            const b = row?.brand ?? '';
+            const md = row?.model ?? '';
+            const t = String(value ?? '').trim();
+            if (b && md && t) fetchFeeSelection = { id, brand: b, model: md, type: t };
+        }
+
         setMachines(
             machines.map((m) => {
                 if (m.id !== id) return m;
@@ -855,15 +981,24 @@ const CreatePurchaseRequestPage: React.FC = () => {
                     updated.model = '';
                     updated.type = '';
                     updated.availableStock = 0;
+                    updated.monthlyRentalFee = 0;
+                    updated.unitPrice = 0;
+                    updated.totalPrice = 0;
                 }
                 // Reset type when model changes
                 if (field === 'model') {
                     updated.type = '';
                     updated.availableStock = 0;
+                    updated.monthlyRentalFee = 0;
+                    updated.unitPrice = 0;
+                    updated.totalPrice = 0;
                 }
                 // Update available stock when type is selected (brand+model+type = inventory grain)
                 if (field === 'type' && updated.brand && updated.model) {
                     updated.availableStock = getAvailableStock(updated.brand, updated.model, value);
+                    updated.monthlyRentalFee = 0;
+                    updated.unitPrice = 0;
+                    updated.totalPrice = 0;
                 }
                 // Derive unitPrice/totalPrice from monthlyRentalFee and quantity
                 const fee = Number(updated.monthlyRentalFee) || 0;
@@ -873,6 +1008,15 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 return updated;
             })
         );
+
+        if (fetchFeeSelection) {
+            void fetchAndApplyMonthlyRentalFee(
+                fetchFeeSelection.id,
+                fetchFeeSelection.brand,
+                fetchFeeSelection.model,
+                fetchFeeSelection.type
+            );
+        }
     };
 
     const getPurchaseOrderValidationErrors = (): Record<string, string> => {
@@ -1010,6 +1154,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 title: 'Created',
                 text: 'Purchase order created successfully.',
             });
+            onCreated?.();
+            if (variant === 'modal') {
+                onClose?.();
+                return;
+            }
             router.push('/purchase-order');
         } catch (error: any) {
             console.error('Error creating purchase request:', error);
@@ -1046,7 +1195,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             type: 'textarea',
             placeholder: 'Enter full business address',
             required: true,
-            rows: 3,
+            rows: 2,
         },
         {
             name: 'contactPerson',
@@ -1070,17 +1219,6 @@ const CreatePurchaseRequestPage: React.FC = () => {
             placeholder: 'Enter contact email',
             required: true,
             validation: validateEmail,
-        },
-        {
-            name: 'status',
-            label: 'Status',
-            type: 'select',
-            placeholder: 'Select status',
-            required: true,
-            options: [
-                { label: 'Active', value: 'Active' },
-                { label: 'Inactive', value: 'Inactive' },
-            ],
         },
     ];
 
@@ -1107,7 +1245,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
             type: 'textarea',
             placeholder: 'Enter full address',
             required: true,
-            rows: 3,
+            rows: 2,
         },
         {
             name: 'phone',
@@ -1125,17 +1263,6 @@ const CreatePurchaseRequestPage: React.FC = () => {
             required: true,
             validation: validateEmail,
         },
-        {
-            name: 'status',
-            label: 'Status',
-            type: 'select',
-            placeholder: 'Select status',
-            required: true,
-            options: [
-                { label: 'Active', value: 'Active' },
-                { label: 'Inactive', value: 'Inactive' },
-            ],
-        },
     ];
 
     const handleCompanySubmit = async (data: Record<string, any>) => {
@@ -1143,7 +1270,6 @@ const CreatePurchaseRequestPage: React.FC = () => {
         try {
             const addressParts = parseAddress(data.businessAddress || '');
             const code = await generateCustomerCode();
-            const statusApi = (data.status === 'Active' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE';
             const locationsPayload = businessLocations
                 .filter((loc) => (loc.name && loc.name.trim()) || (loc.address && loc.address.trim()))
                 .map((loc) => ({ name: (loc.name || '').trim(), address: (loc.address || '').trim() }));
@@ -1161,7 +1287,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 billingPostalCode: addressParts.postalCode || undefined,
                 billingCountry: addressParts.country || undefined,
                 vatRegistrationNumber: data.vatTin || null,
-                status: statusApi,
+                status: 'ACTIVE' as const,
                 ...(locationsPayload.length > 0 && { locations: locationsPayload }),
             };
             const response = await authFetch(`${API_BASE_URL}/customers`, {
@@ -1201,7 +1327,6 @@ const CreatePurchaseRequestPage: React.FC = () => {
         try {
             const addressParts = parseAddress(data.address || '');
             const code = await generateCustomerCode();
-            const statusApi = (data.status === 'Active' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE';
             const payload = {
                 code,
                 type: 'INDIVIDUAL',
@@ -1215,7 +1340,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 billingRegion: addressParts.region || undefined,
                 billingPostalCode: addressParts.postalCode || undefined,
                 billingCountry: addressParts.country || undefined,
-                status: statusApi,
+                status: 'ACTIVE' as const,
             };
             const response = await authFetch(`${API_BASE_URL}/customers`, {
                 method: 'POST',
@@ -1277,41 +1402,50 @@ const CreatePurchaseRequestPage: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-            {/* Top navbar */}
-            <Navbar onMenuClick={handleMenuClick} />
+        <div className={variant === 'page' ? 'min-h-screen bg-gray-100 dark:bg-slate-950' : ''}>
+            {variant === 'page' && (
+                <Suspense fallback={null}>
+                    <PurchaseModeFromSearchParams onModeChange={setPurchaseMode} />
+                </Suspense>
+            )}
+            {variant === 'page' && (
+                <>
+                    <Navbar onMenuClick={handleMenuClick} />
+                    <Sidebar
+                        onLogout={handleLogout}
+                        isMobileOpen={isMobileSidebarOpen}
+                        onMobileClose={handleMobileSidebarClose}
+                        onExpandedChange={setIsSidebarExpanded}
+                    />
+                </>
+            )}
 
-            {/* Left sidebar */}
-            <Sidebar
-                onLogout={handleLogout}
-                isMobileOpen={isMobileSidebarOpen}
-                onMobileClose={handleMobileSidebarClose}
-                onExpandedChange={setIsSidebarExpanded}
-            />
-
-            {/* Main content area */}
-            <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
-                }`}>
-                <div className="max-w-6xl mx-auto space-y-6">
-                    {/* Page header: back button top left (same as inventory/stock-in) */}
-                    <div className="flex items-center gap-4">
-                        <Tooltip content="Back to Purchase Orders">
-                            <button
-                                onClick={() => router.push('/purchase-order')}
-                                className="flex items-center justify-center p-2 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors shrink-0"
-                            >
-                                <ChevronRight className="w-5 h-5 rotate-180" />
-                            </button>
-                        </Tooltip>
-                        <div>
-                            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                                Create Purchase Order
-                            </h2>
-                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                Create a new purchase order and select customer, dates, and machines.
-                            </p>
+            <main
+                className={
+                    variant === 'page'
+                        ? `pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'}`
+                        : 'p-0'
+                }
+            >
+                <div className={variant === 'page' ? 'max-w-6xl mx-auto space-y-6' : 'space-y-4'}>
+                    {variant === 'page' ? (
+                        <div className="flex items-center gap-4">
+                            <Tooltip content="Back to Purchase Orders">
+                                <button
+                                    onClick={() => router.push('/purchase-order')}
+                                    className="flex items-center justify-center p-2 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors shrink-0"
+                                >
+                                    <ChevronRight className="w-5 h-5 rotate-180" />
+                                </button>
+                            </Tooltip>
+                            <div>
+                                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Create Purchase Order</h2>
+                                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    Create a new purchase order and select customer, dates, and machines.
+                                </p>
+                            </div>
                         </div>
-                    </div>
+                    ) : null}
 
                     {/* Form Card - Letterhead-style document (matches official PO / letterhead) */}
                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden w-full max-w-6xl mx-auto">
@@ -1320,11 +1454,15 @@ const CreatePurchaseRequestPage: React.FC = () => {
                             footerStyle="simple"
                             className="p-6 sm:p-8"
                             logoPath={
-                                selectedCustomer
-                                    ? isBusinessCustomer
+                                purchaseMode
+                                    ? purchaseMode === 'vat'
                                         ? '/vat_logo.jpeg'
                                         : '/non_vat_logo.jpeg'
-                                    : undefined
+                                    : selectedCustomer
+                                        ? isBusinessCustomer
+                                            ? '/vat_logo.jpeg'
+                                            : '/non_vat_logo.jpeg'
+                                        : undefined
                             }
                             
                         >
@@ -1886,6 +2024,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                         clearButtonLabel="Clear"
                                         loading={isSubmitting}
                                         enableDynamicSpecs={false}
+                                        density="compact"
                                         hideFooterActions
                                         formId="register-customer-form-company"
                                         className="shadow-none border-0 p-0"
@@ -1917,7 +2056,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                                 return next;
                                                             })
                                                         }
-                                                        className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
                                                     />
                                                 </div>
                                                 <div className="flex gap-2 items-end">
@@ -1936,7 +2075,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                                     return next;
                                                                 })
                                                             }
-                                                            className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                                                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:border-blue-500 dark:focus:border-indigo-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
                                                         />
                                                     </div>
                                                     <button
@@ -1946,7 +2085,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                                                 prev.length > 1 ? prev.filter((_, i) => i !== index) : [{ name: '', address: '' }]
                                                             )
                                                         }
-                                                        className="shrink-0 p-3 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                                        className="shrink-0 p-2.5 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                                                         aria-label="Remove location"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
@@ -1977,6 +2116,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                                     clearButtonLabel="Clear"
                                     loading={isSubmitting}
                                     enableDynamicSpecs={false}
+                                    density="compact"
                                     hideFooterActions
                                     formId="register-customer-form-individual"
                                     className="shadow-none border-0 p-0"
@@ -2011,6 +2151,10 @@ const CreatePurchaseRequestPage: React.FC = () => {
             )}
         </div>
     );
+};
+
+const CreatePurchaseRequestPage: React.FC = () => {
+    return <CreatePurchaseOrderContent variant="page" />;
 };
 
 export default CreatePurchaseRequestPage;

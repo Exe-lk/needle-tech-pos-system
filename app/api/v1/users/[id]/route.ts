@@ -99,6 +99,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
  *                 type: string
  *               isActive:
  *                 type: boolean
+ *               password:
+ *                 type: string
  *     responses:
  *       200:
  *         description: User updated successfully
@@ -111,7 +113,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
   try {
     const { id } = await params;
     const body = await request.json();
-    const { firstName, lastName, email, phone, role, isActive } = body;
+    const { firstName, lastName, email, phone, role, isActive, password } = body;
     
     const existingUser = await prisma.user.findUnique({
       where: { id },
@@ -139,6 +141,20 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
       } catch (error: any) {
         console.error('Error updating Supabase email:', error);
         return validationErrorResponse('Failed to update email in authentication system');
+      }
+    }
+
+    if (password !== undefined) {
+      if (typeof password !== 'string' || password.trim().length < 8) {
+        return validationErrorResponse('Invalid password', {
+          password: ['Password must be at least 8 characters'],
+        });
+      }
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(id, { password });
+      } catch (error: any) {
+        console.error('Error updating Supabase password:', error);
+        return validationErrorResponse('Failed to update password in authentication system');
       }
     }
     

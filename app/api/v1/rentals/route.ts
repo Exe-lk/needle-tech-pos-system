@@ -85,6 +85,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
     
     const statusFilter = searchParams.get('status');
     const customerIdFilter = searchParams.get('customerId');
+    const periodFrom = searchParams.get('periodFrom');
+    const periodTo = searchParams.get('periodTo');
     
     const where: any = {};
     
@@ -96,6 +98,25 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
     
     if (statusFilter) where.status = statusFilter;
     if (customerIdFilter) where.customerId = customerIdFilter;
+
+    // Optional period overlap filter:
+    // startDate <= periodTo AND (expectedEndDate IS NULL OR expectedEndDate >= periodFrom)
+    if (periodFrom && periodTo) {
+      const fromDate = new Date(periodFrom);
+      const toDate = new Date(periodTo);
+      if (!Number.isNaN(fromDate.getTime()) && !Number.isNaN(toDate.getTime())) {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : []),
+          { startDate: { lte: toDate } },
+          {
+            OR: [
+              { expectedEndDate: null },
+              { expectedEndDate: { gte: fromDate } },
+            ],
+          },
+        ];
+      }
+    }
     
     const totalItems = await prisma.rental.count({ where });
     const skip = (page - 1) * limit;

@@ -154,6 +154,7 @@ const OutstandingAlertsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingOutstanding, setIsCheckingOutstanding] = useState(false);
 
   // Update form state
   const [alertStatus, setAlertStatus] = useState<AlertStatus>('Active');
@@ -192,6 +193,41 @@ const OutstandingAlertsPage: React.FC = () => {
   useEffect(() => {
     fetchAlerts();
   }, [fetchAlerts]);
+
+  const handleCheckOutstanding = async () => {
+    setError(null);
+    setIsCheckingOutstanding(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/outstanding-alerts`, {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.message ?? 'Failed to check outstanding');
+      }
+
+      const created = json?.data?.created ?? 0;
+      const skipped = json?.data?.skipped ?? 0;
+      toast.fire({
+        icon: 'success',
+        title: `Check complete. Created ${created} alert(s), skipped ${skipped}.`,
+      });
+
+      await fetchAlerts();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to check outstanding. Please try again.';
+      Swal.fire({
+        icon: 'error',
+        title: 'Check Outstanding failed',
+        text: message,
+        confirmButtonColor: '#dc2626',
+      });
+    } finally {
+      setIsCheckingOutstanding(false);
+    }
+  };
 
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
@@ -525,6 +561,8 @@ const OutstandingAlertsPage: React.FC = () => {
             searchable
             filterable
             loading={loading}
+            onCreateClick={handleCheckOutstanding}
+            createButtonLabel={isCheckingOutstanding ? 'Checking...' : 'Check Outstanding'}
             getRowClassName={getRowClassName}
             emptyMessage="No outstanding alerts found."
           />

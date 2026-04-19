@@ -6,7 +6,7 @@ import Swal, { type SweetAlertResult, type SweetAlertOptions } from 'sweetalert2
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { X, QrCode, Printer, History } from 'lucide-react';
+import { X, QrCode, Printer, History, Pencil } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { authFetch } from '@/lib/auth-client';
 
@@ -67,6 +67,10 @@ const QRGeneratePage: React.FC = () => {
   const [printLogsError, setPrintLogsError] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const qrCodeRef = useRef<HTMLDivElement>(null);
+  const [isUpdateBoxModalOpen, setIsUpdateBoxModalOpen] = useState(false);
+  const [selectedMachineForBoxUpdate, setSelectedMachineForBoxUpdate] = useState<MachineUnit | null>(null);
+  const [boxNumberDraft, setBoxNumberDraft] = useState('');
+  const [isUpdatingBoxNumber, setIsUpdatingBoxNumber] = useState(false);
 
   const fetchMachineUnits = useCallback(async () => {
     setMachineUnitsLoading(true);
@@ -397,6 +401,82 @@ const QRGeneratePage: React.FC = () => {
     setPrintLogs([]);
   };
 
+  const handleOpenUpdateBoxModal = (machine: MachineUnit) => {
+    setSelectedMachineForBoxUpdate(machine);
+    setBoxNumberDraft(machine.boxNumber ?? '');
+    setIsUpdateBoxModalOpen(true);
+  };
+
+  const handleCloseUpdateBoxModal = () => {
+    if (isUpdatingBoxNumber) return;
+    setIsUpdateBoxModalOpen(false);
+    setSelectedMachineForBoxUpdate(null);
+    setBoxNumberDraft('');
+  };
+
+  const handleUpdateBoxNumber = async () => {
+    const machine = selectedMachineForBoxUpdate;
+    if (!machine || isUpdatingBoxNumber) return;
+
+    const nextBox = boxNumberDraft.trim();
+    if (!nextBox) {
+      await Swal.fire({
+        title: 'Box Number Required',
+        text: 'Please enter a valid box number.',
+        icon: 'warning',
+        confirmButtonColor: '#2563eb',
+      });
+      return;
+    }
+
+    if (nextBox === (machine.boxNumber || '').trim()) {
+      handleCloseUpdateBoxModal();
+      return;
+    }
+
+    setIsUpdatingBoxNumber(true);
+    try {
+      const res = await authFetch(`${API_BASE}/machines/${machine.id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boxNumber: nextBox }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.message || 'Failed to update box number');
+      }
+
+      setMachineUnits((prev) =>
+        prev.map((m) => (m.id === machine.id ? { ...m, boxNumber: nextBox } : m))
+      );
+      setSelectedMachineForQR((prev) => (prev?.id === machine.id ? { ...prev, boxNumber: nextBox } : prev));
+      setSelectedMachineForHistory((prev) => (prev?.id === machine.id ? { ...prev, boxNumber: nextBox } : prev));
+
+      setIsUpdateBoxModalOpen(false);
+      setSelectedMachineForBoxUpdate(null);
+      setBoxNumberDraft('');
+
+      await Swal.fire({
+        title: 'Updated',
+        text: 'Box number updated successfully.',
+        icon: 'success',
+        confirmButtonColor: '#2563eb',
+      });
+    } catch (err: unknown) {
+      await Swal.fire({
+        title: 'Update Failed',
+        text: err instanceof Error ? err.message : 'Failed to update box number',
+        icon: 'error',
+        confirmButtonColor: '#2563eb',
+      });
+    } finally {
+      setIsUpdatingBoxNumber(false);
+      // Ensure the QR page remains consistent with DB (e.g., if other fields were normalized)
+      fetchMachineUnits();
+    }
+  };
+
   const tableColumns: TableColumn[] = [
     { key: 'brand', label: 'Brand', sortable: true, filterable: true },
     { key: 'model', label: 'Model', sortable: true, filterable: true },
@@ -435,6 +515,15 @@ const QRGeneratePage: React.FC = () => {
       onClick: (row: MachineUnit) => handleGenerateQR(row),
       tooltip: 'Generate QR Code',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600 border border-gray-300 dark:border-slate-600',
+    },
+    {
+      label: '',
+      icon: <Pencil className="w-4 h-4" />,
+      variant: 'secondary',
+      onClick: (row: MachineUnit) => handleOpenUpdateBoxModal(row),
+      tooltip: 'Update Box Number',
+      className:
+        'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500',
     },
     {
       label: '',
@@ -734,6 +823,79 @@ const QRGeneratePage: React.FC = () => {
                   emptyMessage="No print history found for this machine."
                 />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Box Number Modal */}
+      {isUpdateBoxModalOpen && selectedMachineForBoxUpdate && (
+        <div
+          className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) handleCloseUpdateBoxModal();
+          }}
+        >
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Update Box Number
+                </h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  {selectedMachineForBoxUpdate.brand} {selectedMachineForBoxUpdate.model} • S/N:{' '}
+                  {selectedMachineForBoxUpdate.serialNumber}
+                </p>
+              </div>
+              <button
+                onClick={handleCloseUpdateBoxModal}
+                disabled={isUpdatingBoxNumber}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50 p-4">
+                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
+                  Box Number
+                </label>
+                <input
+                  type="text"
+                  value={boxNumberDraft}
+                  onChange={(e) => setBoxNumberDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleUpdateBoxNumber();
+                    if (e.key === 'Escape') handleCloseUpdateBoxModal();
+                  }}
+                  disabled={isUpdatingBoxNumber}
+                  placeholder="Enter box number (e.g., BOX-001)"
+                  className="w-full rounded-lg border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white px-3 py-2.5 text-sm font-medium focus:border-blue-500 dark:focus:border-indigo-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-indigo-500/20 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Current: <span className="font-medium">{selectedMachineForBoxUpdate.boxNumber || '—'}</span>
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseUpdateBoxModal}
+                  disabled={isUpdatingBoxNumber}
+                  className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUpdateBoxNumber}
+                  disabled={isUpdatingBoxNumber}
+                  className="px-4 py-2 rounded-lg bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUpdatingBoxNumber ? 'Updating...' : 'Update'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
