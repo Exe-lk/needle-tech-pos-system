@@ -6,7 +6,7 @@ import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import CreateForm, { FormField, CreateFormRef } from '@/src/components/form-popup/create';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
-import { X, Plus, Minus, Trash2, ChevronDown, ChevronRight, Check, Package, AlertTriangle, ExternalLink } from 'lucide-react';
+import { X, Plus, Minus, Trash2, ChevronDown, ChevronRight, Check, Package, AlertTriangle, ExternalLink, Wrench } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
 import { validateVATTIN, validateNICNumber, validateEmail, validatePhoneNumber } from '@/src/utils/validation';
 import { authFetch } from '@/lib/auth-client';
@@ -45,6 +45,30 @@ interface MachineRequestItem {
     unitPrice: number;
     totalPrice: number;
     monthlyRentalFee: number;
+}
+
+/** Inventory tool row from GET /api/v1/tools (subset used on the PO form). */
+interface CatalogTool {
+    id: string;
+    toolName: string;
+    toolType: string;
+    brand?: string | null;
+    model?: string | null;
+    quantity: number;
+    unitPrice?: unknown;
+}
+
+interface ToolRequestItem {
+    id: string;
+    toolId: string;
+    toolName: string;
+    toolType: string;
+    brand: string;
+    model: string;
+    quantity: number;
+    availableStock: number;
+    unitPrice: number;
+    totalPrice: number;
 }
 
 interface SearchableSelectProps {
@@ -559,6 +583,10 @@ export const CreatePurchaseOrderContent: React.FC<{
     const [machines, setMachines] = useState<MachineRequestItem[]>([
         { id: '1', brand: '', model: '', type: '', quantity: 1, availableStock: 0, unitPrice: 0, totalPrice: 0, monthlyRentalFee: 0 },
     ]);
+    const [catalogTools, setCatalogTools] = useState<CatalogTool[]>([]);
+    const [toolsLoading, setToolsLoading] = useState(false);
+    /** Optional lines; empty means no tools on this PO. */
+    const [tools, setTools] = useState<ToolRequestItem[]>([]);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
     // API data: registered customers, inventory, and master data (brands, models, machine types)
@@ -625,6 +653,23 @@ export const CreatePurchaseOrderContent: React.FC<{
     }, []);
 
     // Fetch master data: brands, models, machine types (so user can select any brand/model/type, not only from inventory)
+    const fetchCatalogTools = useCallback(async () => {
+        setToolsLoading(true);
+        try {
+            const params = new URLSearchParams({ page: '1', limit: '500', status: 'AVAILABLE' });
+            const response = await authFetch(`${API_BASE_URL}/tools?${params.toString()}`, {
+                credentials: 'include',
+            });
+            const json = await response.json();
+            const items = json?.data?.items;
+            setCatalogTools(Array.isArray(items) ? items : []);
+        } catch {
+            setCatalogTools([]);
+        } finally {
+            setToolsLoading(false);
+        }
+    }, []);
+
     const fetchMasterData = useCallback(async () => {
         setMasterDataLoading(true);
         try {
@@ -655,7 +700,8 @@ export const CreatePurchaseOrderContent: React.FC<{
         fetchCustomers();
         fetchInventory();
         fetchMasterData();
-    }, [fetchCustomers, fetchInventory, fetchMasterData]);
+        fetchCatalogTools();
+    }, [fetchCustomers, fetchInventory, fetchMasterData, fetchCatalogTools]);
 
     // In modal variant we force a mode, bypassing querystring.
     useEffect(() => {
@@ -898,14 +944,29 @@ export const CreatePurchaseOrderContent: React.FC<{
         [apiBrands, apiModels]
     );
 
-    // Calculate pricing from monthly rental fee × quantity per line (read-only summary; row totals updated in handleMachineChange)
+    const toolCatalogOptions = useMemo(
+        () =>
+            catalogTools.map((t) => ({
+                value: t.id,
+                label: `${t.toolName} (${t.toolType}) — stock ${t.quantity}`,
+            })),
+        [catalogTools]
+    );
+
+    // Calculate pricing: machine monthly fees + optional tool line totals
     const pricing = useMemo(() => {
-        return machines.reduce((sum, m) => {
+        const machineTotal = machines.reduce((sum, m) => {
             const fee = Number(m.monthlyRentalFee) || 0;
             const qty = Math.max(0, Number(m.quantity) || 0);
             return sum + fee * qty;
         }, 0);
-    }, [machines]);
+        const toolsTotal = tools.reduce((sum, t) => {
+            const fee = Number(t.unitPrice) || 0;
+            const qty = Math.max(0, Number(t.quantity) || 0);
+            return sum + fee * qty;
+        }, 0);
+        return machineTotal + toolsTotal;
+    }, [machines, tools]);
 
     const handleMenuClick = () => {
         setIsMobileSidebarOpen((prev) => !prev);
@@ -1019,6 +1080,84 @@ export const CreatePurchaseOrderContent: React.FC<{
         }
     };
 
+    const handleAddTool = () => {
+        setTools((prev) => [
+            ...prev,
+            {
+                id: Date.now().toString(),
+                toolId: '',
+                toolName: '',
+                toolType: '',
+                brand: '',
+                model: '',
+                quantity: 1,
+                availableStock: 0,
+                unitPrice: 0,
+                totalPrice: 0,
+            },
+        ]);
+    };
+
+    const handleRemoveTool = (lineId: string) => {
+        setTools((prev) => prev.filter((t) => t.id !== lineId));
+    };
+
+    const handleToolChange = (lineId: string, field: keyof ToolRequestItem, value: unknown) => {
+        setTools((prev) =>
+            prev.map((t) => {
+                if (t.id !== lineId) return t;
+                let updated: ToolRequestItem = { ...t, [field]: value } as ToolRequestItem;
+
+                if (field === 'toolId') {
+                    const idStr = String(value ?? '').trim();
+                    const cat = catalogTools.find((c) => c.id === idStr);
+                    if (cat) {
+                        const up = Number(cat.unitPrice);
+                        const fee = Number.isFinite(up) ? up : 0;
+                        const qty = Math.max(1, Number(updated.quantity) || 1);
+                        updated = {
+                            ...updated,
+                            toolId: cat.id,
+                            toolName: cat.toolName,
+                            toolType: cat.toolType,
+                            brand: cat.brand ?? '',
+                            model: cat.model ?? '',
+                            availableStock: typeof cat.quantity === 'number' ? cat.quantity : 0,
+                            unitPrice: fee,
+                            quantity: qty,
+                            totalPrice: fee * qty,
+                        };
+                    } else if (!idStr) {
+                        updated = {
+                            ...updated,
+                            toolId: '',
+                            toolName: '',
+                            toolType: '',
+                            brand: '',
+                            model: '',
+                            availableStock: 0,
+                            unitPrice: 0,
+                            totalPrice: 0,
+                        };
+                    }
+                }
+
+                if (field === 'quantity') {
+                    const qty = Math.max(1, parseInt(String(value), 10) || 1);
+                    const fee = Number(updated.unitPrice) || 0;
+                    updated = { ...updated, quantity: qty, totalPrice: fee * qty };
+                }
+                if (field === 'unitPrice') {
+                    const fee = Math.max(0, value === '' ? 0 : parseFloat(String(value)) || 0);
+                    const qty = Math.max(1, Number(updated.quantity) || 1);
+                    updated = { ...updated, unitPrice: fee, totalPrice: fee * qty };
+                }
+
+                return updated;
+            })
+        );
+    };
+
     const getPurchaseOrderValidationErrors = (): Record<string, string> => {
         const errors: Record<string, string> = {};
 
@@ -1042,6 +1181,12 @@ export const CreatePurchaseOrderContent: React.FC<{
             }
         });
 
+        tools.forEach((tool, index) => {
+            if (!tool.toolId?.trim()) errors[`tool_toolId_${index}`] = 'Tool is required';
+            if (tool.quantity < 1) errors[`tool_quantity_${index}`] = 'Quantity must be at least 1';
+            if (Number(tool.unitPrice) < 0) errors[`tool_unitPrice_${index}`] = 'Unit price cannot be negative';
+        });
+
         return errors;
     };
 
@@ -1056,6 +1201,9 @@ export const CreatePurchaseOrderContent: React.FC<{
                 `machine_quantity_${i}`,
                 `machine_monthlyRentalFee_${i}`
             );
+        }
+        for (let i = 0; i < tools.length; i++) {
+            keys.push(`tool_toolId_${i}`, `tool_quantity_${i}`, `tool_unitPrice_${i}`);
         }
         for (const k of keys) {
             if (errors[k]) return k;
@@ -1127,6 +1275,27 @@ export const CreatePurchaseOrderContent: React.FC<{
                 };
             });
 
+            const toolsWithStatus = tools.map((tool) => {
+                const available = Math.min(tool.availableStock, tool.quantity);
+                const pending = tool.quantity - available;
+                const fee = Number(tool.unitPrice) || 0;
+                const qty = Math.max(1, Number(tool.quantity) || 1);
+                return {
+                    id: tool.id,
+                    toolId: tool.toolId,
+                    toolName: tool.toolName,
+                    toolType: tool.toolType,
+                    brand: tool.brand || null,
+                    model: tool.model || null,
+                    quantity: qty,
+                    availableStock: tool.availableStock ?? 0,
+                    unitPrice: fee,
+                    totalPrice: fee * qty,
+                    rentedQuantity: 0,
+                    pendingQuantity: pending,
+                };
+            });
+
             const payload = {
                 customerId: selectedCustomerId,
                 customerName,
@@ -1135,6 +1304,7 @@ export const CreatePurchaseOrderContent: React.FC<{
                 startDate: startDate || undefined,
                 endDate: endDate || undefined,
                 machines: machinesWithStatus,
+                ...(toolsWithStatus.length > 0 ? { tools: toolsWithStatus } : {}),
                 totalAmount: pricing,
             };
 
@@ -1441,7 +1611,7 @@ export const CreatePurchaseOrderContent: React.FC<{
                             <div>
                                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Create Purchase Order</h2>
                                 <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                    Create a new purchase order and select customer, dates, and machines.
+                                    Create a new purchase order: customer, dates, machines, and optional tools.
                                 </p>
                             </div>
                         </div>
@@ -1911,6 +2081,239 @@ export const CreatePurchaseOrderContent: React.FC<{
                                         >
                                             <Plus className="w-4 h-4 mr-1" />
                                             Add Machine
+                                        </button>
+                                    </Tooltip>
+                                </div>
+                            </div>
+
+                            {/* Tools (optional) — same PO total includes tool lines when added */}
+                            <div className="space-y-4 pt-6 mt-6 border-t border-dashed border-gray-200 dark:border-slate-600">
+                                <div className="flex items-start gap-2">
+                                    <Wrench className="w-5 h-5 text-gray-500 dark:text-gray-400 mt-0.5 shrink-0" aria-hidden />
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                            Tools{' '}
+                                            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">(optional)</span>
+                                        </h3>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                            Add inventory tools if needed. You can submit with machines only—this section can stay empty.
+                                        </p>
+                                    </div>
+                                </div>
+                                {toolsLoading && (
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Loading tools…</p>
+                                )}
+                                {!toolsLoading && catalogTools.length === 0 && (
+                                    <p className="text-sm text-amber-700 dark:text-amber-400/90">
+                                        No available tools in the catalog. You can still create this purchase order with machines only.
+                                    </p>
+                                )}
+
+                                {tools.map((tool, index) => {
+                                    const lineAvailable = tool.toolId ? tool.availableStock : 0;
+                                    return (
+                                        <div
+                                            key={tool.id}
+                                            className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 space-y-4"
+                                        >
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    Tool {index + 1}
+                                                </span>
+                                                <Tooltip content="Remove tool line">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveTool(tool.id)}
+                                                        className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </Tooltip>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-2">
+                                                <div
+                                                    className="min-w-0 flex flex-col outline-none rounded-lg md:col-span-2"
+                                                    data-po-field-key={`tool_toolId_${index}`}
+                                                    tabIndex={-1}
+                                                >
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                        Tool <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <SearchableSelect
+                                                        value={tool.toolId}
+                                                        onChange={(value) => handleToolChange(tool.id, 'toolId', value)}
+                                                        options={toolCatalogOptions}
+                                                        placeholder={
+                                                            toolsLoading
+                                                                ? 'Loading…'
+                                                                : catalogTools.length
+                                                                  ? 'Select tool from inventory'
+                                                                  : 'No tools available'
+                                                        }
+                                                        disabled={toolsLoading || catalogTools.length === 0}
+                                                        error={formErrors[`tool_toolId_${index}`]}
+                                                    />
+                                                </div>
+                                                <div
+                                                    className="min-w-0 flex flex-col outline-none rounded-lg"
+                                                    data-po-field-key={`tool_quantity_${index}`}
+                                                    tabIndex={-1}
+                                                >
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                        Quantity <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={tool.quantity}
+                                                            onChange={(e) =>
+                                                                handleToolChange(
+                                                                    tool.id,
+                                                                    'quantity',
+                                                                    parseInt(e.target.value, 10) || 1
+                                                                )
+                                                            }
+                                                            disabled={!tool.toolId}
+                                                            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                                                formErrors[`tool_quantity_${index}`]
+                                                                    ? 'border-red-500'
+                                                                    : 'border-gray-300 dark:border-slate-600'
+                                                            } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                        />
+                                                        <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Decrease quantity"
+                                                                onClick={() =>
+                                                                    handleToolChange(
+                                                                        tool.id,
+                                                                        'quantity',
+                                                                        Math.max(1, (Number(tool.quantity) || 1) - 1)
+                                                                    )
+                                                                }
+                                                                disabled={!tool.toolId}
+                                                                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <Minus className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                aria-label="Increase quantity"
+                                                                onClick={() =>
+                                                                    handleToolChange(
+                                                                        tool.id,
+                                                                        'quantity',
+                                                                        (Number(tool.quantity) || 1) + 1
+                                                                    )
+                                                                }
+                                                                disabled={!tool.toolId}
+                                                                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <Plus className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    {tool.toolId && (
+                                                        <div
+                                                            className={`mt-1.5 inline-flex items-center gap-1.5 w-fit px-2 py-1 rounded-md ${
+                                                                lineAvailable > 0
+                                                                    ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                                                                    : 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'
+                                                            }`}
+                                                        >
+                                                            <Package
+                                                                className={`w-3.5 h-3.5 ${
+                                                                    lineAvailable > 0
+                                                                        ? 'text-green-700 dark:text-green-400'
+                                                                        : 'text-red-700 dark:text-red-400'
+                                                                }`}
+                                                            />
+                                                            <span
+                                                                className={`text-xs font-semibold ${
+                                                                    lineAvailable > 0
+                                                                        ? 'text-green-700 dark:text-green-400'
+                                                                        : 'text-red-700 dark:text-red-400'
+                                                                }`}
+                                                            >
+                                                                In stock: {lineAvailable}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    {formErrors[`tool_quantity_${index}`] && (
+                                                        <p className="mt-1 text-sm text-red-500">
+                                                            {formErrors[`tool_quantity_${index}`]}
+                                                        </p>
+                                                    )}
+                                                    {tool.toolId && tool.quantity > lineAvailable && (
+                                                        <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
+                                                            {tool.quantity - lineAvailable} unit(s) over current stock will be marked as pending
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div
+                                                    className="min-w-0 flex flex-col outline-none rounded-lg"
+                                                    data-po-field-key={`tool_unitPrice_${index}`}
+                                                    tabIndex={-1}
+                                                >
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                        Unit price (Rs.) <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        step={0.01}
+                                                        value={tool.unitPrice || ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            const num = val === '' ? 0 : parseFloat(val) || 0;
+                                                            handleToolChange(tool.id, 'unitPrice', num);
+                                                        }}
+                                                        disabled={!tool.toolId}
+                                                        placeholder="0"
+                                                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                                            formErrors[`tool_unitPrice_${index}`]
+                                                                ? 'border-red-500'
+                                                                : 'border-gray-300 dark:border-slate-600'
+                                                        } focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                    />
+                                                    {formErrors[`tool_unitPrice_${index}`] && (
+                                                        <p className="mt-1 text-sm text-red-500">
+                                                            {formErrors[`tool_unitPrice_${index}`]}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {(Number(tool.unitPrice) > 0 || tool.quantity > 0) && tool.toolId && (
+                                                <div className="mt-2 pt-3 border-t border-gray-200 dark:border-slate-600">
+                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                        Line total: Rs. {(tool.unitPrice || 0).toLocaleString('en-LK')} × {tool.quantity}{' '}
+                                                        = Rs. {(tool.totalPrice || 0).toLocaleString('en-LK')}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+
+                                <div className="flex justify-end">
+                                    <Tooltip
+                                        content={
+                                            catalogTools.length === 0
+                                                ? 'Add tools to inventory first'
+                                                : 'Add another tool line'
+                                        }
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={handleAddTool}
+                                            disabled={toolsLoading || catalogTools.length === 0}
+                                            className="inline-flex items-center px-3 py-2 bg-slate-600 dark:bg-slate-600 text-white text-sm font-medium rounded-lg hover:bg-slate-700 dark:hover:bg-slate-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <Plus className="w-4 h-4 mr-1" />
+                                            Add Tool
                                         </button>
                                     </Tooltip>
                                 </div>

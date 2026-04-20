@@ -373,6 +373,9 @@ model Tool {
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
+  // Relations
+  rentalTools     RentalTool[]
+
   @@index([toolName])
   @@index([toolType])
   @@index([status])
@@ -414,7 +417,10 @@ model PurchaseOrder {
   
   // Purchase request machines (stored as JSON for flexibility)
   machines        Json[] // Array of machine requests with quantities
-  
+
+  // Purchase request tools (stored as JSON for flexibility); optional at creation
+  tools Json[] @default([]) // Array of tool requests with quantities
+
   notes           String?
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
@@ -531,6 +537,7 @@ model Rental {
   createdBy       User      @relation("RentalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   
   machines        RentalMachine[]
+  tools           RentalTool[]
   invoices        Invoice[]
   invoiceRentals  InvoiceRental[]
   gatePasses      GatePass[]
@@ -571,6 +578,26 @@ model RentalMachine {
   @@index([rentalId])
   @@index([machineId])
   @@map("rental_machines")
+}
+
+model RentalTool {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rentalId   String   @db.Uuid
+  toolId     String   @db.Uuid
+
+  // Snapshot of tool usage/pricing at time of rental
+  unitPrice  Decimal? @db.Decimal(10, 2)
+  quantity   Int      @default(1)
+  dispatchedQuantity Int @default(0)
+
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  rental     Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  tool       Tool     @relation(fields: [toolId], references: [id], onDelete: Restrict)
+
+  @@index([rentalId])
+  @@index([toolId])
+  @@map("rental_tools")
 }
 
 enum RentalStatus {
