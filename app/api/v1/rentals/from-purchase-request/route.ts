@@ -22,14 +22,18 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
       rentalStartDate,
       rentalEndDate,
       machines = [],
+      tools = [],
     } = body;
     
-    if (!purchaseRequestId || !rentalStartDate || !rentalEndDate || !machines.length) {
+    const hasMachines = Array.isArray(machines) && machines.length > 0;
+    const hasTools = Array.isArray(tools) && tools.length > 0;
+    if (!purchaseRequestId || !rentalStartDate || !rentalEndDate || (!hasMachines && !hasTools)) {
       return validationErrorResponse('Missing required fields', {
         purchaseRequestId: !purchaseRequestId ? ['Purchase request ID is required'] : [],
         rentalStartDate: !rentalStartDate ? ['Rental start date is required'] : [],
         rentalEndDate: !rentalEndDate ? ['Rental end date is required'] : [],
-        machines: !machines.length ? ['At least one machine is required'] : [],
+        machines: !hasMachines ? ['At least one machine or tool is required'] : [],
+        tools: !hasTools ? ['At least one machine or tool is required'] : [],
       });
     }
     
@@ -60,38 +64,69 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
     // Purchase order stores unitPrice as MONTHLY rental fee per unit (from purchase-order create page).
     const poMachines = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
     const requestedMachineLines: { brand: string; model: string; type: string; quantity: number; dailyRate: number }[] = [];
-    for (const req of machines) {
-      const line = poMachines.find((m: any) => String(m.id || m.machineId) === String(req.machineId));
-      if (!line) {
-        return validationErrorResponse('Invalid machine for this purchase order', {
-          machines: [`Machine ${req.machineId} is not part of this purchase order`],
+    if (hasMachines) {
+      for (const req of machines) {
+        const line = poMachines.find((m: any) => String(m.id || m.machineId) === String(req.machineId));
+        if (!line) {
+          return validationErrorResponse('Invalid machine for this purchase order', {
+            machines: [`Machine ${req.machineId} is not part of this purchase order`],
+          });
+        }
+        const requested = req.quantity || 0;
+        if (requested < 1) continue;
+        // PO unitPrice is monthly; store daily rate for RentalMachine compatibility (monthly / 30)
+        const monthlyRate = typeof req.unitPrice === 'number' ? req.unitPrice : parseFloat(String(req.unitPrice || 0)) || 0;
+        const dailyRate = monthlyRate / 30;
+        requestedMachineLines.push({
+          brand: String(line.brand || '').trim(),
+          model: String(line.model || '').trim(),
+          type: String(line.type || '').trim(),
+          quantity: requested,
+          dailyRate,
         });
       }
-      const requested = req.quantity || 0;
-      if (requested < 1) continue;
-      // PO unitPrice is monthly; store daily rate for RentalMachine compatibility (monthly / 30)
-      const monthlyRate = typeof req.unitPrice === 'number' ? req.unitPrice : parseFloat(String(req.unitPrice || 0)) || 0;
-      const dailyRate = monthlyRate / 30;
-      requestedMachineLines.push({
-        brand: String(line.brand || '').trim(),
-        model: String(line.model || '').trim(),
-        type: String(line.type || '').trim(),
-        quantity: requested,
-        dailyRate,
-      });
+      if (requestedMachineLines.length === 0) {
+        return validationErrorResponse('At least one machine line with quantity > 0 is required', {
+          machines: ['Select at least one machine with quantity greater than zero'],
+        });
+      }
     }
-    if (requestedMachineLines.length === 0) {
-      return validationErrorResponse('At least one machine line with quantity > 0 is required', {
-        machines: ['Select at least one machine with quantity greater than zero'],
-      });
+
+    // Validate requested tool lines exist on the PO. Tools are stored as JSON lines on the purchase order.
+    const poTools = Array.isArray((purchaseOrder as any).tools) ? ((purchaseOrder as any).tools as any[]) : [];
+    const requestedToolLines: { toolId: string; quantity: number; unitPrice: number }[] = [];
+    if (hasTools) {
+      for (const req of tools) {
+        const reqToolId = String(req.toolId ?? req.id ?? '');
+        const line = poTools.find((t: any) => String(t.toolId ?? t.id) === reqToolId);
+        if (!line) {
+          return validationErrorResponse('Invalid tool for this purchase order', {
+            tools: [`Tool ${reqToolId} is not part of this purchase order`],
+          });
+        }
+        const requestedQty = req.quantity || 0;
+        if (requestedQty < 1) continue;
+        const monthlyUnitPrice = typeof req.unitPrice === 'number' ? req.unitPrice : parseFloat(String(req.unitPrice || 0)) || 0;
+        requestedToolLines.push({ toolId: reqToolId, quantity: requestedQty, unitPrice: monthlyUnitPrice });
+      }
+      if (requestedToolLines.length === 0) {
+        return validationErrorResponse('At least one tool line with quantity > 0 is required', {
+          tools: ['Select at least one tool with quantity greater than zero'],
+        });
+      }
     }
 
     // Calculate totals: PO unitPrice is always MONTHLY rental fee per unit
-    const monthlySubtotal = machines.reduce(
+    const machineMonthlySubtotal = (hasMachines ? machines : []).reduce(
       (sum: number, m: { quantity?: number; unitPrice?: number }) =>
         sum + (m.quantity || 0) * (typeof m.unitPrice === 'number' ? m.unitPrice : parseFloat(String(m.unitPrice || 0)) || 0),
       0
     );
+    const toolsMonthlySubtotal = (hasTools ? requestedToolLines : []).reduce(
+      (sum: number, t: { quantity: number; unitPrice: number }) => sum + (t.quantity || 0) * (t.unitPrice || 0),
+      0
+    );
+    const monthlySubtotal = machineMonthlySubtotal + toolsMonthlySubtotal;
     const start = new Date(rentalStartDate);
     const end = new Date(rentalEndDate);
     const daysDiff = Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
@@ -134,12 +169,28 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
       },
     });
 
+    // Create RentalTool records for each selected tool (snapshot pricing/qty)
+    if (requestedToolLines.length > 0) {
+      for (const row of requestedToolLines) {
+        await (prisma as any).rentalTool.create({
+          data: {
+            rentalId: newRental.id,
+            toolId: row.toolId,
+            unitPrice: new Decimal(row.unitPrice || 0),
+            quantity: row.quantity || 0,
+          },
+        });
+      }
+    }
+
     // Update purchase order: add this agreement's quantities to each line's rentedQuantity; set status Completed when all lines fulfilled, else Partially Fulfilled
     const currentMachines = Array.isArray(purchaseOrder.machines) ? (purchaseOrder.machines as any[]) : [];
     const machineIdToAdded = new Map<string, number>();
-    for (const m of machines) {
-      const id = String(m.machineId);
-      machineIdToAdded.set(id, (machineIdToAdded.get(id) || 0) + (m.quantity || 0));
+    if (hasMachines) {
+      for (const m of machines) {
+        const id = String(m.machineId);
+        machineIdToAdded.set(id, (machineIdToAdded.get(id) || 0) + (m.quantity || 0));
+      }
     }
     const updatedMachines = currentMachines.map((line: any) => {
       const id = line.id != null ? String(line.id) : String(line.machineId);
@@ -147,11 +198,29 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
       const prevRented = line.rentedQuantity || 0;
       return { ...line, rentedQuantity: prevRented + added };
     });
-    const allFulfilled = updatedMachines.every((m: any) => (m.rentedQuantity || 0) >= (m.quantity || 0));
+
+    const currentTools = Array.isArray((purchaseOrder as any).tools) ? ((purchaseOrder as any).tools as any[]) : [];
+    const toolIdToAdded = new Map<string, number>();
+    if (requestedToolLines.length > 0) {
+      for (const t of requestedToolLines) {
+        const id = String(t.toolId);
+        toolIdToAdded.set(id, (toolIdToAdded.get(id) || 0) + (t.quantity || 0));
+      }
+    }
+    const updatedTools = currentTools.map((line: any) => {
+      const id = String(line.toolId ?? line.id);
+      const added = toolIdToAdded.get(id) || 0;
+      const prevRented = line.rentedQuantity || 0;
+      return { ...line, rentedQuantity: prevRented + added };
+    });
+
+    const allMachinesFulfilled = updatedMachines.length === 0 || updatedMachines.every((m: any) => (m.rentedQuantity || 0) >= (m.quantity || 0));
+    const allToolsFulfilled = updatedTools.length === 0 || updatedTools.every((t: any) => (t.rentedQuantity || 0) >= (t.quantity || 0));
+    const allFulfilled = allMachinesFulfilled && allToolsFulfilled;
     const newPoStatus = allFulfilled ? 'COMPLETED' : 'PARTIALLY_FULFILLED';
     await (prisma as any).purchaseOrder.update({
       where: { id: purchaseRequestId },
-      data: { machines: updatedMachines, status: newPoStatus },
+      data: { machines: updatedMachines, tools: updatedTools, status: newPoStatus },
     });
     
     // Transform response

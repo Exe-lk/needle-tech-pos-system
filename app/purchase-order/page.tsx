@@ -31,6 +31,7 @@ interface PurchaseRequest {
     status: PurchaseRequestStatus;
     requestedMachines: number;
     machines: MachineRequestItem[];
+    tools?: ToolRequestLine[];
     rentalAgreementIds?: (string | number)[];
 }
 
@@ -49,6 +50,29 @@ interface MachineRequestItem {
     pendingQuantity?: number;
     expectedAvailabilityDate?: string;
 }
+
+interface ToolRequestLine {
+    id: string;
+    toolId?: string;
+    toolName?: string;
+    toolType?: string;
+    brand?: string;
+    model?: string;
+    quantity: number;
+    availableStock?: number;
+    unitPrice?: number;
+    totalPrice?: number;
+    rentedQuantity?: number;
+    pendingQuantity?: number;
+}
+
+type ToolForRental = ToolRequestLine & {
+    /** Normalized key used for selection/payload (toolId if present, else id). */
+    id: string;
+    canRent: number;
+    stillPending: number;
+    unitPrice: number;
+};
 
 /** Values for `<input type="date">` must be `YYYY-MM-DD`; ISO datetime strings show as empty in many browsers. */
 const toDateInputValue = (value: string | Date | null | undefined): string => {
@@ -156,6 +180,10 @@ const PurchaseOrderPage: React.FC = () => {
     /** Which machine lines are included in the hiring agreement (checkbox). Only included lines with qty > 0 are sent. */
     const [machineIncludedInRental, setMachineIncludedInRental] = useState<Record<string, boolean>>({});
     const [modifiedUnitPrices, setModifiedUnitPrices] = useState<Record<string, number>>({});
+    const [selectedToolsForRental, setSelectedToolsForRental] = useState<Record<string, number>>({});
+    /** Which tool lines are included in the hiring agreement (checkbox). Only included lines with qty > 0 are sent. */
+    const [toolIncludedInRental, setToolIncludedInRental] = useState<Record<string, boolean>>({});
+    const [modifiedToolUnitPrices, setModifiedToolUnitPrices] = useState<Record<string, number>>({});
     const [rentalStartDate, setRentalStartDate] = useState('');
     const [rentalEndDate, setRentalEndDate] = useState('');
     const [rentalFormErrors, setRentalFormErrors] = useState<Record<string, string>>({});
@@ -163,7 +191,14 @@ const PurchaseOrderPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
-    const [updateForm, setUpdateForm] = useState<{ status: PurchaseRequestStatus; startDate: string; endDate: string; machines: MachineRequestItem[]; notes: string }>({ status: 'Pending', startDate: '', endDate: '', machines: [], notes: '' });
+    const [updateForm, setUpdateForm] = useState<{
+        status: PurchaseRequestStatus;
+        startDate: string;
+        endDate: string;
+        machines: MachineRequestItem[];
+        tools: ToolRequestLine[];
+        notes: string;
+    }>({ status: 'Pending', startDate: '', endDate: '', machines: [], tools: [], notes: '' });
     const [updateFormErrors, setUpdateFormErrors] = useState<Record<string, string>>({});
     const [isUpdateSubmitting, setIsUpdateSubmitting] = useState(false);
     // All machines available for this customer, used to add new machine lines in the update modal.
@@ -215,6 +250,20 @@ const PurchaseOrderPage: React.FC = () => {
         }).filter(m => m.canRent > 0) || [];
     }, [selectedRequest, modifiedUnitPrices]);
 
+    const availableToolsForRental = useMemo(() => {
+        if (!selectedRequest) return [];
+        const tools = selectedRequest.tools || [];
+        return tools
+            .map((tool): ToolForRental => {
+                const lineId = String(tool.toolId ?? tool.id ?? '');
+                const available = Math.min(Number(tool.availableStock ?? 0), Number(tool.quantity ?? 0) - Number(tool.rentedQuantity ?? 0));
+                const pending = Number(tool.quantity ?? 0) - Number(tool.rentedQuantity ?? 0) - available;
+                const currentUnitPrice = modifiedToolUnitPrices[lineId] ?? Number(tool.unitPrice ?? 0);
+                return { ...tool, id: lineId, canRent: available, stillPending: pending, unitPrice: currentUnitPrice };
+            })
+            .filter((t) => t.canRent > 0);
+    }, [selectedRequest, modifiedToolUnitPrices]);
+
     const handleMenuClick = () => setIsMobileSidebarOpen((prev) => !prev);
     const handleMobileSidebarClose = () => setIsMobileSidebarOpen(false);
     const handleLogout = () => console.log('Logout clicked');
@@ -255,11 +304,15 @@ const PurchaseOrderPage: React.FC = () => {
     }, []);
 
     const handleCreateRentalAgreement = (request: PurchaseRequest) => {
-        if (!hasAvailableMachinesForRental(request)) {
+        const hasAvailableTools =
+            Array.isArray(request.tools) &&
+            request.tools.some(t => Math.min(Number(t.availableStock ?? 0), Number(t.quantity ?? 0) - Number(t.rentedQuantity ?? 0)) > 0);
+
+        if (!hasAvailableMachinesForRental(request) && !hasAvailableTools) {
             Swal.fire({
                 icon: 'info',
-                title: 'No available machines',
-                text: 'You can only create a rental agreement when at least one machine line has available stock.',
+                title: 'No available items',
+                text: 'You can only create a rental agreement when at least one machine or tool line has available stock.',
                 confirmButtonColor: '#2563eb',
             });
             return;
@@ -278,6 +331,9 @@ const PurchaseOrderPage: React.FC = () => {
         setSelectedRequest(request);
         setSelectedMachinesForRental({});
         setModifiedUnitPrices({});
+        setSelectedToolsForRental({});
+        setToolIncludedInRental({});
+        setModifiedToolUnitPrices({});
         setRentalStartDate(poStart);
         setRentalEndDate(poEnd ?? '');
         setRentalFormErrors({});
@@ -294,6 +350,24 @@ const PurchaseOrderPage: React.FC = () => {
         });
         setSelectedMachinesForRental(initialSelection);
         setMachineIncludedInRental(initialIncluded);
+
+        const tools = request.tools || [];
+        const availableTools = tools
+            .map((t) => {
+                const id = String(t.toolId ?? t.id ?? '');
+                const available = Math.min(Number(t.availableStock ?? 0), Number(t.quantity ?? 0) - Number(t.rentedQuantity ?? 0));
+                return { ...t, id, canRent: available };
+            })
+            .filter((t) => (t.canRent || 0) > 0);
+        const initialToolSelection: Record<string, number> = {};
+        const initialToolIncluded: Record<string, boolean> = {};
+        availableTools.forEach((t) => {
+            const id = String(t.id);
+            initialToolSelection[id] = t.canRent;
+            initialToolIncluded[id] = true;
+        });
+        setSelectedToolsForRental(initialToolSelection);
+        setToolIncludedInRental(initialToolIncluded);
         setIsRentalModalOpen(true);
     };
 
@@ -303,6 +377,9 @@ const PurchaseOrderPage: React.FC = () => {
         setSelectedMachinesForRental({});
         setMachineIncludedInRental({});
         setModifiedUnitPrices({});
+        setSelectedToolsForRental({});
+        setToolIncludedInRental({});
+        setModifiedToolUnitPrices({});
         setRentalStartDate('');
         setRentalEndDate('');
         setRentalFormErrors({});
@@ -355,6 +432,14 @@ const PurchaseOrderPage: React.FC = () => {
             startDate: startDateStr,
             endDate: endDateStr,
             machines: (request.machines || []).map(m => ({ ...m, totalPrice: (m.unitPrice || 0) * (m.quantity || 0) })),
+            tools: (request.tools || []).map(t => ({
+                ...t,
+                id: String(t.id ?? t.toolId ?? ''),
+                toolId: t.toolId ? String(t.toolId) : (t.id ? String(t.id) : undefined),
+                quantity: Number(t.quantity ?? 0),
+                unitPrice: Number(t.unitPrice ?? 0),
+                totalPrice: Number(t.unitPrice ?? 0) * Number(t.quantity ?? 0),
+            })),
             notes: '',
         });
         setUpdateFormErrors({});
@@ -367,7 +452,7 @@ const PurchaseOrderPage: React.FC = () => {
     const handleCloseUpdateModal = () => {
         setIsUpdateModalOpen(false);
         setSelectedRequest(null);
-        setUpdateForm({ status: 'Pending', startDate: '', endDate: '', machines: [], notes: '' });
+        setUpdateForm({ status: 'Pending', startDate: '', endDate: '', machines: [], tools: [], notes: '' });
         setUpdateFormErrors({});
     };
 
@@ -393,6 +478,32 @@ const PurchaseOrderPage: React.FC = () => {
         setUpdateForm(prev => ({
             ...prev,
             machines: prev.machines.filter(m => m.id !== machineId),
+        }));
+    };
+
+    const handleUpdateFormToolChange = (toolLineId: string, field: 'quantity' | 'unitPrice', value: number) => {
+        setUpdateForm(prev => {
+            const tools = prev.tools.map(t => {
+                if (t.id !== toolLineId) return t;
+                const rented = t.rentedQuantity ?? 0;
+                if (field === 'quantity') {
+                    const qty = Math.max(0, Math.round(value));
+                    const minQty = Math.max(0, rented);
+                    const finalQty = Math.max(minQty, qty);
+                    const unitPrice = Number(t.unitPrice ?? 0);
+                    return { ...t, quantity: finalQty, totalPrice: unitPrice * finalQty };
+                }
+                const unitPrice = Math.max(0, value);
+                return { ...t, unitPrice, totalPrice: unitPrice * Number(t.quantity ?? 0) };
+            });
+            return { ...prev, tools };
+        });
+    };
+
+    const handleRemoveToolFromUpdate = (toolLineId: string) => {
+        setUpdateForm(prev => ({
+            ...prev,
+            tools: prev.tools.filter(t => t.id !== toolLineId),
         }));
     };
 
@@ -427,6 +538,10 @@ const PurchaseOrderPage: React.FC = () => {
             const rented = m.rentedQuantity || 0;
             if (m.quantity < rented) errors[`machine_${i}_qty`] = `Quantity cannot be less than already rented (${rented})`;
         });
+        updateForm.tools.forEach((t, i) => {
+            const rented = t.rentedQuantity ?? 0;
+            if (Number(t.quantity ?? 0) < rented) errors[`tool_${i}_qty`] = `Tool quantity cannot be less than already allocated (${rented})`;
+        });
         setUpdateFormErrors(errors);
         return Object.keys(errors).length === 0;
     };
@@ -449,12 +564,29 @@ const PurchaseOrderPage: React.FC = () => {
                 rentedQuantity: m.rentedQuantity ?? 0,
                 pendingQuantity: (m.quantity - (m.rentedQuantity || 0)),
             }));
-            const totalAmount = updateForm.machines.reduce((sum, m) => sum + (m.unitPrice || 0) * (m.quantity || 0), 0);
+            const toolsPayload = updateForm.tools.map(t => ({
+                id: String(t.id ?? t.toolId ?? ''),
+                toolId: t.toolId ? String(t.toolId) : String(t.id ?? ''),
+                toolName: t.toolName,
+                toolType: t.toolType,
+                brand: t.brand ?? null,
+                model: t.model ?? null,
+                quantity: Number(t.quantity ?? 0),
+                availableStock: Number(t.availableStock ?? 0),
+                unitPrice: Number(t.unitPrice ?? 0),
+                totalPrice: Number(t.unitPrice ?? 0) * Number(t.quantity ?? 0),
+                rentedQuantity: Number(t.rentedQuantity ?? 0),
+                pendingQuantity: Number(t.pendingQuantity ?? 0),
+            }));
+            const totalAmount =
+                updateForm.machines.reduce((sum, m) => sum + (m.unitPrice || 0) * (m.quantity || 0), 0) +
+                updateForm.tools.reduce((sum, t) => sum + (Number(t.unitPrice ?? 0) * Number(t.quantity ?? 0)), 0);
             const payload = {
                 status: updateForm.status,
                 startDate: updateForm.startDate || undefined,
                 endDate: updateForm.endDate || undefined,
                 machines: machinesPayload,
+                tools: toolsPayload,
                 totalAmount: Math.round(totalAmount * 100) / 100,
                 notes: updateForm.notes || undefined,
             };
@@ -492,15 +624,22 @@ const PurchaseOrderPage: React.FC = () => {
         setModifiedUnitPrices(prev => ({ ...prev, [machineId]: Math.max(0, newPrice) }));
     };
 
+    const handleToolUnitPriceChange = (toolLineId: string, newPrice: number) => {
+        setModifiedToolUnitPrices(prev => ({ ...prev, [toolLineId]: Math.max(0, newPrice) }));
+    };
+
     const validateRentalForm = (): boolean => {
         const errors: Record<string, string> = {};
         if (!rentalStartDate) errors.rentalStartDate = 'Start date is required';
         if (!rentalEndDate) errors.rentalEndDate = 'End date is required';
         if (rentalStartDate && rentalEndDate && new Date(rentalEndDate) <= new Date(rentalStartDate)) errors.rentalEndDate = 'End date must be after start date';
-        const hasSelection = availableMachinesForRental.some(
+        const hasMachineSelection = availableMachinesForRental.some(
             m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0
         );
-        if (!hasSelection) errors.machines = 'Please select at least one machine (check the box and set quantity) to include in the hiring agreement';
+        const hasToolSelection = availableToolsForRental.some(
+            (t) => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0
+        );
+        if (!hasMachineSelection && !hasToolSelection) errors.machines = 'Please select at least one machine or tool (check the box and set quantity) to include in the hiring agreement';
         setRentalFormErrors(errors);
         return Object.keys(errors).length === 0;
     };
@@ -516,6 +655,17 @@ const PurchaseOrderPage: React.FC = () => {
         }
     };
 
+    const handleToggleToolIncluded = (toolLineId: string, included: boolean) => {
+        setToolIncludedInRental(prev => ({ ...prev, [toolLineId]: included }));
+        const tool = availableToolsForRental.find(t => t.id === toolLineId);
+        if (tool) {
+            setSelectedToolsForRental(prev => ({
+                ...prev,
+                [toolLineId]: included ? tool.canRent : 0,
+            }));
+        }
+    };
+
     const handleSubmitRentalAgreement = async () => {
         if (!validateRentalForm() || !selectedRequest) return;
         setIsSubmitting(true);
@@ -527,11 +677,19 @@ const PurchaseOrderPage: React.FC = () => {
                     quantity: selectedMachinesForRental[m.id],
                     unitPrice: modifiedUnitPrices[m.id] ?? m.unitPrice,
                 }));
+            const toolsToRent = availableToolsForRental
+                .filter(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)
+                .map(t => ({
+                    toolId: t.id,
+                    quantity: selectedToolsForRental[t.id],
+                    unitPrice: modifiedToolUnitPrices[t.id] ?? Number(t.unitPrice ?? 0),
+                }));
             const payload = {
                 purchaseRequestId: selectedRequest.id,
                 rentalStartDate: rentalStartDate,
                 rentalEndDate: rentalEndDate || undefined,
                 machines: machinesToRent,
+                tools: toolsToRent,
             };
             const response = await authFetch(`${API_BASE_URL}/rentals/from-purchase-request`, {
                 method: 'POST',
@@ -685,6 +843,40 @@ const PurchaseOrderPage: React.FC = () => {
                         );
                     })}
                 </div>
+                {selectedRequest.tools && selectedRequest.tools.length > 0 && (
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Tool Details</h3>
+                        {selectedRequest.tools.map((tool, index) => {
+                            const available = Math.min(tool.availableStock ?? 0, tool.quantity - (tool.rentedQuantity || 0));
+                            const rented = tool.rentedQuantity || 0;
+                            const pending = tool.pendingQuantity ?? 0;
+                            return (
+                                <div key={`${tool.id}-${index}`} className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 border border-gray-200 dark:border-slate-600">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Tool {index + 1}</span>
+                                        {tool.toolName && (
+                                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold ${available > 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
+                                                In stock: {available}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Name</label><div className="text-sm text-gray-900 dark:text-white">{tool.toolName ?? '—'}</div></div>
+                                        <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Type</label><div className="text-sm text-gray-900 dark:text-white">{tool.toolType ?? '—'}</div></div>
+                                        <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Quantity</label><div className="text-sm text-gray-900 dark:text-white">{tool.quantity}</div></div>
+                                        <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Brand / Model</label><div className="text-sm text-gray-900 dark:text-white">{[tool.brand, tool.model].filter(Boolean).join(' · ') || '—'}</div></div>
+                                    </div>
+                                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-600 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                        <span>Unit Price: Rs. {(tool.unitPrice ?? 0).toLocaleString('en-LK')}</span>
+                                        <span>Sub Total: Rs. {(tool.totalPrice ?? 0).toLocaleString('en-LK')} ({(tool.unitPrice ?? 0).toLocaleString('en-LK')} × {tool.quantity})</span>
+                                        {rented > 0 && <span className="flex items-center text-green-600 dark:text-green-400"><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Allocated: {rented}</span>}
+                                        {pending > 0 && <span className="flex items-center text-yellow-600 dark:text-yellow-400"><Clock className="w-3.5 h-3.5 mr-1" /> Pending: {pending}</span>}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
                 <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Pricing Summary</h3>
                     <div className="flex justify-between items-center">
@@ -747,6 +939,16 @@ const PurchaseOrderPage: React.FC = () => {
                                     <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{m.quantity}</td>
                                     <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.unitPrice.toLocaleString('en-LK')}</td>
                                     <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.totalPrice.toLocaleString('en-LK')}</td>
+                                </tr>
+                            ))}
+                            {request.tools?.map((t, i) => (
+                                <tr key={`tool-${i}`}>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{t.toolName ?? '—'}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{[t.brand, t.model].filter(Boolean).join(' · ') || '—'}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{t.toolType ?? '—'}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{t.quantity}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{(t.unitPrice ?? 0).toLocaleString('en-LK')}</td>
+                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{(t.totalPrice ?? 0).toLocaleString('en-LK')}</td>
                                 </tr>
                             ))}
                             <tr className="bg-gray-50 dark:bg-slate-700/30 print:bg-gray-50 font-semibold">
@@ -1108,7 +1310,171 @@ const PurchaseOrderPage: React.FC = () => {
                                         )}
                                         {rentalFormErrors.machines && <p className="text-sm text-red-500">{rentalFormErrors.machines}</p>}
                                     </div>
-                                    {availableMachinesForRental.some(m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0) && (
+                                    <div className="space-y-4">
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Select Tools to Rent</h3>
+
+                                        {availableToolsForRental.length === 0 ? (
+                                            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
+                                                <p className="text-sm text-yellow-800 dark:text-yellow-200">No tools available for rental from this purchase request.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {availableToolsForRental.map((tool) => {
+                                                    const included = toolIncludedInRental[tool.id] !== false;
+                                                    const currentPrice = modifiedToolUnitPrices[tool.id] ?? Number(tool.unitPrice ?? 0);
+                                                    const originalPrice = Number((selectedRequest.tools || []).find(t => String(t.toolId ?? t.id) === String(tool.id))?.unitPrice ?? tool.unitPrice ?? 0);
+                                                    const isPriceModified = modifiedToolUnitPrices[tool.id] !== undefined && modifiedToolUnitPrices[tool.id] !== originalPrice;
+                                                    const qty = included ? (selectedToolsForRental[tool.id] || 0) : 0;
+                                                    const subtotal = currentPrice * qty;
+                                                    return (
+                                                        <div key={tool.id} className={`rounded-xl border p-4 shadow-sm transition-shadow ${included ? 'bg-white dark:bg-slate-700/80 border-gray-200 dark:border-slate-600 hover:shadow-md' : 'bg-gray-100 dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 opacity-80'}`}>
+                                                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                                                <div className="min-w-0 flex-1 flex items-center gap-3">
+                                                                    <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={included}
+                                                                            onChange={(e) => handleToggleToolIncluded(tool.id, e.target.checked)}
+                                                                            className="w-4 h-4 rounded border-gray-300 dark:border-slate-500 text-blue-600 dark:text-indigo-500 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                                                        />
+                                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Include</span>
+                                                                    </label>
+                                                                    <div className="min-w-0">
+                                                                        <h4 className="font-medium text-gray-900 dark:text-white truncate">
+                                                                            {tool.toolName ?? 'Tool'}{' '}
+                                                                            <span className="text-gray-500 dark:text-gray-400 font-normal">({tool.toolType ?? '—'})</span>
+                                                                        </h4>
+                                                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                                                                                Available: {tool.canRent}
+                                                                            </span>
+                                                                            {tool.stillPending > 0 && (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                                                                    {tool.stillPending} pending
+                                                                                </span>
+                                                                            )}
+                                                                            {isPriceModified && included && (
+                                                                                <span className="text-xs text-blue-600 dark:text-blue-400">
+                                                                                    Original: Rs. {Number(originalPrice).toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Rs.</span>
+                                                                        <div className="relative inline-block">
+                                                                            <input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                step="0.01"
+                                                                                value={currentPrice}
+                                                                                onChange={(e) => handleToolUnitPriceChange(tool.id, parseFloat(e.target.value) || 0)}
+                                                                                disabled={!included}
+                                                                                className="w-24 sm:w-28 px-3 py-2 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Decrease unit price"
+                                                                                onClick={() => {
+                                                                                    const next = Math.max(0, Number(((Number(currentPrice) || 0) - 0.01).toFixed(2)));
+                                                                                    handleToolUnitPriceChange(tool.id, next);
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                <Minus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Increase unit price"
+                                                                                onClick={() => {
+                                                                                    const next = Number(((Number(currentPrice) || 0) + 0.01).toFixed(2));
+                                                                                    handleToolUnitPriceChange(tool.id, next);
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                <Plus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
+                                                                        {isPriceModified && included && (
+                                                                            <Tooltip content="Reset to original price">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        setModifiedToolUnitPrices(prev => {
+                                                                                            const u = { ...prev };
+                                                                                            delete u[tool.id];
+                                                                                            return u;
+                                                                                        })
+                                                                                    }
+                                                                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+                                                                                >
+                                                                                    Reset
+                                                                                </button>
+                                                                            </Tooltip>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Qty</span>
+                                                                        <div className="relative inline-block">
+                                                                            <input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                max={tool.canRent}
+                                                                                value={qty}
+                                                                                onChange={(e) => {
+                                                                                    const val = Math.max(0, Math.min(parseInt(e.target.value) || 0, tool.canRent));
+                                                                                    setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: val });
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="w-16 sm:w-20 px-3 py-2 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Decrease quantity"
+                                                                                onClick={() => {
+                                                                                    const next = Math.max(0, Math.min((Number(qty) || 0) - 1, tool.canRent));
+                                                                                    setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: next });
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                <Minus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Increase quantity"
+                                                                                onClick={() => {
+                                                                                    const next = Math.max(0, Math.min((Number(qty) || 0) + 1, tool.canRent));
+                                                                                    setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: next });
+                                                                                }}
+                                                                                disabled={!included}
+                                                                                className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                <Plus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
+                                                                        <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">/ {tool.canRent}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1 sm:min-w-[120px]">
+                                                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">=</span>
+                                                                        <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                                                            Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {(availableMachinesForRental.some(m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0) ||
+                                        availableToolsForRental.some(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)) && (
                                         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                                             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Rental Summary</h3>
                                             <div className="space-y-2 text-sm">
@@ -1123,9 +1489,27 @@ const PurchaseOrderPage: React.FC = () => {
                                                         </div>
                                                     );
                                                 })}
+                                                {availableToolsForRental
+                                                    .filter(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)
+                                                    .map((tool) => {
+                                                        const finalPrice = modifiedToolUnitPrices[tool.id] ?? Number(tool.unitPrice ?? 0);
+                                                        const quantity = selectedToolsForRental[tool.id] || 0;
+                                                        const subtotal = finalPrice * quantity;
+                                                        return (
+                                                            <div key={`tool-summary-${tool.id}`} className="flex justify-between">
+                                                                <span className="text-gray-600 dark:text-gray-400">{tool.toolName ?? 'Tool'} × {quantity}</span>
+                                                                <span className="font-medium text-gray-900 dark:text-white">Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 <div className="border-t border-blue-200 dark:border-blue-800 pt-2 mt-2 flex justify-between">
                                                     <span className="font-semibold text-gray-900 dark:text-white">Total Monthly Rent:</span>
-                                                    <span className="font-bold text-lg text-blue-600 dark:text-blue-400">Rs. {availableMachinesForRental.reduce((sum, m) => sum + (machineIncludedInRental[m.id] ? (modifiedUnitPrices[m.id] ?? m.unitPrice) * (selectedMachinesForRental[m.id] || 0) : 0), 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                    <span className="font-bold text-lg text-blue-600 dark:text-blue-400">
+                                                        Rs. {(
+                                                            availableMachinesForRental.reduce((sum, m) => sum + (machineIncludedInRental[m.id] ? (modifiedUnitPrices[m.id] ?? m.unitPrice) * (selectedMachinesForRental[m.id] || 0) : 0), 0) +
+                                                            availableToolsForRental.reduce((sum, t) => sum + (toolIncludedInRental[t.id] ? (modifiedToolUnitPrices[t.id] ?? Number(t.unitPrice ?? 0)) * (selectedToolsForRental[t.id] || 0) : 0), 0)
+                                                        ).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -1355,7 +1739,7 @@ const PurchaseOrderPage: React.FC = () => {
                                                             <div className="flex flex-col items-end">
                                                                 <span className="text-sm">Total Amount</span>
                                                                 <span className="text-lg font-bold">
-                                                                    Rs. {updateForm.machines.reduce((sum, m) => sum + (m.unitPrice || 0) * (m.quantity || 0), 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                    Rs. {(updateForm.machines.reduce((sum, m) => sum + (m.unitPrice || 0) * (m.quantity || 0), 0) + updateForm.tools.reduce((sum, t) => sum + (Number(t.unitPrice ?? 0) * Number(t.quantity ?? 0)), 0)).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                                 </span>
                                                             </div>
                                                         </td>
@@ -1364,6 +1748,115 @@ const PurchaseOrderPage: React.FC = () => {
                                             </table>
                                         </div>
                                     </div>
+                                    {updateForm.tools.length > 0 && (
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Tools</h3>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">Quantity cannot be less than already allocated. Unit price and total are recalculated automatically.</p>
+                                            <div className="overflow-x-auto border border-gray-200 dark:border-slate-600 rounded-lg">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-gray-50 dark:bg-slate-700/80">
+                                                        <tr>
+                                                            <th className="text-left px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Name</th>
+                                                            <th className="text-left px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Type</th>
+                                                            <th className="text-center px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Quantity</th>
+                                                            <th className="text-right px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Unit Price (Rs.)</th>
+                                                            <th className="text-right px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Total (Rs.)</th>
+                                                            <th className="text-center px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-200 dark:divide-slate-600">
+                                                        {updateForm.tools.map((t, idx) => {
+                                                            const rented = t.rentedQuantity ?? 0;
+                                                            const minQty = Math.max(0, rented);
+                                                            const isRemovable = rented === 0;
+                                                            const unitPrice = Number(t.unitPrice ?? 0);
+                                                            const quantity = Number(t.quantity ?? 0);
+                                                            return (
+                                                                <tr key={t.id} className="bg-white dark:bg-slate-800/50 hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                                                                    <td className="px-4 py-3 text-gray-900 dark:text-white">{t.toolName ?? '—'}</td>
+                                                                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{t.toolType ?? '—'}</td>
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        <div className="relative inline-block">
+                                                                            <input
+                                                                                type="number"
+                                                                                min={minQty}
+                                                                                value={quantity}
+                                                                                onChange={(e) => handleUpdateFormToolChange(t.id, 'quantity', parseInt(e.target.value, 10) || 0)}
+                                                                                className="w-20 px-2 py-1.5 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Decrease quantity"
+                                                                                onClick={() => handleUpdateFormToolChange(t.id, 'quantity', Math.max(minQty, (Number(quantity) || 0) - 1))}
+                                                                                className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                                            >
+                                                                                <Minus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Increase quantity"
+                                                                                onClick={() => handleUpdateFormToolChange(t.id, 'quantity', (Number(quantity) || 0) + 1)}
+                                                                                className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                                            >
+                                                                                <Plus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
+                                                                        {rented > 0 && <span className="block text-xs text-amber-600 dark:text-amber-400 mt-0.5">min: {minQty} (allocated)</span>}
+                                                                        {updateFormErrors[`tool_${idx}_qty`] && <span className="block text-xs text-red-500 mt-0.5">{updateFormErrors[`tool_${idx}_qty`]}</span>}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        <div className="relative inline-block">
+                                                                            <input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                step="0.01"
+                                                                                value={unitPrice}
+                                                                                onChange={(e) => handleUpdateFormToolChange(t.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                                                                className="w-28 px-2 py-1.5 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-right appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Decrease unit price"
+                                                                                onClick={() => {
+                                                                                    const next = Math.max(0, Number(((Number(unitPrice) || 0) - 0.01).toFixed(2)));
+                                                                                    handleUpdateFormToolChange(t.id, 'unitPrice', next);
+                                                                                }}
+                                                                                className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                                            >
+                                                                                <Minus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label="Increase unit price"
+                                                                                onClick={() => {
+                                                                                    const next = Number(((Number(unitPrice) || 0) + 0.01).toFixed(2));
+                                                                                    handleUpdateFormToolChange(t.id, 'unitPrice', next);
+                                                                                }}
+                                                                                className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600"
+                                                                            >
+                                                                                <Plus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">{(unitPrice * quantity).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => isRemovable && handleRemoveToolFromUpdate(t.id)}
+                                                                            disabled={!isRemovable}
+                                                                            className={`inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-medium border transition-colors ${isRemovable ? 'text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-600/60 dark:hover:bg-red-900/30' : 'text-gray-400 border-gray-200 dark:text-gray-500 dark:border-slate-600 cursor-not-allowed'}`}
+                                                                        >
+                                                                            Remove
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes (optional)</label>
                                         <textarea
