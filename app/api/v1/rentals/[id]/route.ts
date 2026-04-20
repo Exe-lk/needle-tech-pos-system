@@ -138,8 +138,18 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       );
     }
 
-    // Expected machine categories (brand/model/type + quantity). Used to validate scan-time assignment.
-    type ExpectedCategory = { id: string; brand: string; model: string; type: string; quantity: number };
+    // Expected machine categories (brand/model/type + quantity [+ dailyRate if available]).
+    // If rental was created from a PO / request, requestedMachineLines may carry per-category dailyRate.
+    // When assigning actual machines by scanning, we must persist the category's dailyRate (not an averaged rate),
+    // otherwise rental_machines.dailyRate diverges from requestedMachineLines shown in the UI.
+    type ExpectedCategory = {
+      id: string;
+      brand: string;
+      model: string;
+      type: string;
+      quantity: number;
+      dailyRate?: number;
+    };
     const expectedMachineCategories: ExpectedCategory[] = (() => {
       const req = existingRental.requestedMachineLines as any[] | null;
       if (Array.isArray(req) && req.length > 0) {
@@ -149,6 +159,13 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
           model: String(m.model ?? ''),
           type: String(m.type ?? ''),
           quantity: typeof m.quantity === 'number' ? m.quantity : 1,
+          dailyRate:
+            m.dailyRate == null
+              ? undefined
+              : (() => {
+                  const n = Number(m.dailyRate);
+                  return Number.isFinite(n) ? n : undefined;
+                })(),
         }));
       }
       const poMachines = existingRental.purchaseOrder?.machines as any[] | undefined;
@@ -160,9 +177,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
           const type = String(m.type ?? '');
           const qty = typeof m.quantity === 'number' ? m.quantity : Number(m.quantity) || 0;
           const key = `${brand}||${model}||${type}`.toUpperCase().trim();
-          if (!map.has(key)) {
-            map.set(key, { id: String(m.id ?? key), brand, model, type, quantity: 0 });
-          }
+          if (!map.has(key)) map.set(key, { id: String(m.id ?? key), brand, model, type, quantity: 0 });
           map.get(key)!.quantity += qty;
         }
         return Array.from(map.values()).filter((c) => c.quantity > 0);
@@ -185,6 +200,9 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       const key = machineToKey(m);
       currentAssignedCountsByKey.set(key, (currentAssignedCountsByKey.get(key) ?? 0) + 1);
     }
+
+    // Track how many assignments were actually created in this request.
+    let newlyAddedCount = 0;
 
     // Handle machine assignment from QR scans
     if (body.machines && Array.isArray(body.machines)) {
@@ -241,6 +259,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
         }
 
         // Validate machine belongs to the expected agreement categories, and enforce per-category quantities.
+        // Also: when requestedMachineLines provide a per-category dailyRate, persist that exact rate.
         if (expectedMachineCategories.length > 0) {
           const key = machineToKey(machine);
           const expectedCat = expectedByKey.get(key);
@@ -262,14 +281,25 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
             });
           }
           nextCountsByKey.set(key, nextCount);
+
+          const dailyRateCandidate = expectedCat.dailyRate ?? perMachineDailyRate;
+          const dailyRateNum = Number(dailyRateCandidate);
+          const resolvedDailyRate = Number.isFinite(dailyRateNum) ? dailyRateNum : 0;
+
+          machinesToAdd.push({
+            machineId: machine.id,
+            dailyRate: new Decimal(resolvedDailyRate),
+            securityDeposit: new Decimal(0),
+            quantity: 1,
+          });
+          continue;
         }
-        
-        // Use per-machine daily rate so agreement total = subtotal (e.g. 5 machines × 3000 = 15000)
-        const dailyRate = perMachineDailyRate;
-        
+
+        // No expected categories on the agreement: fall back to averaged per-machine daily rate.
+        const fallbackRateNum = Number(perMachineDailyRate);
         machinesToAdd.push({
           machineId: machine.id,
-          dailyRate: new Decimal(dailyRate),
+          dailyRate: new Decimal(Number.isFinite(fallbackRateNum) ? fallbackRateNum : 0),
           securityDeposit: new Decimal(0),
           quantity: 1,
         });
@@ -282,6 +312,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
             rentalId: id,
           })),
         });
+        newlyAddedCount = machinesToAdd.length;
       }
     }
     
@@ -289,7 +320,7 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     const activeExistingCount = (existingRental.machines as any[]).filter(
       (rm: any) => !returnedIdsPut.has(rm.machineId)
     ).length;
-    const currentCount = activeExistingCount + (body.machines?.length || 0);
+    const currentCount = activeExistingCount + newlyAddedCount;
     const allMachinesAssigned = expectedCount > 0 && currentCount >= expectedCount;
 
     // When all expected machines are assigned and agreement is PENDING, set to ACTIVE (e.g. from machine-assign-page).
