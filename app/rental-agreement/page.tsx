@@ -250,12 +250,8 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     months > 1 &&
     (almostEqual(subtotal * months + vatAmount, total) || almostEqual(subtotal * months, total));
   const monthlySubtotal = subtotalLooksMonthly ? subtotal : months > 0 ? subtotal / months : subtotal;
-  // Per-machine monthly rent in the view/print should be derived from the assigned machine's daily rate.
-  // Business rule: monthly rent per machine = dailyRate * 30 (and respect quantity if API sends it).
-  const toFiniteNumber = (v: unknown) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
+  const machineCount = (r.machines ?? []).length;
+  const perMachineMonthly = machineCount > 0 ? monthlySubtotal / machineCount : 0;
   const addressParts = [
     r.customer.billingAddressLine1,
     r.customer.billingAddressLine2,
@@ -269,9 +265,6 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     const model = rm.machine.model?.name ?? '';
     const type = rm.machine.type?.name ?? '';
     const desc = `${brand} ${model}${type ? ` - ${type}` : ''}`.trim() || 'Machine';
-    const dailyRate = toFiniteNumber(rm.dailyRate);
-    const qty = Math.max(1, Math.floor(toFiniteNumber(rm.quantity) || 1));
-    const monthlyRentFromDailyRate = dailyRate * 30 * qty;
     return {
       serialNo: rm.machine.serialNumber,
       machineBrand: brand,
@@ -279,7 +272,7 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
       machineType: type,
       machineDescription: desc.toUpperCase(),
       motorBoxNo: rm.machine.boxNumber ?? undefined,
-      monthlyRent: monthlyRentFromDailyRate,
+      monthlyRent: perMachineMonthly,
     };
   });
   const statusMap: Record<string, RentalStatus> = {
