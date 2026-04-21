@@ -101,6 +101,13 @@ interface GatePassItem {
   motorBoxNo: string;
 }
 
+interface GatePassToolItem {
+  id: string;
+  description: string;
+  quantity: number;
+  serialNo?: string;
+}
+
 interface GatePass {
   id: number;
   gatepassNo: string;
@@ -114,6 +121,7 @@ interface GatePass {
   vehicleNumber: string;
   driverName: string;
   items: GatePassItem[];
+  tools?: GatePassToolItem[];
   issuedBy?: string;
   receivedBy?: string;
 }
@@ -149,6 +157,16 @@ interface ApiGatePassResponse {
       brand?: { name: string } | null;
       model?: { name: string } | null;
       type?: { name: string } | null;
+    };
+  }>;
+  tools?: Array<{
+    quantity: number;
+    tool: {
+      toolName: string;
+      toolType: string;
+      brand?: string | null;
+      model?: string | null;
+      serialNumber?: string | null;
     };
   }>;
 }
@@ -1919,6 +1937,19 @@ const RentalAgreementPage: React.FC = () => {
         motorBoxNo: machine.boxNumber ?? 'N/A',
       };
     });
+    const tools: GatePassToolItem[] = (api.tools ?? []).map((t, idx) => {
+      const tool = t.tool;
+      const description = [tool?.toolName, tool?.toolType ? `(${tool.toolType})` : '', tool?.brand, tool?.model]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      return {
+        id: `tool-${idx + 1}`,
+        description: (description || 'Tool').toUpperCase(),
+        quantity: typeof t.quantity === 'number' ? t.quantity : 1,
+        serialNo: tool?.serialNumber ?? undefined,
+      };
+    });
     return {
       id: Date.now(),
       gatepassNo: api.gatePassNumber,
@@ -1932,6 +1963,7 @@ const RentalAgreementPage: React.FC = () => {
       vehicleNumber: api.vehicleNumber ?? vehicleNumber,
       driverName: api.driverName ?? driverName,
       items,
+      tools,
       issuedBy: '',
       receivedBy: '',
     };
@@ -2297,6 +2329,43 @@ const RentalAgreementPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Tools Table (if any) */}
+        {gatePass.tools && gatePass.tools.length > 0 && (
+          <div className="mb-6">
+            <div className="text-sm font-semibold text-gray-700 mb-2">Tools</div>
+            <table className="w-full border-collapse border border-gray-800">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900">
+                    Description
+                  </th>
+                  <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900 w-24">
+                    Qty
+                  </th>
+                  <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                    Serial No
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {gatePass.tools.map((t) => (
+                  <tr key={t.id}>
+                    <td className="border border-gray-800 px-4 py-2 text-sm text-gray-900">
+                      {t.description}
+                    </td>
+                    <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                      {t.quantity}
+                    </td>
+                    <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                      {t.serialNo || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Signatures */}
         <div className="grid grid-cols-2 gap-8 mb-6">

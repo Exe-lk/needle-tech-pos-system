@@ -375,6 +375,7 @@ model Tool {
 
   // Relations
   rentalTools     RentalTool[]
+  gatePassTools   GatePassTool[]
 
   @@index([toolName])
   @@index([toolType])
@@ -772,6 +773,7 @@ model GatePass {
   issuedBy        User     @relation("GatePassIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
   
   machines        GatePassMachine[]
+  tools           GatePassTool[]
 
   @@index([gatePassNumber])
   @@index([rentalId])
@@ -795,6 +797,25 @@ model GatePassMachine {
   @@index([gatePassId])
   @@index([machineId])
   @@map("gate_pass_machines")
+}
+
+model GatePassTool {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gatePassId String   @db.Uuid
+  toolId     String   @db.Uuid
+
+  // Snapshot of tool quantity/pricing at time of gate pass
+  unitPrice  Decimal? @db.Decimal(10, 2)
+  quantity   Int      @default(1)
+
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  gatePass   GatePass @relation(fields: [gatePassId], references: [id], onDelete: Cascade)
+  tool       Tool     @relation(fields: [toolId], references: [id], onDelete: Restrict)
+
+  @@index([gatePassId])
+  @@index([toolId])
+  @@map("gate_pass_tools")
 }
 
 enum GatePassStatus {
