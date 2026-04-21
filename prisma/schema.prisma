@@ -527,6 +527,9 @@ model Rental {
   // For agreements created from PO without assigned machines: requested lines (brand, model, type, quantity, dailyRate)
   requestedMachineLines     Json?    // [{ brand, model, type?, quantity, dailyRate }]
   
+  // For agreements created from PO without assigned tools: requested lines (toolName, toolType, brand, model, quantity, unitPrice)
+  requestedToolLines        Json?    // [{ toolName, toolType, brand?, model?, quantity, unitPrice? }]
+  
   createdByUserId String   @db.Uuid
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)

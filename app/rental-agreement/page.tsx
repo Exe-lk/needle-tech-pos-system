@@ -55,6 +55,14 @@ interface MachineDetail {
   monthlyRent: number;
 }
 
+/** Tools / add-ons on a rental (from rental_tools + tools, or requestedToolLines snapshot). */
+interface ToolDetailLine {
+  description: string;
+  quantity: number;
+  /** Monthly charge for this line (unitPrice × quantity). */
+  monthlyRent: number;
+}
+
 // Rental Agreement Detail Data Types
 interface RentalAgreementInfo {
   id: string;
@@ -63,6 +71,7 @@ interface RentalAgreementInfo {
   customerName: string;
   customerAddress?: string;
   machines: MachineDetail[];
+  tools?: ToolDetailLine[];
   startDate: string;
   endDate: string | null;
   monthlyRent: number;
@@ -190,6 +199,70 @@ interface ApiRental {
   };
   purchaseOrder?: { id: string; requestNumber: string } | null;
   machines: ApiRentalMachine[];
+  /** From GET /rentals/[id] when include tools */
+  tools?: ApiRentalToolLine[];
+  /** Snapshot when agreement was created from a PO (mirrors Rental.requestedToolLines). */
+  requestedToolLines?: Array<{
+    toolId?: string;
+    toolName?: string;
+    toolType?: string;
+    brand?: string | null;
+    model?: string | null;
+    quantity?: number;
+    unitPrice?: number;
+  }>;
+}
+
+interface ApiRentalToolLine {
+  quantity: number;
+  unitPrice?: number | string | null;
+  tool?: {
+    toolName: string;
+    toolType: string;
+    brand?: string | null;
+    model?: string | null;
+  };
+}
+
+function mapToolsFromApi(r: ApiRental): ToolDetailLine[] {
+  const fromRelation = Array.isArray(r.tools) ? r.tools : [];
+  if (fromRelation.length > 0) {
+    return fromRelation.map((rt) => {
+      const t = rt.tool;
+      const qty =
+        typeof rt.quantity === 'number' && rt.quantity > 0 ? rt.quantity : 1;
+      const unit = Number(rt.unitPrice ?? 0);
+      const nameType = [t?.toolName, t?.toolType].filter(Boolean).join(' — ');
+      const brandModel = [t?.brand, t?.model].filter(Boolean).join(' ');
+      const description =
+        [nameType, brandModel].filter(Boolean).join(' — ') || 'Tool';
+      return {
+        description: description.toUpperCase(),
+        quantity: qty,
+        monthlyRent: unit * qty,
+      };
+    });
+  }
+  const lines = r.requestedToolLines;
+  if (Array.isArray(lines) && lines.length > 0) {
+    return lines.map((line) => {
+      const qty =
+        typeof line.quantity === 'number' && line.quantity > 0
+          ? line.quantity
+          : 1;
+      const unit = Number(line.unitPrice ?? 0);
+      const nameType = [line.toolName, line.toolType].filter(Boolean).join(' — ');
+      const brandModel = [line.brand, line.model].filter(Boolean).join(' ');
+      const description =
+        [nameType, brandModel].filter(Boolean).join(' — ') || 'Tool';
+      return {
+        description: description.toUpperCase(),
+        quantity: qty,
+        monthlyRent: unit * qty,
+      };
+    });
+  }
+  return [];
 }
 
 function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
@@ -303,6 +376,7 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     purchaseRequestNumber: r.purchaseOrder?.requestNumber,
     expectedMachines: r.expectedMachineCount ?? r.machines?.length,
     addedMachines: r.machines?.length,
+    tools: mapToolsFromApi(r),
   };
 }
 
@@ -2297,7 +2371,10 @@ const RentalAgreementPage: React.FC = () => {
 
   // Render Rental Agreement Document for Printing (letterhead style - matches HIRING MACHINE AGREEMENT)
   const renderRentalAgreementDocument = (agreementInfo: RentalAgreementInfo) => {
-    const totalMonthlyRent = agreementInfo.machines.reduce((sum, machine) => sum + machine.monthlyRent, 0);
+    const machineMonthly = agreementInfo.machines.reduce((sum, machine) => sum + machine.monthlyRent, 0);
+    const toolsMonthly =
+      agreementInfo.tools?.reduce((sum, row) => sum + row.monthlyRent, 0) ?? 0;
+    const totalMonthlyRent = machineMonthly + toolsMonthly;
     const dateOfIssue = agreementInfo.startDate
       ? new Date(agreementInfo.startDate).toLocaleDateString('en-LK', {
         year: 'numeric',
@@ -2340,45 +2417,91 @@ const RentalAgreementPage: React.FC = () => {
         </div>
 
         {/* Machine details table - Model/Description, Serial No, Motor/Box No, Monthly Res */}
-        <div className="mb-4">
-          <table className="w-full border-collapse border border-gray-800">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-800 px-3 py-2 text-left text-sm font-semibold text-gray-900">
-                  Model - Description
-                </th>
-                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
-                  Serial No
-                </th>
-                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
-                  Motor / Box No
-                </th>
-                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
-                  Monthly Rent
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {agreementInfo.machines.map((machine, index) => (
-                <tr key={index}>
-                  <td className="border border-gray-800 px-3 py-2 text-sm text-gray-900">
-                    {machine.machineDescription}
-                  </td>
-                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
-                    {machine.serialNo}
-                  </td>
-                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
-                    {machine.motorBoxNo || 'N/A'}
-                  </td>
-                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
-                    {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                  </td>
+        {(agreementInfo.machines?.length ?? 0) > 0 && (
+          <div className="mb-4">
+            <table className="w-full border-collapse border border-gray-800">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-800 px-3 py-2 text-left text-sm font-semibold text-gray-900">
+                    Model - Description
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Serial No
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Motor / Box No
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Monthly Rent
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {agreementInfo.machines.map((machine, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-800 px-3 py-2 text-sm text-gray-900">
+                      {machine.machineDescription}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {machine.serialNo}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {machine.motorBoxNo || 'N/A'}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Tools / related items (from PO hiring agreement or requestedToolLines). */}
+        {(agreementInfo.tools?.length ?? 0) > 0 && (
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-gray-900 mb-2">Tools &amp; related items</div>
+            <table className="w-full border-collapse border border-gray-800">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-800 px-3 py-2 text-left text-sm font-semibold text-gray-900">
+                    Description
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Qty
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Monthly Rent
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {agreementInfo.tools!.map((row, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-800 px-3 py-2 text-sm text-gray-900">
+                      {row.description}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {row.quantity}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {row.monthlyRent.toLocaleString('en-LK', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mb-4">
           <div className="mt-2 text-sm font-semibold text-gray-900">
-            Total: {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            Total monthly rent (machines &amp; tools):{' '}
+            {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </div>
         </div>
 
