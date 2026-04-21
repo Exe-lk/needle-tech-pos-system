@@ -101,6 +101,20 @@ interface ApiGatePass {
       };
     };
   }[];
+  tools?: {
+    id: string;
+    toolId: string;
+    quantity: number;
+    unitPrice?: number | string | null;
+    tool?: {
+      id: string;
+      toolName: string;
+      toolType: string;
+      brand?: string | null;
+      model?: string | null;
+      serialNumber?: string | null;
+    };
+  }[];
   issuedBy?: {
     id: string;
     fullName: string;
@@ -117,6 +131,13 @@ interface GatePassMachine {
   machineId?: string;
 }
 
+interface GatePassToolItem {
+  id: string;
+  description: string;
+  quantity: number;
+  serialNo?: string;
+}
+
 interface GatePass {
   id: string;
   gatepassNo: string;
@@ -130,6 +151,7 @@ interface GatePass {
   vehicleNumber: string;
   driverName: string;
   items: GatePassMachine[];
+  tools?: GatePassToolItem[];
   issuedBy?: string;
   receivedBy?: string;
   rentalId?: string;
@@ -165,6 +187,7 @@ const buildCustomerAddress = (customer: any): string => {
 const mapApiGatePassToFrontend = (apiGatePass: ApiGatePass): GatePass => {
   const customer = apiGatePass.customer || apiGatePass.rental?.customer;
   const machines = apiGatePass.machines || [];
+  const tools = apiGatePass.tools || [];
   
   return {
     id: apiGatePass.id,
@@ -186,6 +209,24 @@ const mapApiGatePassToFrontend = (apiGatePass: ApiGatePass): GatePass => {
       motorBoxNo: m.machine?.boxNumber || '',
       machineId: m.machineId,
     })),
+    tools: tools.map((t) => {
+      const tool = t.tool;
+      const description = [
+        tool?.toolName,
+        tool?.toolType ? `(${tool.toolType})` : '',
+        tool?.brand,
+        tool?.model,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      return {
+        id: t.id,
+        description: description || 'Tool',
+        quantity: typeof t.quantity === 'number' ? t.quantity : 1,
+        serialNo: tool?.serialNumber || undefined,
+      };
+    }),
     issuedBy: apiGatePass.issuedBy?.fullName || '',
     receivedBy: '',
     rentalId: apiGatePass.rentalId,
@@ -1325,6 +1366,39 @@ const GatePassPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Tools Table (if any) */}
+      {gatePass.tools && gatePass.tools.length > 0 && (
+        <div className="mb-4 sm:mb-6 overflow-x-auto">
+          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-2">
+            Tools
+          </div>
+          <table className="w-full border-collapse text-xs sm:text-sm min-w-[18rem]">
+            <thead>
+              <tr className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800">
+                <th className="text-left py-2 pr-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
+                <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 w-20">Qty</th>
+                <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gatePass.tools.map((t, idx) => (
+                <tr key={t.id} className="border-b border-gray-200 dark:border-slate-600 print:border-gray-200">
+                  <td className="py-2 pr-2 text-gray-900 dark:text-slate-100 print:text-gray-900 break-words align-top">
+                    {idx + 1}. {t.description}
+                  </td>
+                  <td className="py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900 align-top">
+                    {t.quantity}
+                  </td>
+                  <td className="py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900 break-all align-top">
+                    {t.serialNo || '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 
