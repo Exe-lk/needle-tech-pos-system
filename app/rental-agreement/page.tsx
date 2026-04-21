@@ -250,8 +250,6 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     months > 1 &&
     (almostEqual(subtotal * months + vatAmount, total) || almostEqual(subtotal * months, total));
   const monthlySubtotal = subtotalLooksMonthly ? subtotal : months > 0 ? subtotal / months : subtotal;
-  const machineCount = (r.machines ?? []).length;
-  const perMachineMonthly = machineCount > 0 ? monthlySubtotal / machineCount : 0;
   const addressParts = [
     r.customer.billingAddressLine1,
     r.customer.billingAddressLine2,
@@ -265,6 +263,9 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     const model = rm.machine.model?.name ?? '';
     const type = rm.machine.type?.name ?? '';
     const desc = `${brand} ${model}${type ? ` - ${type}` : ''}`.trim() || 'Machine';
+    const dailyRateNum = Number(rm.dailyRate);
+    const resolvedDailyRate = Number.isFinite(dailyRateNum) ? dailyRateNum : 0;
+    const qty = Number.isFinite(Number(rm.quantity)) && Number(rm.quantity) > 0 ? Number(rm.quantity) : 1;
     return {
       serialNo: rm.machine.serialNumber,
       machineBrand: brand,
@@ -272,7 +273,9 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
       machineType: type,
       machineDescription: desc.toUpperCase(),
       motorBoxNo: rm.machine.boxNumber ?? undefined,
-      monthlyRent: perMachineMonthly,
+      // View/print should reflect the actual assigned machine pricing:
+      // monthly rent per machine = rental_machines.dailyRate * 30 (per assigned machine line).
+      monthlyRent: resolvedDailyRate * 30 * qty,
     };
   });
   const statusMap: Record<string, RentalStatus> = {
