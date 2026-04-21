@@ -30,10 +30,16 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
         },
       },
     });
-    
+
     if (!rental) {
       return notFoundResponse('Rental not found');
     }
+
+    // Load tools separately so we avoid Prisma include typing mismatches on Rental.tools across client versions.
+    const rentalTools = await (prisma as any).rentalTool.findMany({
+      where: { rentalId: id },
+      include: { tool: true },
+    });
 
     const returnedIds = await getReturnedMachineIdsForRental(prisma, id);
     const allMachines = Array.isArray((rental as any).machines) ? (rental as any).machines : [];
@@ -41,7 +47,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
       ? allMachines.filter((rm: any) => !returnedIds.has(rm.machineId))
       : allMachines;
 
-    let payload: any = rental;
+    let payload: any = { ...rental, tools: rentalTools };
     if (returnedIds.size > 0) {
       const start = (rental as any).startDate ? new Date((rental as any).startDate) : new Date();
       const end = (rental as any).expectedEndDate ? new Date((rental as any).expectedEndDate) : null;
@@ -60,13 +66,14 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
       payload = {
         ...rental,
         machines: activeMachines,
+        tools: rentalTools,
         subtotal: new Decimal(newSubtotal),
         vatAmount: new Decimal(newVatAmount),
         total: new Decimal(newTotal),
         balance: new Decimal(Math.max(0, newTotal - Number((rental as any).paidAmount || 0))),
       };
     } else {
-      payload = { ...rental, machines: allMachines };
+      payload = { ...rental, machines: allMachines, tools: rentalTools };
     }
 
     const requestedLines = (rental as any).requestedMachineLines as { id?: string; brand?: string; model?: string; type?: string; quantity?: number }[] | null;

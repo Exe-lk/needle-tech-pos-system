@@ -95,6 +95,16 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
     // Validate requested tool lines exist on the PO. Tools are stored as JSON lines on the purchase order.
     const poTools = Array.isArray((purchaseOrder as any).tools) ? ((purchaseOrder as any).tools as any[]) : [];
     const requestedToolLines: { toolId: string; quantity: number; unitPrice: number }[] = [];
+    /** Persisted on Rental.requestedToolLines (matches schema comment + UI). */
+    const requestedToolLinesJson: {
+      toolId?: string;
+      toolName: string;
+      toolType: string;
+      brand?: string | null;
+      model?: string | null;
+      quantity: number;
+      unitPrice: number;
+    }[] = [];
     if (hasTools) {
       for (const req of tools) {
         const reqToolId = String(req.toolId ?? req.id ?? '');
@@ -108,6 +118,15 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
         if (requestedQty < 1) continue;
         const monthlyUnitPrice = typeof req.unitPrice === 'number' ? req.unitPrice : parseFloat(String(req.unitPrice || 0)) || 0;
         requestedToolLines.push({ toolId: reqToolId, quantity: requestedQty, unitPrice: monthlyUnitPrice });
+        requestedToolLinesJson.push({
+          toolId: reqToolId,
+          toolName: String(line.toolName ?? '').trim(),
+          toolType: String(line.toolType ?? '').trim(),
+          brand: line.brand != null && line.brand !== '' ? String(line.brand) : null,
+          model: line.model != null && line.model !== '' ? String(line.model) : null,
+          quantity: requestedQty,
+          unitPrice: monthlyUnitPrice,
+        });
       }
       if (requestedToolLines.length === 0) {
         return validationErrorResponse('At least one tool line with quantity > 0 is required', {
@@ -152,7 +171,8 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
         customerId: purchaseOrder.customerId,
         purchaseOrderId: purchaseRequestId,
         status: 'PENDING',
-        requestedMachineLines: requestedMachineLines as any,
+        requestedMachineLines: requestedMachineLines.length > 0 ? (requestedMachineLines as any) : undefined,
+        ...(requestedToolLinesJson.length > 0 ? { requestedToolLines: requestedToolLinesJson as any } : {}),
         startDate: new Date(rentalStartDate),
         expectedEndDate: new Date(rentalEndDate),
         subtotal: new Decimal(subtotal),
