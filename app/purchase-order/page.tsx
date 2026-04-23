@@ -167,6 +167,9 @@ const columns: TableColumn[] = [
 
 const PurchaseOrderPage: React.FC = () => {
     const router = useRouter();
+    // Hide "Select Tools to Rent" inside the Hiring Agreement popup by default.
+    // Can be re-enabled via env when needed.
+    const SHOW_RENTAL_TOOLS_SECTION = process.env.NEXT_PUBLIC_ENABLE_RENTAL_TOOLS === 'true';
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
     const [isCreateTypeSelectOpen, setIsCreateTypeSelectOpen] = useState(false);
@@ -636,10 +639,14 @@ const PurchaseOrderPage: React.FC = () => {
         const hasMachineSelection = availableMachinesForRental.some(
             m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0
         );
-        const hasToolSelection = availableToolsForRental.some(
-            (t) => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0
-        );
-        if (!hasMachineSelection && !hasToolSelection) errors.machines = 'Please select at least one machine or tool (check the box and set quantity) to include in the hiring agreement';
+        const hasToolSelection = SHOW_RENTAL_TOOLS_SECTION
+            ? availableToolsForRental.some((t) => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)
+            : false;
+        if (!hasMachineSelection && !hasToolSelection) {
+            errors.machines = SHOW_RENTAL_TOOLS_SECTION
+                ? 'Please select at least one machine or tool (check the box and set quantity) to include in the hiring agreement'
+                : 'Please select at least one machine (check the box and set quantity) to include in the hiring agreement';
+        }
         setRentalFormErrors(errors);
         return Object.keys(errors).length === 0;
     };
@@ -677,13 +684,15 @@ const PurchaseOrderPage: React.FC = () => {
                     quantity: selectedMachinesForRental[m.id],
                     unitPrice: modifiedUnitPrices[m.id] ?? m.unitPrice,
                 }));
-            const toolsToRent = availableToolsForRental
-                .filter(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)
-                .map(t => ({
-                    toolId: t.id,
-                    quantity: selectedToolsForRental[t.id],
-                    unitPrice: modifiedToolUnitPrices[t.id] ?? Number(t.unitPrice ?? 0),
-                }));
+            const toolsToRent = SHOW_RENTAL_TOOLS_SECTION
+                ? availableToolsForRental
+                      .filter(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)
+                      .map(t => ({
+                          toolId: t.id,
+                          quantity: selectedToolsForRental[t.id],
+                          unitPrice: modifiedToolUnitPrices[t.id] ?? Number(t.unitPrice ?? 0),
+                      }))
+                : [];
             const payload = {
                 purchaseRequestId: selectedRequest.id,
                 rentalStartDate: rentalStartDate,
@@ -1310,171 +1319,173 @@ const PurchaseOrderPage: React.FC = () => {
                                         )}
                                         {rentalFormErrors.machines && <p className="text-sm text-red-500">{rentalFormErrors.machines}</p>}
                                     </div>
-                                    <div className="space-y-4">
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Select Tools to Rent</h3>
+                                    {SHOW_RENTAL_TOOLS_SECTION && (
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Select Tools to Rent</h3>
 
-                                        {availableToolsForRental.length === 0 ? (
-                                            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
-                                                <p className="text-sm text-yellow-800 dark:text-yellow-200">No tools available for rental from this purchase request.</p>
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-4">
-                                                {availableToolsForRental.map((tool) => {
-                                                    const included = toolIncludedInRental[tool.id] !== false;
-                                                    const currentPrice = modifiedToolUnitPrices[tool.id] ?? Number(tool.unitPrice ?? 0);
-                                                    const originalPrice = Number((selectedRequest.tools || []).find(t => String(t.toolId ?? t.id) === String(tool.id))?.unitPrice ?? tool.unitPrice ?? 0);
-                                                    const isPriceModified = modifiedToolUnitPrices[tool.id] !== undefined && modifiedToolUnitPrices[tool.id] !== originalPrice;
-                                                    const qty = included ? (selectedToolsForRental[tool.id] || 0) : 0;
-                                                    const subtotal = currentPrice * qty;
-                                                    return (
-                                                        <div key={tool.id} className={`rounded-xl border p-4 shadow-sm transition-shadow ${included ? 'bg-white dark:bg-slate-700/80 border-gray-200 dark:border-slate-600 hover:shadow-md' : 'bg-gray-100 dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 opacity-80'}`}>
-                                                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                                                <div className="min-w-0 flex-1 flex items-center gap-3">
-                                                                    <label className="flex items-center gap-2 shrink-0 cursor-pointer">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={included}
-                                                                            onChange={(e) => handleToggleToolIncluded(tool.id, e.target.checked)}
-                                                                            className="w-4 h-4 rounded border-gray-300 dark:border-slate-500 text-blue-600 dark:text-indigo-500 focus:ring-blue-500 dark:focus:ring-indigo-500"
-                                                                        />
-                                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Include</span>
-                                                                    </label>
-                                                                    <div className="min-w-0">
-                                                                        <h4 className="font-medium text-gray-900 dark:text-white truncate">
-                                                                            {tool.toolName ?? 'Tool'}{' '}
-                                                                            <span className="text-gray-500 dark:text-gray-400 font-normal">({tool.toolType ?? '—'})</span>
-                                                                        </h4>
-                                                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
-                                                                                Available: {tool.canRent}
-                                                                            </span>
-                                                                            {tool.stillPending > 0 && (
-                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                                                                                    {tool.stillPending} pending
+                                            {availableToolsForRental.length === 0 ? (
+                                                <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
+                                                    <p className="text-sm text-yellow-800 dark:text-yellow-200">No tools available for rental from this purchase request.</p>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    {availableToolsForRental.map((tool) => {
+                                                        const included = toolIncludedInRental[tool.id] !== false;
+                                                        const currentPrice = modifiedToolUnitPrices[tool.id] ?? Number(tool.unitPrice ?? 0);
+                                                        const originalPrice = Number((selectedRequest.tools || []).find(t => String(t.toolId ?? t.id) === String(tool.id))?.unitPrice ?? tool.unitPrice ?? 0);
+                                                        const isPriceModified = modifiedToolUnitPrices[tool.id] !== undefined && modifiedToolUnitPrices[tool.id] !== originalPrice;
+                                                        const qty = included ? (selectedToolsForRental[tool.id] || 0) : 0;
+                                                        const subtotal = currentPrice * qty;
+                                                        return (
+                                                            <div key={tool.id} className={`rounded-xl border p-4 shadow-sm transition-shadow ${included ? 'bg-white dark:bg-slate-700/80 border-gray-200 dark:border-slate-600 hover:shadow-md' : 'bg-gray-100 dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 opacity-80'}`}>
+                                                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                                                    <div className="min-w-0 flex-1 flex items-center gap-3">
+                                                                        <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={included}
+                                                                                onChange={(e) => handleToggleToolIncluded(tool.id, e.target.checked)}
+                                                                                className="w-4 h-4 rounded border-gray-300 dark:border-slate-500 text-blue-600 dark:text-indigo-500 focus:ring-blue-500 dark:focus:ring-indigo-500"
+                                                                            />
+                                                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Include</span>
+                                                                        </label>
+                                                                        <div className="min-w-0">
+                                                                            <h4 className="font-medium text-gray-900 dark:text-white truncate">
+                                                                                {tool.toolName ?? 'Tool'}{' '}
+                                                                                <span className="text-gray-500 dark:text-gray-400 font-normal">({tool.toolType ?? '—'})</span>
+                                                                            </h4>
+                                                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                                                                                    Available: {tool.canRent}
                                                                                 </span>
-                                                                            )}
-                                                                            {isPriceModified && included && (
-                                                                                <span className="text-xs text-blue-600 dark:text-blue-400">
-                                                                                    Original: Rs. {Number(originalPrice).toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                                                </span>
-                                                                            )}
+                                                                                {tool.stillPending > 0 && (
+                                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                                                                        {tool.stillPending} pending
+                                                                                    </span>
+                                                                                )}
+                                                                                {isPriceModified && included && (
+                                                                                    <span className="text-xs text-blue-600 dark:text-blue-400">
+                                                                                        Original: Rs. {Number(originalPrice).toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
                                                                         </div>
                                                                     </div>
-                                                                </div>
-                                                                <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Rs.</span>
-                                                                        <div className="relative inline-block">
-                                                                            <input
-                                                                                type="number"
-                                                                                min="0"
-                                                                                step="0.01"
-                                                                                value={currentPrice}
-                                                                                onChange={(e) => handleToolUnitPriceChange(tool.id, parseFloat(e.target.value) || 0)}
-                                                                                disabled={!included}
-                                                                                className="w-24 sm:w-28 px-3 py-2 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                                            />
-                                                                            <button
-                                                                                type="button"
-                                                                                aria-label="Decrease unit price"
-                                                                                onClick={() => {
-                                                                                    const next = Math.max(0, Number(((Number(currentPrice) || 0) - 0.01).toFixed(2)));
-                                                                                    handleToolUnitPriceChange(tool.id, next);
-                                                                                }}
-                                                                                disabled={!included}
-                                                                                className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                                            >
-                                                                                <Minus className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                            <button
-                                                                                type="button"
-                                                                                aria-label="Increase unit price"
-                                                                                onClick={() => {
-                                                                                    const next = Number(((Number(currentPrice) || 0) + 0.01).toFixed(2));
-                                                                                    handleToolUnitPriceChange(tool.id, next);
-                                                                                }}
-                                                                                disabled={!included}
-                                                                                className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                                            >
-                                                                                <Plus className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                        </div>
-                                                                        {isPriceModified && included && (
-                                                                            <Tooltip content="Reset to original price">
+                                                                    <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Rs.</span>
+                                                                            <div className="relative inline-block">
+                                                                                <input
+                                                                                    type="number"
+                                                                                    min="0"
+                                                                                    step="0.01"
+                                                                                    value={currentPrice}
+                                                                                    onChange={(e) => handleToolUnitPriceChange(tool.id, parseFloat(e.target.value) || 0)}
+                                                                                    disabled={!included}
+                                                                                    className="w-24 sm:w-28 px-3 py-2 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                                />
                                                                                 <button
                                                                                     type="button"
-                                                                                    onClick={() =>
-                                                                                        setModifiedToolUnitPrices(prev => {
-                                                                                            const u = { ...prev };
-                                                                                            delete u[tool.id];
-                                                                                            return u;
-                                                                                        })
-                                                                                    }
-                                                                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+                                                                                    aria-label="Decrease unit price"
+                                                                                    onClick={() => {
+                                                                                        const next = Math.max(0, Number(((Number(currentPrice) || 0) - 0.01).toFixed(2)));
+                                                                                        handleToolUnitPriceChange(tool.id, next);
+                                                                                    }}
+                                                                                    disabled={!included}
+                                                                                    className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
                                                                                 >
-                                                                                    Reset
+                                                                                    <Minus className="w-3.5 h-3.5" />
                                                                                 </button>
-                                                                            </Tooltip>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Qty</span>
-                                                                        <div className="relative inline-block">
-                                                                            <input
-                                                                                type="number"
-                                                                                min="0"
-                                                                                max={tool.canRent}
-                                                                                value={qty}
-                                                                                onChange={(e) => {
-                                                                                    const val = Math.max(0, Math.min(parseInt(e.target.value) || 0, tool.canRent));
-                                                                                    setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: val });
-                                                                                }}
-                                                                                disabled={!included}
-                                                                                className="w-16 sm:w-20 px-3 py-2 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                                            />
-                                                                            <button
-                                                                                type="button"
-                                                                                aria-label="Decrease quantity"
-                                                                                onClick={() => {
-                                                                                    const next = Math.max(0, Math.min((Number(qty) || 0) - 1, tool.canRent));
-                                                                                    setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: next });
-                                                                                }}
-                                                                                disabled={!included}
-                                                                                className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                                            >
-                                                                                <Minus className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                            <button
-                                                                                type="button"
-                                                                                aria-label="Increase quantity"
-                                                                                onClick={() => {
-                                                                                    const next = Math.max(0, Math.min((Number(qty) || 0) + 1, tool.canRent));
-                                                                                    setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: next });
-                                                                                }}
-                                                                                disabled={!included}
-                                                                                className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                                            >
-                                                                                <Plus className="w-3.5 h-3.5" />
-                                                                            </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    aria-label="Increase unit price"
+                                                                                    onClick={() => {
+                                                                                        const next = Number(((Number(currentPrice) || 0) + 0.01).toFixed(2));
+                                                                                        handleToolUnitPriceChange(tool.id, next);
+                                                                                    }}
+                                                                                    disabled={!included}
+                                                                                    className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                                >
+                                                                                    <Plus className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            </div>
+                                                                            {isPriceModified && included && (
+                                                                                <Tooltip content="Reset to original price">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setModifiedToolUnitPrices(prev => {
+                                                                                                const u = { ...prev };
+                                                                                                delete u[tool.id];
+                                                                                                return u;
+                                                                                            })
+                                                                                        }
+                                                                                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+                                                                                    >
+                                                                                        Reset
+                                                                                    </button>
+                                                                                </Tooltip>
+                                                                            )}
                                                                         </div>
-                                                                        <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">/ {tool.canRent}</span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-1 sm:min-w-[120px]">
-                                                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">=</span>
-                                                                        <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                                                                            Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                                        </span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Qty</span>
+                                                                            <div className="relative inline-block">
+                                                                                <input
+                                                                                    type="number"
+                                                                                    min="0"
+                                                                                    max={tool.canRent}
+                                                                                    value={qty}
+                                                                                    onChange={(e) => {
+                                                                                        const val = Math.max(0, Math.min(parseInt(e.target.value) || 0, tool.canRent));
+                                                                                        setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: val });
+                                                                                    }}
+                                                                                    disabled={!included}
+                                                                                    className="w-16 sm:w-20 px-3 py-2 pl-7 pr-7 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                                />
+                                                                                <button
+                                                                                    type="button"
+                                                                                    aria-label="Decrease quantity"
+                                                                                    onClick={() => {
+                                                                                        const next = Math.max(0, Math.min((Number(qty) || 0) - 1, tool.canRent));
+                                                                                        setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: next });
+                                                                                    }}
+                                                                                    disabled={!included}
+                                                                                    className="absolute inset-y-0 left-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                                >
+                                                                                    <Minus className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    aria-label="Increase quantity"
+                                                                                    onClick={() => {
+                                                                                        const next = Math.max(0, Math.min((Number(qty) || 0) + 1, tool.canRent));
+                                                                                        setSelectedToolsForRental({ ...selectedToolsForRental, [tool.id]: next });
+                                                                                    }}
+                                                                                    disabled={!included}
+                                                                                    className="absolute inset-y-0 right-1 flex items-center p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                                >
+                                                                                    <Plus className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            </div>
+                                                                            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">/ {tool.canRent}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1 sm:min-w-[120px]">
+                                                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">=</span>
+                                                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                                                                Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                            </span>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     {(availableMachinesForRental.some(m => machineIncludedInRental[m.id] && (selectedMachinesForRental[m.id] || 0) > 0) ||
-                                        availableToolsForRental.some(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)) && (
+                                        (SHOW_RENTAL_TOOLS_SECTION && availableToolsForRental.some(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0))) && (
                                         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                                             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Rental Summary</h3>
                                             <div className="space-y-2 text-sm">
@@ -1489,25 +1500,28 @@ const PurchaseOrderPage: React.FC = () => {
                                                         </div>
                                                     );
                                                 })}
-                                                {availableToolsForRental
-                                                    .filter(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)
-                                                    .map((tool) => {
-                                                        const finalPrice = modifiedToolUnitPrices[tool.id] ?? Number(tool.unitPrice ?? 0);
-                                                        const quantity = selectedToolsForRental[tool.id] || 0;
-                                                        const subtotal = finalPrice * quantity;
-                                                        return (
-                                                            <div key={`tool-summary-${tool.id}`} className="flex justify-between">
-                                                                <span className="text-gray-600 dark:text-gray-400">{tool.toolName ?? 'Tool'} × {quantity}</span>
-                                                                <span className="font-medium text-gray-900 dark:text-white">Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                                            </div>
-                                                        );
-                                                    })}
+                                                {SHOW_RENTAL_TOOLS_SECTION &&
+                                                    availableToolsForRental
+                                                        .filter(t => toolIncludedInRental[t.id] && (selectedToolsForRental[t.id] || 0) > 0)
+                                                        .map((tool) => {
+                                                            const finalPrice = modifiedToolUnitPrices[tool.id] ?? Number(tool.unitPrice ?? 0);
+                                                            const quantity = selectedToolsForRental[tool.id] || 0;
+                                                            const subtotal = finalPrice * quantity;
+                                                            return (
+                                                                <div key={`tool-summary-${tool.id}`} className="flex justify-between">
+                                                                    <span className="text-gray-600 dark:text-gray-400">{tool.toolName ?? 'Tool'} × {quantity}</span>
+                                                                    <span className="font-medium text-gray-900 dark:text-white">Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                </div>
+                                                            );
+                                                        })}
                                                 <div className="border-t border-blue-200 dark:border-blue-800 pt-2 mt-2 flex justify-between">
                                                     <span className="font-semibold text-gray-900 dark:text-white">Total Monthly Rent:</span>
                                                     <span className="font-bold text-lg text-blue-600 dark:text-blue-400">
                                                         Rs. {(
                                                             availableMachinesForRental.reduce((sum, m) => sum + (machineIncludedInRental[m.id] ? (modifiedUnitPrices[m.id] ?? m.unitPrice) * (selectedMachinesForRental[m.id] || 0) : 0), 0) +
-                                                            availableToolsForRental.reduce((sum, t) => sum + (toolIncludedInRental[t.id] ? (modifiedToolUnitPrices[t.id] ?? Number(t.unitPrice ?? 0)) * (selectedToolsForRental[t.id] || 0) : 0), 0)
+                                                            (SHOW_RENTAL_TOOLS_SECTION
+                                                                ? availableToolsForRental.reduce((sum, t) => sum + (toolIncludedInRental[t.id] ? (modifiedToolUnitPrices[t.id] ?? Number(t.unitPrice ?? 0)) * (selectedToolsForRental[t.id] || 0) : 0), 0)
+                                                                : 0)
                                                         ).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
                                                 </div>
