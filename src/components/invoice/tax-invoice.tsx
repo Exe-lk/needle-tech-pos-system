@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
+import { QRCodeSVG } from 'qrcode.react';
 
 export interface TaxInvoiceProps {
   invoiceNumber: string;
@@ -209,12 +210,18 @@ export function TaxInvoice({
         </table>
       </div>
 
-      {/* Footer Instructions */}
-      <div className="mt-auto text-xs space-y-1 text-gray-700">
-        <p>All cheques to be drawn in favour of <span className="font-bold text-black">" Needle Technologies Company (Pvt) Ltd "</span></p>
-        <p className="font-bold text-black pt-2">Bank Details :</p>
-        <p>A/C 1420027865, Commercial Bank, Kaduwela.</p>
-        <p>Kindly mention your invoice number for the reference.</p>
+      {/* Footer Instructions & QR */}
+      <div className="mt-auto flex items-end gap-8">
+        <div className="border border-gray-200 p-1.5 bg-white rounded-md flex flex-col items-center">
+          <QRCodeSVG value={invoiceNumber} size={70} />
+          <span className="text-[8px] text-gray-500 mt-1 uppercase font-semibold">Scan QR</span>
+        </div>
+        <div className="text-xs space-y-1 text-gray-700 flex-1">
+          <p>All cheques to be drawn in favour of <span className="font-bold text-black">" Needle Technologies Company (Pvt) Ltd "</span></p>
+          <p className="font-bold text-black pt-2">Bank Details :</p>
+          <p>A/C 1420027865, Commercial Bank, Kaduwela.</p>
+          <p>Kindly mention your invoice number for the reference.</p>
+        </div>
       </div>
 
       {/* Signatures */}

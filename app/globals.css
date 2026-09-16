@@ -118,3 +118,13 @@ body {
     overflow: visible;
   }
 }
+
+/* Hide default browser header/footer (URL, Date) on printed pages */
+@media print {
+  @page {
+    margin: 0;
+  }
+  body {
+    margin: 1cm;
+  }
+}

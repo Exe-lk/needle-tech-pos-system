@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
+import { QRCodeSVG } from 'qrcode.react';
 
 export interface GatepassDocumentProps {
   from: string;
@@ -156,14 +157,20 @@ export function GatepassDocument({
       </div>
 
       {/* Footer Details */}
-      <div className="mt-auto text-center">
-        <div className="text-[10px] text-gray-500 tracking-wider mb-6 leading-relaxed max-w-4xl mx-auto uppercase">
-          {info.importerInfo}
+      <div className="mt-auto relative">
+        <div className="absolute bottom-0 left-0 border border-gray-200 p-1.5 bg-white rounded-md flex flex-col items-center">
+          <QRCodeSVG value={gatepassNo} size={70} />
+          <span className="text-[8px] text-gray-500 mt-1 uppercase font-semibold">Scan QR</span>
         </div>
-        
-        <div className="border-t border-gray-300 pt-3">
-          <div className="text-[11px] text-gray-600 space-y-1">
-            {info.address}, Tel: {info.telephone.join(', ')} Fax: {info.fax}, Email: {info.email}
+        <div className="text-center pl-24">
+          <div className="text-[10px] text-gray-500 tracking-wider mb-6 leading-relaxed max-w-4xl mx-auto uppercase">
+            {info.importerInfo}
+          </div>
+          
+          <div className="border-t border-gray-300 pt-3">
+            <div className="text-[11px] text-gray-600 space-y-1">
+              {info.address}, Tel: {info.telephone.join(', ')} Fax: {info.fax}, Email: {info.email}
+            </div>
           </div>
         </div>
       </div>

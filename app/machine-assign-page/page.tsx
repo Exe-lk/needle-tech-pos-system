@@ -297,6 +297,8 @@ const MachineAssignPage: React.FC = () => {
   const [agreementNumberInput, setAgreementNumberInput] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [isScanningDocument, setIsScanningDocument] = useState(false);
+  const [documentScannerKey, setDocumentScannerKey] = useState(0);
   const [pendingAgreements, setPendingAgreements] = useState<PendingAgreementOption[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [pendingError, setPendingError] = useState<string | null>(null);
@@ -912,72 +914,97 @@ const MachineAssignPage: React.FC = () => {
         <div className="px-4 py-8">
           <div className="max-w-md mx-auto space-y-4">
             <div className="bg-white dark:bg-slate-800/60 backdrop-blur-sm rounded-2xl border border-gray-200 dark:border-slate-700/60 p-6 space-y-4 shadow-sm dark:shadow-none">
-              <label htmlFor="agreement-input" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
+              <label
+                htmlFor="agreement-input"
+                className="block text-sm font-medium text-gray-700 dark:text-slate-300"
+              >
                 Agreement Number
               </label>
-              <div ref={agreementDropdownRef} className="relative">
-                <input
-                  id="agreement-input"
-                  type="text"
-                  autoComplete="off"
-                  value={agreementNumberInput}
-                  onChange={(e) => {
-                    setAgreementNumberInput(e.target.value);
-                    setLookupError(null);
-                    setShowAgreementDropdown(true);
-                  }}
-                  onFocus={() => setShowAgreementDropdown(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setShowAgreementDropdown(false);
-                    }
-                    if (e.key === 'Enter') {
-                      void handleContinueFromStep1();
-                    }
-                  }}
-                  placeholder={pendingLoading ? 'Loading pending agreements...' : 'Search pending agreement number'}
-                  className="w-full min-h-[52px] pr-12 px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowAgreementDropdown((prev) => !prev)}
-                  className="absolute inset-y-0 right-0 px-3 text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
-                  aria-label="Toggle pending agreement list"
-                >
-                  <ChevronDown className={`w-5 h-5 transition-transform ${showAgreementDropdown ? 'rotate-180' : ''}`} />
-                </button>
+              {isScanningDocument ? (
+                <div className="space-y-4">
+                  <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-slate-700">
+                    <QRScannerComponent
+                      key={`doc-scan-${documentScannerKey}`}
+                      onScanSuccess={(decoded) => {
+                        const val = decoded.trim();
+                        if (val) {
+                          setAgreementNumberInput(val);
+                          setIsScanningDocument(false);
+                          setLookupError(null);
+                          setTimeout(() => {
+                             const btn = document.getElementById('step1-continue-btn');
+                             if (btn) btn.click();
+                          }, 300);
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsScanningDocument(false)}
+                    className="w-full py-3 text-sm font-semibold text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    Cancel Scan
+                  </button>
+                </div>
+              ) : (
+                <div className="relative flex gap-2" ref={agreementDropdownRef}>
+                  <input
+                    id="agreement-input"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    value={agreementNumberInput}
+                    onChange={(e) => {
+                      setAgreementNumberInput(e.target.value);
+                      setLookupError(null);
+                      setShowAgreementDropdown(true);
+                    }}
+                    onFocus={() => setShowAgreementDropdown(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setShowAgreementDropdown(false);
+                      }
+                      if (e.key === 'Enter') {
+                        void handleContinueFromStep1();
+                      }
+                    }}
+                    placeholder={pendingLoading ? 'Loading pending agreements...' : 'Search pending agreement number'}
+                    className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setIsScanningDocument(true); setDocumentScannerKey(k => k + 1); setShowAgreementDropdown(false); }}
+                    className="px-4 min-h-[52px] bg-blue-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-slate-600 rounded-xl hover:bg-blue-100 dark:hover:bg-slate-600 flex items-center justify-center transition-colors shrink-0"
+                    aria-label="Scan Document QR"
+                  >
+                    <Scan className="w-5 h-5" />
+                  </button>
 
-                {showAgreementDropdown && (
-                  <div className="absolute z-20 mt-2 w-full max-h-64 overflow-y-auto rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg">
-                    {pendingLoading ? (
-                      <p className="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">Loading pending agreements...</p>
-                    ) : pendingError ? (
-                      <p className="px-4 py-3 text-sm text-red-600 dark:text-red-400">{pendingError}</p>
-                    ) : filteredPendingAgreements.length === 0 ? (
-                      <p className="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">No matching pending agreements.</p>
-                    ) : (
-                      filteredPendingAgreements.map((item) => (
-                        <button
-                          key={item.id || item.agreementNo}
-                          type="button"
+                  {showAgreementDropdown && filteredPendingAgreements.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg max-h-60 overflow-auto" style={{ top: '100%' }}>
+                      {filteredPendingAgreements.map((item) => (
+                        <div
+                          key={item.id}
+                          className="px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700/50 last:border-0"
                           onClick={() => {
                             setAgreementNumberInput(item.agreementNo);
-                            setLookupError(null);
                             setShowAgreementDropdown(false);
                           }}
-                          className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-slate-800/80 border-b last:border-b-0 border-gray-100 dark:border-slate-800"
                         >
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">{item.agreementNo}</p>
-                          <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
-                            {item.customerName || 'Customer name unavailable'}
-                          </p>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {item.agreementNo}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                            {item.customerName}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {lookupError && (
                 <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2" role="alert">
                   <span className="w-1.5 h-1.5 bg-red-500 dark:bg-red-400 rounded-full"></span>
@@ -988,6 +1015,7 @@ const MachineAssignPage: React.FC = () => {
                 Search and select a pending rental agreement number, then continue.
               </p>
               <button
+                id="step1-continue-btn"
                 type="button"
                 onClick={() => void handleContinueFromStep1()}
                 disabled={lookupLoading}

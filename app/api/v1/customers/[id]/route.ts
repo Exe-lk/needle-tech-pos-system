@@ -63,6 +63,31 @@ export const PUT = withAuthAndPermission(['customers:update', 'management:*', '*
     const resolvedVatRegistrationNumber = effectiveType === 'INDIVIDUAL'
       ? (body.nicNumber ?? body.vatRegistrationNumber)
       : body.vatRegistrationNumber;
+
+    const businessTaxFieldsInBody =
+      effectiveType === 'GARMENT_FACTORY' &&
+      ('vatRegistrationNumber' in body || 'tinNumber' in body);
+
+    if (businessTaxFieldsInBody) {
+      const vat =
+        typeof body.vatRegistrationNumber === 'string'
+          ? body.vatRegistrationNumber.trim()
+          : body.vatRegistrationNumber;
+      const tin =
+        typeof body.tinNumber === 'string' ? body.tinNumber.trim() : body.tinNumber;
+      if (!vat || !tin) {
+        return validationErrorResponse('Business customers require VAT and TIN numbers', {
+          ...(!vat ? { vatRegistrationNumber: ['VAT number is required'] } : {}),
+          ...(!tin ? { tinNumber: ['TIN number is required'] } : {}),
+        });
+      }
+    }
+
+    const resolvedTinNumber = businessTaxFieldsInBody
+      ? (typeof body.tinNumber === 'string' ? body.tinNumber.trim() : body.tinNumber)
+      : body.tinNumber != null && effectiveType === 'GARMENT_FACTORY'
+        ? (typeof body.tinNumber === 'string' ? body.tinNumber.trim() : body.tinNumber)
+        : undefined;
     
     const updateData: any = {
       ...(body.name != null && { name: body.name }),
@@ -83,6 +108,7 @@ export const PUT = withAuthAndPermission(['customers:update', 'management:*', '*
       ...(body.shippingPostalCode != null && { shippingPostalCode: body.shippingPostalCode }),
       ...(body.shippingCountry != null && { shippingCountry: body.shippingCountry }),
       ...(resolvedVatRegistrationNumber != null && { vatRegistrationNumber: resolvedVatRegistrationNumber }),
+      ...(resolvedTinNumber !== undefined && { tinNumber: resolvedTinNumber || null }),
       ...(body.status && { status: body.status }),
     };
 
