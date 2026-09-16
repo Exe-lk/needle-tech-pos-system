@@ -5,6 +5,7 @@ import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import { Decimal } from '@prisma/client/runtime/client';
 import { getReturnedMachineIdsForRentals } from '@/lib/rental-returns';
+import { logAuditAction } from '@/lib/audit-logger';
 
 function parseExpectedFromLockedReason(lockedReason: string | null): { expectedMachineCount?: number; expectedMachineCategories?: { id: string; brand: string; model: string; type: string; quantity: number }[] } {
   if (!lockedReason) return {};
@@ -181,7 +182,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, auth: { id: string }) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, auth: any) => {
   try {
     const body = await request.json();
     const { 
@@ -320,6 +321,15 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer
     const rentalWithMachines = await prisma.rental.findUnique({
       where: { id: newRental.id },
       include: { customer: true, machines: { include: { machine: { include: { brand: true, model: true, type: true } } } } },
+    });
+    
+    // Log audit action
+    await logAuditAction(request, auth, {
+      action: 'CREATE',
+      entityType: 'Rental',
+      entityId: newRental.id,
+      description: `Hiring Agreement ${newRental.agreementNumber} created`,
+      after: rentalWithMachines || newRental,
     });
     
     return successResponse(rentalWithMachines ?? newRental, 'Rental created successfully', 201);

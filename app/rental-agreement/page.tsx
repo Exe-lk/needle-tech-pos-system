@@ -11,8 +11,9 @@ import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument, LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
+import { HiringMachineAgreementPrint } from '@/src/components/rental-agreement/hiring-machine-agreement-print';
 
-type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
+export type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
 
 // Expected machine category (brand, model, type, quantity) for pending agreements
 interface ExpectedMachineCategory {
@@ -45,7 +46,7 @@ interface RentalAgreement {
 }
 
 // Machine detail interface for agreement
-interface MachineDetail {
+export interface MachineDetail {
   serialNo: string;
   machineBrand: string;
   machineModel: string;
@@ -64,7 +65,7 @@ interface ToolDetailLine {
 }
 
 // Rental Agreement Detail Data Types
-interface RentalAgreementInfo {
+export interface RentalAgreementInfo {
   id: string;
   agreementNo: string;
   customerNo: string;
@@ -2635,22 +2636,6 @@ const RentalAgreementPage: React.FC = () => {
         </div>
       </div>
     );
-
-    return (
-      <div
-        className="bg-white dark:!bg-white text-black dark:!text-black w-full p-6 sm:p-8 max-w-[210mm] mx-auto print:w-[210mm] print:max-w-[210mm] print:p-8 print:overflow-visible"
-        style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
-      >
-        <LetterheadDocument
-          documentTitle="HIRING MACHINE AGREEMENT"
-          footerStyle="simple"
-          footerContent={signatureBlock}
-          className="print:p-0 dark:!bg-white dark:!text-black"
-        >
-          {mainContent}
-        </LetterheadDocument>
-      </div>
-    );
   };
 
   // Machine Assignment section: only for Pending agreements; category-based scan (brand, model, type, count, scan button per category).
@@ -2910,7 +2895,7 @@ const RentalAgreementPage: React.FC = () => {
           className="hidden print:block print:bg-white print:z-[9999] print:overflow-visible"
           style={{ printColorAdjust: 'exact' } as React.CSSProperties}
         >
-          {renderRentalAgreementDocument(rentalDetail)}
+          <HiringMachineAgreementPrint agreementInfo={rentalDetail} />
         </div>
       )}
 

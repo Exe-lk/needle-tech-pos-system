@@ -4,6 +4,7 @@ import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import { Decimal } from '@prisma/client/runtime/client';
 import { getReturnedMachineIdsForRental } from '@/lib/rental-returns';
+import { logAuditAction } from '@/lib/audit-logger';
 
 export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'], async (
   request: NextRequest,
@@ -380,6 +381,22 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     const activeMachineCount = (updatedRental.machines as any[]).filter(
       (rm: any) => !returnedIdsAfterPut.has(rm.machineId)
     ).length;
+    
+    // Log audit action
+    await logAuditAction(request, auth, {
+      action: 'UPDATE',
+      entityType: 'Rental',
+      entityId: updatedRental.id,
+      description: `Hiring Agreement ${updatedRental.agreementNumber} updated (Status: ${updatedRental.status})`,
+      before: {
+        status: existingRental.status,
+        machinesCount: (existingRental.machines as any[])?.length || 0
+      },
+      after: {
+        status: updatedRental.status,
+        machinesCount: (updatedRental.machines as any[])?.length || 0
+      }
+    });
     
     return successResponse({
       id: updatedRental.id,
