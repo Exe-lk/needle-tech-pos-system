@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma';
 import type { AuthUser } from '@/lib/auth-supabase';
 import { getReturnedMachineIdsForRental } from '@/lib/rental-returns';
 import { processReturnPostProcessing } from '@/lib/return-post-processing';
+import { logAuditAction } from '@/lib/audit-logger';
 
 /**
  * @swagger
@@ -404,6 +405,15 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
         photosCount: rm.photos.length,
       })),
     };
+    
+    // Log audit action
+    await logAuditAction(request, auth, {
+      action: 'CREATE',
+      entityType: 'Return',
+      entityId: newReturn!.id,
+      description: `Return ${newReturn!.returnNumber} created for Rental ${rental.agreementNumber} (${machines.length} machines)`,
+      after: transformed,
+    });
     
     return successResponse(
       { ...transformed, ...postProcessingResult },

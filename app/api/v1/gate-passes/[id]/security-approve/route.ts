@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
+import { logAuditAction } from '@/lib/audit-logger';
 
 /**
  * @swagger
@@ -120,6 +121,16 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
     const updatedGatePass = await prisma.gatePass.findUnique({
       where: { id },
       select: { id: true, gatePassNumber: true },
+    });
+    
+    // Log audit action
+    await logAuditAction(request, auth, {
+      action: 'UPDATE',
+      entityType: 'GatePass',
+      entityId: id,
+      description: `Gatepass ${updatedGatePass?.gatePassNumber || id} security approved. Rental activated and inventory updated.`,
+      before: { status: 'PENDING' },
+      after: { status: 'DEPARTED', machinesDispatched: machineIds.length },
     });
     
     return successResponse(

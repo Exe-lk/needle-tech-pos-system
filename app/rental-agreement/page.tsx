@@ -11,8 +11,9 @@ import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument, LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
 import { authFetch } from '@/lib/auth-client';
+import { HiringMachineAgreementPrint } from '@/src/components/rental-agreement/hiring-machine-agreement-print';
 
-type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
+export type RentalStatus = 'Active' | 'Completed' | 'Cancelled' | 'Pending';
 
 // Expected machine category (brand, model, type, quantity) for pending agreements
 interface ExpectedMachineCategory {
@@ -45,7 +46,7 @@ interface RentalAgreement {
 }
 
 // Machine detail interface for agreement
-interface MachineDetail {
+export interface MachineDetail {
   serialNo: string;
   machineBrand: string;
   machineModel: string;
@@ -56,7 +57,7 @@ interface MachineDetail {
 }
 
 // Rental Agreement Detail Data Types
-interface RentalAgreementInfo {
+export interface RentalAgreementInfo {
   id: string;
   agreementNo: string;
   customerNo: string;
@@ -2294,166 +2295,13 @@ const RentalAgreementPage: React.FC = () => {
 
   // Render Rental Agreement Document for Printing (letterhead style - matches HIRING MACHINE AGREEMENT)
   const renderRentalAgreementDocument = (agreementInfo: RentalAgreementInfo) => {
-    const totalMonthlyRent = agreementInfo.machines.reduce((sum, machine) => sum + machine.monthlyRent, 0);
-    const dateOfIssue = agreementInfo.startDate
-      ? new Date(agreementInfo.startDate).toLocaleDateString('en-LK', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      })
-      : 'TBD';
-    const signatureDate = agreementInfo.customerSignatureDate
-      ? new Date(agreementInfo.customerSignatureDate).toLocaleDateString('en-LK', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      })
-      : '';
-
-    const mainContent = (
-      <>
-        {/* Two-column: Customer (left) | Agreement (right) same row; Address (left) | Date of Issue (right) same row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 mb-6">
-          <div className="space-y-2">
-            <div>
-              <span className="text-sm font-semibold text-gray-700">Customer: </span>
-              <span className="text-sm text-gray-900">{agreementInfo.customerName}</span>
-            </div>
-            <div>
-              <span className="text-sm font-semibold text-gray-700">Address: </span>
-              <span className="text-sm text-gray-900">{agreementInfo.customerAddress || 'N/A'}</span>
-            </div>
-          </div>
-          <div className="space-y-2 text-left sm:text-right print:text-right">
-            <div>
-              <span className="text-sm font-semibold text-gray-700">Agreement: </span>
-              <span className="text-sm text-gray-900">-{agreementInfo.agreementNo || 'TBD'}</span>
-            </div>
-            <div>
-              <span className="text-sm font-semibold text-gray-700">Date of Issue: </span>
-              <span className="text-sm text-gray-900">-{dateOfIssue}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Machine details table - Model/Description, Serial No, Motor/Box No, Monthly Res */}
-        <div className="mb-4">
-          <table className="w-full border-collapse border border-gray-800">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-800 px-3 py-2 text-left text-sm font-semibold text-gray-900">
-                  Model - Description
-                </th>
-                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
-                  Serial No
-                </th>
-                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
-                  Motor / Box No
-                </th>
-                <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
-                  Monthly Rent
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {agreementInfo.machines.map((machine, index) => (
-                <tr key={index}>
-                  <td className="border border-gray-800 px-3 py-2 text-sm text-gray-900">
-                    {machine.machineDescription}
-                  </td>
-                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
-                    {machine.serialNo}
-                  </td>
-                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
-                    {machine.motorBoxNo || 'N/A'}
-                  </td>
-                  <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
-                    {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="mt-2 text-sm font-semibold text-gray-900">
-            Total: {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-          </div>
-        </div>
-
-        {/* Additional Parts */}
-        {agreementInfo.additionalParts && (
-          <div className="mb-4">
-            <div className="text-sm font-semibold text-gray-700 mb-1">Additional Parts</div>
-            <div className="text-sm text-gray-900">- {agreementInfo.additionalParts}</div>
-          </div>
-        )}
-
-        {/* Terms & Conditions */}
-        <div className="mb-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-3">Terms & Conditions</h3>
-          <div className="space-y-2 text-sm text-gray-900">
-            <p>
-              <span className="font-semibold">(01)</span> You have to be paid in cash double monthly rental fee on the date of rent machine issues.
-              The excess payment would be immediately return to you as and when you returned the hired
-              machine within the stipulated period.
-            </p>
-            <p>
-              <span className="font-semibold">(02)</span> Above payment has to be paid 05 days prior to next month.
-            </p>
-            <p>
-              <span className="font-semibold">(03)</span> Customer has to take total responsibility with regard to security of the machine.
-            </p>
-            <p>
-              <span className="font-semibold">(04)</span> Both the parties can withdraw or return the machine with one month prior notice.
-            </p>
-            <p>
-              <span className="font-semibold">(05)</span> Company will examine the machine at the point of returning and will release due security deposit.
-            </p>
-          </div>
-        </div>
-      </>
-    );
-
-    const signatureBlock = (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 print:break-inside-avoid">
-        <div>
-          <div className="text-sm font-semibold text-gray-700 mb-2">Customer Signature</div>
-          <div className="border-b border-gray-800 pb-2 min-h-[44px]">
-            {agreementInfo.customerSignature && (
-              <div className="text-sm text-gray-900">{agreementInfo.customerSignature}</div>
-            )}
-          </div>
-          <div className="text-xs text-gray-600 mt-1">(Agreed upon the terms & Conditions)</div>
-        </div>
-        <div className="space-y-2">
-          <div>
-            <span className="text-sm font-semibold text-gray-700">ID NO: </span>
-            <span className="text-sm text-gray-900">{agreementInfo.customerIdNo ?? ''}</span>
-          </div>
-          <div>
-            <span className="text-sm font-semibold text-gray-700">Full Name: </span>
-            <span className="text-sm text-gray-900">{agreementInfo.customerFullName ?? ''}</span>
-          </div>
-          <div>
-            <span className="text-sm font-semibold text-gray-700">Date: </span>
-            <span className="text-sm text-gray-900">{signatureDate}</span>
-          </div>
-        </div>
-      </div>
-    );
-
     return (
-      <div
-        className="bg-white dark:!bg-white text-black dark:!text-black w-full p-6 sm:p-8 max-w-[210mm] mx-auto print:w-[210mm] print:max-w-[210mm] print:p-8 print:overflow-visible"
-        style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
-      >
-        <LetterheadDocument
-          documentTitle="HIRING MACHINE AGREEMENT"
-          footerStyle="simple"
-          footerContent={signatureBlock}
-          className="print:p-0 dark:!bg-white dark:!text-black"
-        >
-          {mainContent}
-        </LetterheadDocument>
+      <div>
+        <div className="print:hidden">
+          <div className="space-y-6">
+            <HiringMachineAgreementPrint agreementInfo={agreementInfo} />
+          </div>
+        </div>
       </div>
     );
   };
@@ -2715,7 +2563,7 @@ const RentalAgreementPage: React.FC = () => {
           className="hidden print:block print:bg-white print:z-[9999] print:overflow-visible"
           style={{ printColorAdjust: 'exact' } as React.CSSProperties}
         >
-          {renderRentalAgreementDocument(rentalDetail)}
+          <HiringMachineAgreementPrint agreementInfo={rentalDetail} />
         </div>
       )}
 

@@ -20,6 +20,7 @@ import {
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
+import { GatepassDocument } from '@/src/components/gatepass/gatepass-document';
 import { authFetch } from '@/lib/auth-client';
 import { Swal, toast } from '@/src/lib/swal';
 
@@ -1254,7 +1255,7 @@ const GatePassPage: React.FC = () => {
     },
   ];
 
-  /** Gatepass body content (details + table) for use inside LetterheadDocument */
+  /** Gatepass body content (details + table) for use inside LetterheadDocument (used in create form) */
   const renderGatePassLetterheadBody = (gatePass: GatePass) => (
     <>
       {/* Top row: left = FROM/TO/Vehicle/Driver, right = Gatepass/Date/Returnable/Entry */}
@@ -1351,40 +1352,44 @@ const GatePassPage: React.FC = () => {
     </div>
   );
 
-  /** Full gatepass on letterhead - for both screen preview and print. Footer: address, telephone, fax, email only. */
-  const renderGatePassOnLetterhead = (gatePass: GatePass) => (
-    <div className="bg-white dark:bg-slate-800 w-full p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 dark:border-slate-600 rounded-lg print:shadow-none print:border-0 print:rounded-none print:bg-white print:w-[210mm] print:max-w-[210mm] print:p-8">
-      <LetterheadDocument
-        documentTitle="GATEPASS"
-        footerStyle="simple"
-        footerContent={renderGatePassSignatures(gatePass)}
-        className="print:p-0"
-      >
-        {renderGatePassLetterheadBody(gatePass)}
-      </LetterheadDocument>
-    </div>
-  );
-
   // View Gate Pass Content: same letterhead layout on screen and in print
   const renderGatePassDetails = () => {
     if (!selectedGatePass) return null;
 
     return (
       <div>
-        {/* Screen View - letterhead layout (matches print) */}
-        <div className="print:hidden">{renderGatePassOnLetterhead(selectedGatePass)}</div>
-
-        {/* Print View - only visible when printing; normal flow so footer prints (matches view mode) */}
-        <div className="hidden print:block print:bg-white print:min-h-0 print:p-0 print:m-0">
-          <div className="p-8 max-w-[210mm] mx-auto">
-            <LetterheadDocument
-              documentTitle="GATEPASS"
-              footerStyle="simple"
-              footerContent={renderGatePassSignatures(selectedGatePass)}
-            >
-              {renderGatePassLetterheadBody(selectedGatePass)}
-            </LetterheadDocument>
+        {/* Screen View */}
+        <div className="print:hidden w-full p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 dark:border-slate-600 rounded-lg bg-gray-200">
+          <div className="overflow-x-auto overflow-y-hidden" style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
+            <GatepassDocument
+              from={selectedGatePass.from}
+              to={selectedGatePass.to}
+              toAddress={selectedGatePass.toAddress}
+              vehicleNumber={selectedGatePass.vehicleNumber}
+              driverName={selectedGatePass.driverName}
+              gatepassNo={selectedGatePass.gatepassNo}
+              dateOfIssue={selectedGatePass.dateOfIssue}
+              returnable={selectedGatePass.returnable}
+              entry={selectedGatePass.entry}
+              items={selectedGatePass.items}
+            />
           </div>
+        </div>
+
+        {/* Print View */}
+        <div className="hidden print:block print:bg-white print:min-h-0 print:p-0 print:m-0">
+          <GatepassDocument
+            from={selectedGatePass.from}
+            to={selectedGatePass.to}
+            toAddress={selectedGatePass.toAddress}
+            vehicleNumber={selectedGatePass.vehicleNumber}
+            driverName={selectedGatePass.driverName}
+            gatepassNo={selectedGatePass.gatepassNo}
+            dateOfIssue={selectedGatePass.dateOfIssue}
+            returnable={selectedGatePass.returnable}
+            entry={selectedGatePass.entry}
+            items={selectedGatePass.items}
+          />
         </div>
       </div>
     );
@@ -1446,7 +1451,18 @@ const GatePassPage: React.FC = () => {
           id="gatepass-print-area"
           className="hidden print:block print:bg-white print:min-h-0"
         >
-          {renderGatePassOnLetterhead(selectedGatePass)}
+          <GatepassDocument
+            from={selectedGatePass.from}
+            to={selectedGatePass.to}
+            toAddress={selectedGatePass.toAddress}
+            vehicleNumber={selectedGatePass.vehicleNumber}
+            driverName={selectedGatePass.driverName}
+            gatepassNo={selectedGatePass.gatepassNo}
+            dateOfIssue={selectedGatePass.dateOfIssue}
+            returnable={selectedGatePass.returnable}
+            entry={selectedGatePass.entry}
+            items={selectedGatePass.items}
+          />
         </div>
       )}
 

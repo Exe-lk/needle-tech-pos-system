@@ -4,6 +4,7 @@ import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import type { AuthUser } from '@/lib/auth-supabase';
+import { logAuditAction } from '@/lib/audit-logger';
 
 /**
  * @swagger
@@ -212,6 +213,15 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer
           }
         }
       }
+    });
+    
+    // Log audit action
+    await logAuditAction(request, auth, {
+      action: 'CREATE',
+      entityType: 'GatePass',
+      entityId: newGatePass.id,
+      description: `Gatepass ${newGatePass.gatePassNumber} created for Rental ${rentalId}`,
+      after: newGatePass,
     });
     
     return successResponse(newGatePass, 'Gate pass created successfully', 201);

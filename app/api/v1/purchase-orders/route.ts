@@ -4,6 +4,7 @@ import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import { Decimal } from '@prisma/client/runtime/client';
+import { logAuditAction } from '@/lib/audit-logger';
 
 /**
  * @swagger
@@ -118,7 +119,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, auth: any) => {
   try {
     const body = await request.json();
     const {
@@ -220,6 +221,15 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
       status: newPurchaseOrder.status,
       machines: machineData,
     };
+    
+    // Log audit action
+    await logAuditAction(request, auth, {
+      action: 'CREATE',
+      entityType: 'PurchaseOrder',
+      entityId: newPurchaseOrder.id,
+      description: `Purchase Order ${newPurchaseOrder.requestNumber} created`,
+      after: transformed,
+    });
     
     return successResponse(transformed, 'Purchase request created successfully', 201);
   } catch (error: any) {
