@@ -137,6 +137,7 @@ model Customer {
   // Tax Profile
   vatApplicable           Boolean  @default(true)
   vatRegistrationNumber   String?
+  tinNumber               String?
   taxCategory             TaxCategory @default(VAT)
   
   // Financials

@@ -1,6 +1,7 @@
 import React from 'react';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
 import type { RentalAgreementInfo } from '@/app/rental-agreement/page';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface Props {
   agreementInfo: RentalAgreementInfo;
@@ -160,9 +161,12 @@ export const HiringMachineAgreementPrint: React.FC<Props> = ({ agreementInfo }) 
             </div>
           </div>
           
-          {/* QR Code Placeholder */}
-          <div className="w-24 h-24 border border-gray-400 flex items-center justify-center text-gray-500 font-handwriting text-2xl mt-12" style={{fontFamily: 'cursive'}}>
-            QR
+          {/* QR Code */}
+          <div className="mt-12 flex flex-col items-start">
+            <div className="border border-gray-200 p-1.5 bg-white rounded-md flex flex-col items-center">
+              <QRCodeSVG value={agreementInfo.agreementNo || ''} size={80} />
+              <span className="text-[9px] text-gray-500 mt-1 uppercase font-semibold">Scan QR</span>
+            </div>
           </div>
         </div>
       </LetterheadDocument>

@@ -2636,6 +2636,22 @@ const RentalAgreementPage: React.FC = () => {
         </div>
       </div>
     );
+
+    return (
+      <div
+        className="bg-white dark:!bg-white text-black dark:!text-black w-full p-6 sm:p-8 max-w-[210mm] mx-auto print:w-[210mm] print:max-w-[210mm] print:p-8 print:overflow-visible"
+        style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+      >
+        <LetterheadDocument
+          documentTitle="HIRING MACHINE AGREEMENT"
+          footerStyle="simple"
+          footerContent={signatureBlock}
+          className="print:p-0 dark:!bg-white dark:!text-black"
+        >
+          {mainContent}
+        </LetterheadDocument>
+      </div>
+    );
   };
 
   // Machine Assignment section: only for Pending agreements; category-based scan (brand, model, type, count, scan button per category).

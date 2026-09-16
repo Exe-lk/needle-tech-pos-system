@@ -158,6 +158,7 @@ export const POST = withAuthAndPermission(['customers:create', 'management:*', '
       billingPostalCode,
       billingCountry,
       vatRegistrationNumber,
+      tinNumber,
       status,
       locations = [],
     } = body;
@@ -165,7 +166,25 @@ export const POST = withAuthAndPermission(['customers:create', 'management:*', '
     const resolvedVatRegistrationNumber =
       type === 'INDIVIDUAL'
         ? (body.nicNumber ?? vatRegistrationNumber ?? null)
-        : (vatRegistrationNumber ?? null);
+        : typeof vatRegistrationNumber === 'string'
+          ? vatRegistrationNumber.trim()
+          : (vatRegistrationNumber ?? null);
+
+    const resolvedTinNumber =
+      type === 'GARMENT_FACTORY'
+        ? (typeof tinNumber === 'string' ? tinNumber.trim() : tinNumber ?? null)
+        : null;
+
+    if (type === 'GARMENT_FACTORY') {
+      const vat = typeof vatRegistrationNumber === 'string' ? vatRegistrationNumber.trim() : vatRegistrationNumber;
+      const tin = typeof resolvedTinNumber === 'string' ? resolvedTinNumber : '';
+      if (!vat || !tin) {
+        return validationErrorResponse('Business customers require VAT and TIN numbers', {
+          ...( !vat ? { vatRegistrationNumber: ['VAT number is required'] } : {}),
+          ...( !tin ? { tinNumber: ['TIN number is required'] } : {}),
+        });
+      }
+    }
 
     if (!code || !type || !name) {
       return validationErrorResponse('Missing required fields', {
@@ -200,6 +219,7 @@ export const POST = withAuthAndPermission(['customers:create', 'management:*', '
         billingPostalCode: billingPostalCode ?? null,
         billingCountry: billingCountry ?? null,
         vatRegistrationNumber: resolvedVatRegistrationNumber,
+        tinNumber: resolvedTinNumber,
         status: status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
         locations:
           Array.isArray(locations) && locations.length > 0

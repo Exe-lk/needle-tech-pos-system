@@ -371,6 +371,7 @@ const MachineListPage: React.FC = () => {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'machine' | 'tool'>('machine');
   
   // New state for dropdown options
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -473,6 +474,7 @@ const MachineListPage: React.FC = () => {
 
   const handleOpenRegister = () => {
     setIsCreateModalOpen(true);
+    setActiveTab('machine');
     setSelectedBrandId(''); // Reset brand selection
     setMachineFormWarrantyStatus(''); // Reset warranty-based field visibility
   };
@@ -688,21 +690,21 @@ const MachineListPage: React.FC = () => {
       label: 'Manufacture Year',
       type: 'date',
       placeholder: 'Select date',
-      required: true,
+      required: false,
     },
     {
       name: 'country',
       label: 'Country',
       type: 'text',
       placeholder: 'Enter country',
-      required: true,
+      required: false,
     },
     {
       name: 'conditionOnArrival',
       label: 'Condition on Arrival',
       type: 'select',
       placeholder: 'Select condition',
-      required: true,
+      required: false,
       options: [
         { label: 'New', value: 'New' },
         { label: 'Used', value: 'Used' },
@@ -776,6 +778,33 @@ const MachineListPage: React.FC = () => {
   // Create form: same fields as above but without Invoice/GRN (simplified registration)
   const getMachineCreateFields = (): FormField[] =>
     getMachineFields().filter((f) => f.name !== 'invoiceGrn');
+
+  const getToolCreateFields = (): FormField[] => [
+    { name: 'toolName', label: 'Tool Name', type: 'text', placeholder: 'Enter tool name', required: true },
+    { name: 'toolType', label: 'Tool Type', type: 'text', placeholder: 'Enter tool type', required: true },
+    { name: 'brand', label: 'Brand', type: 'text', placeholder: 'Enter brand', required: false },
+    { name: 'model', label: 'Model', type: 'text', placeholder: 'Enter model', required: false },
+    { name: 'serialNumber', label: 'Serial Number', type: 'text', placeholder: 'Enter serial number', required: false },
+    { name: 'quantity', label: 'Quantity', type: 'number', placeholder: 'Enter quantity', required: true },
+    { name: 'unitPrice', label: 'Unit Price', type: 'number', placeholder: 'Enter unit price', required: false },
+    { name: 'location', label: 'Location', type: 'text', placeholder: 'Enter location', required: false },
+    { name: 'purchaseDate', label: 'Purchase Date', type: 'date', placeholder: 'Select date', required: false },
+    {
+      name: 'condition',
+      label: 'Condition',
+      type: 'select',
+      placeholder: 'Select condition',
+      required: false,
+      options: [
+        { label: 'New', value: 'NEW' },
+        { label: 'Good', value: 'GOOD' },
+        { label: 'Fair', value: 'FAIR' },
+        { label: 'Poor', value: 'POOR' },
+      ],
+    },
+    { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Additional notes', required: false, rows: 3 },
+    { name: 'toolPhotoUrls', label: 'Tool Photos', type: 'file-multiple', accept: 'image/*', required: false, multiple: true },
+  ];
 
   // Update form: full machine details (all Machine table columns editable except id/qr/onboarded)
   const getMachineUpdateFields = (): FormField[] => [
@@ -1022,6 +1051,47 @@ const MachineListPage: React.FC = () => {
         icon: 'error',
         title: 'Failed to register',
         text: 'Failed to create machine. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToolSubmit = async (data: Record<string, any>) => {
+    setIsSubmitting(true);
+    try {
+      const payload: Record<string, any> = { ...data };
+      if (payload.quantity) payload.quantity = parseInt(payload.quantity, 10);
+      if (payload.unitPrice) payload.unitPrice = parseFloat(payload.unitPrice);
+
+      const response = await authFetch(`${API_BASE_URL}/tools`, {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      const resultData = await response.json();
+
+      if (response.ok) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Registered',
+          text: `Tool "${payload.toolName}" registered successfully.`,
+        });
+        handleCloseCreateModal();
+      } else {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed to register',
+          text: `Failed to create tool: ${resultData.message || 'Unknown error'}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error creating tool:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to register',
+        text: 'Failed to create tool. Please try again.',
       });
     } finally {
       setIsSubmitting(false);
@@ -1455,32 +1525,70 @@ const MachineListPage: React.FC = () => {
       {isCreateModalOpen && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Register
-              </h2>
-              <Tooltip content="Close">
+            <div className="flex flex-col border-b border-gray-200 dark:border-slate-700">
+              <div className="flex items-center justify-between p-6 pb-2">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  Register
+                </h2>
+                <Tooltip content="Close">
+                  <button
+                    onClick={handleCloseCreateModal}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </Tooltip>
+              </div>
+              <div className="flex px-6 space-x-4">
                 <button
-                  onClick={handleCloseCreateModal}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'machine'
+                      ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                  onClick={() => setActiveTab('machine')}
                 >
-                  <X className="w-5 h-5" />
+                  Machine Registration
                 </button>
-              </Tooltip>
+                <button
+                  className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'tool'
+                      ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                  onClick={() => setActiveTab('tool')}
+                >
+                  Tool Registration
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
-              <CreateForm
-                title="Machine Registration"
-                fields={getMachineCreateFields()}
-                onSubmit={handleMachineSubmit}
-                onClear={handleClear}
-                submitButtonLabel="Register"
-                clearButtonLabel="Clear"
-                loading={isSubmitting}
-                enableDynamicSpecs={false}
-                className="shadow-none border-0 p-0"
-              />
+              {activeTab === 'machine' ? (
+                <CreateForm
+                  title=""
+                  fields={getMachineCreateFields()}
+                  onSubmit={handleMachineSubmit}
+                  onClear={handleClear}
+                  submitButtonLabel="Register Machine"
+                  clearButtonLabel="Clear"
+                  loading={isSubmitting}
+                  enableDynamicSpecs={false}
+                  className="shadow-none border-0 p-0"
+                />
+              ) : (
+                <CreateForm
+                  title=""
+                  fields={getToolCreateFields()}
+                  onSubmit={handleToolSubmit}
+                  onClear={handleClear}
+                  submitButtonLabel="Register Tool"
+                  clearButtonLabel="Clear"
+                  loading={isSubmitting}
+                  enableDynamicSpecs={false}
+                  className="shadow-none border-0 p-0"
+                />
+              )}
             </div>
           </div>
         </div>
