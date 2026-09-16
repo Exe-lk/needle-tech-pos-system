@@ -56,6 +56,14 @@ export interface MachineDetail {
   monthlyRent: number;
 }
 
+/** Tools / add-ons on a rental (from rental_tools + tools, or requestedToolLines snapshot). */
+interface ToolDetailLine {
+  description: string;
+  quantity: number;
+  /** Monthly charge for this line (unitPrice × quantity). */
+  monthlyRent: number;
+}
+
 // Rental Agreement Detail Data Types
 export interface RentalAgreementInfo {
   id: string;
@@ -64,6 +72,7 @@ export interface RentalAgreementInfo {
   customerName: string;
   customerAddress?: string;
   machines: MachineDetail[];
+  tools?: ToolDetailLine[];
   startDate: string;
   endDate: string | null;
   monthlyRent: number;
@@ -93,6 +102,13 @@ interface GatePassItem {
   motorBoxNo: string;
 }
 
+interface GatePassToolItem {
+  id: string;
+  description: string;
+  quantity: number;
+  serialNo?: string;
+}
+
 interface GatePass {
   id: number;
   gatepassNo: string;
@@ -106,6 +122,7 @@ interface GatePass {
   vehicleNumber: string;
   driverName: string;
   items: GatePassItem[];
+  tools?: GatePassToolItem[];
   issuedBy?: string;
   receivedBy?: string;
 }
@@ -141,6 +158,16 @@ interface ApiGatePassResponse {
       brand?: { name: string } | null;
       model?: { name: string } | null;
       type?: { name: string } | null;
+    };
+  }>;
+  tools?: Array<{
+    quantity: number;
+    tool: {
+      toolName: string;
+      toolType: string;
+      brand?: string | null;
+      model?: string | null;
+      serialNumber?: string | null;
     };
   }>;
 }
@@ -191,6 +218,70 @@ interface ApiRental {
   };
   purchaseOrder?: { id: string; requestNumber: string } | null;
   machines: ApiRentalMachine[];
+  /** From GET /rentals/[id] when include tools */
+  tools?: ApiRentalToolLine[];
+  /** Snapshot when agreement was created from a PO (mirrors Rental.requestedToolLines). */
+  requestedToolLines?: Array<{
+    toolId?: string;
+    toolName?: string;
+    toolType?: string;
+    brand?: string | null;
+    model?: string | null;
+    quantity?: number;
+    unitPrice?: number;
+  }>;
+}
+
+interface ApiRentalToolLine {
+  quantity: number;
+  unitPrice?: number | string | null;
+  tool?: {
+    toolName: string;
+    toolType: string;
+    brand?: string | null;
+    model?: string | null;
+  };
+}
+
+function mapToolsFromApi(r: ApiRental): ToolDetailLine[] {
+  const fromRelation = Array.isArray(r.tools) ? r.tools : [];
+  if (fromRelation.length > 0) {
+    return fromRelation.map((rt) => {
+      const t = rt.tool;
+      const qty =
+        typeof rt.quantity === 'number' && rt.quantity > 0 ? rt.quantity : 1;
+      const unit = Number(rt.unitPrice ?? 0);
+      const nameType = [t?.toolName, t?.toolType].filter(Boolean).join(' — ');
+      const brandModel = [t?.brand, t?.model].filter(Boolean).join(' ');
+      const description =
+        [nameType, brandModel].filter(Boolean).join(' — ') || 'Tool';
+      return {
+        description: description.toUpperCase(),
+        quantity: qty,
+        monthlyRent: unit * qty,
+      };
+    });
+  }
+  const lines = r.requestedToolLines;
+  if (Array.isArray(lines) && lines.length > 0) {
+    return lines.map((line) => {
+      const qty =
+        typeof line.quantity === 'number' && line.quantity > 0
+          ? line.quantity
+          : 1;
+      const unit = Number(line.unitPrice ?? 0);
+      const nameType = [line.toolName, line.toolType].filter(Boolean).join(' — ');
+      const brandModel = [line.brand, line.model].filter(Boolean).join(' ');
+      const description =
+        [nameType, brandModel].filter(Boolean).join(' — ') || 'Tool';
+      return {
+        description: description.toUpperCase(),
+        quantity: qty,
+        monthlyRent: unit * qty,
+      };
+    });
+  }
+  return [];
 }
 
 function mapApiRentalToAgreement(r: ApiRental): RentalAgreement {
@@ -251,8 +342,6 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     months > 1 &&
     (almostEqual(subtotal * months + vatAmount, total) || almostEqual(subtotal * months, total));
   const monthlySubtotal = subtotalLooksMonthly ? subtotal : months > 0 ? subtotal / months : subtotal;
-  const machineCount = (r.machines ?? []).length;
-  const perMachineMonthly = machineCount > 0 ? monthlySubtotal / machineCount : 0;
   const addressParts = [
     r.customer.billingAddressLine1,
     r.customer.billingAddressLine2,
@@ -266,6 +355,9 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     const model = rm.machine.model?.name ?? '';
     const type = rm.machine.type?.name ?? '';
     const desc = `${brand} ${model}${type ? ` - ${type}` : ''}`.trim() || 'Machine';
+    const dailyRateNum = Number(rm.dailyRate);
+    const resolvedDailyRate = Number.isFinite(dailyRateNum) ? dailyRateNum : 0;
+    const qty = Number.isFinite(Number(rm.quantity)) && Number(rm.quantity) > 0 ? Number(rm.quantity) : 1;
     return {
       serialNo: rm.machine.serialNumber,
       machineBrand: brand,
@@ -273,7 +365,9 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
       machineType: type,
       machineDescription: desc.toUpperCase(),
       motorBoxNo: rm.machine.boxNumber ?? undefined,
-      monthlyRent: perMachineMonthly,
+      // View/print should reflect the actual assigned machine pricing:
+      // monthly rent per machine = rental_machines.dailyRate * 30 (per assigned machine line).
+      monthlyRent: resolvedDailyRate * 30 * qty,
     };
   });
   const statusMap: Record<string, RentalStatus> = {
@@ -301,6 +395,7 @@ function mapApiRentalToAgreementInfo(r: ApiRental): RentalAgreementInfo {
     purchaseRequestNumber: r.purchaseOrder?.requestNumber,
     expectedMachines: r.expectedMachineCount ?? r.machines?.length,
     addedMachines: r.machines?.length,
+    tools: mapToolsFromApi(r),
   };
 }
 
@@ -1843,6 +1938,19 @@ const RentalAgreementPage: React.FC = () => {
         motorBoxNo: machine.boxNumber ?? 'N/A',
       };
     });
+    const tools: GatePassToolItem[] = (api.tools ?? []).map((t, idx) => {
+      const tool = t.tool;
+      const description = [tool?.toolName, tool?.toolType ? `(${tool.toolType})` : '', tool?.brand, tool?.model]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      return {
+        id: `tool-${idx + 1}`,
+        description: (description || 'Tool').toUpperCase(),
+        quantity: typeof t.quantity === 'number' ? t.quantity : 1,
+        serialNo: tool?.serialNumber ?? undefined,
+      };
+    });
     return {
       id: Date.now(),
       gatepassNo: api.gatePassNumber,
@@ -1856,6 +1964,7 @@ const RentalAgreementPage: React.FC = () => {
       vehicleNumber: api.vehicleNumber ?? vehicleNumber,
       driverName: api.driverName ?? driverName,
       items,
+      tools,
       issuedBy: '',
       receivedBy: '',
     };
@@ -2222,6 +2331,43 @@ const RentalAgreementPage: React.FC = () => {
           </table>
         </div>
 
+        {/* Tools Table (if any) */}
+        {gatePass.tools && gatePass.tools.length > 0 && (
+          <div className="mb-6">
+            <div className="text-sm font-semibold text-gray-700 mb-2">Tools</div>
+            <table className="w-full border-collapse border border-gray-800">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-800 px-4 py-2 text-left text-sm font-semibold text-gray-900">
+                    Description
+                  </th>
+                  <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900 w-24">
+                    Qty
+                  </th>
+                  <th className="border border-gray-800 px-4 py-2 text-center text-sm font-semibold text-gray-900">
+                    Serial No
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {gatePass.tools.map((t) => (
+                  <tr key={t.id}>
+                    <td className="border border-gray-800 px-4 py-2 text-sm text-gray-900">
+                      {t.description}
+                    </td>
+                    <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                      {t.quantity}
+                    </td>
+                    <td className="border border-gray-800 px-4 py-2 text-center text-sm text-gray-900">
+                      {t.serialNo || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* Signatures */}
         <div className="grid grid-cols-2 gap-8 mb-6">
           <div>
@@ -2295,11 +2441,197 @@ const RentalAgreementPage: React.FC = () => {
 
   // Render Rental Agreement Document for Printing (letterhead style - matches HIRING MACHINE AGREEMENT)
   const renderRentalAgreementDocument = (agreementInfo: RentalAgreementInfo) => {
-    return (
-      <div>
-        <div className="print:hidden">
-          <div className="space-y-6">
-            <HiringMachineAgreementPrint agreementInfo={agreementInfo} />
+    const machineMonthly = agreementInfo.machines.reduce((sum, machine) => sum + machine.monthlyRent, 0);
+    const toolsMonthly =
+      agreementInfo.tools?.reduce((sum, row) => sum + row.monthlyRent, 0) ?? 0;
+    const totalMonthlyRent = machineMonthly + toolsMonthly;
+    const dateOfIssue = agreementInfo.startDate
+      ? new Date(agreementInfo.startDate).toLocaleDateString('en-LK', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+      : 'TBD';
+    const signatureDate = agreementInfo.customerSignatureDate
+      ? new Date(agreementInfo.customerSignatureDate).toLocaleDateString('en-LK', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+      : '';
+
+    const mainContent = (
+      <>
+        {/* Two-column: Customer (left) | Agreement (right) same row; Address (left) | Date of Issue (right) same row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 mb-6">
+          <div className="space-y-2">
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Customer: </span>
+              <span className="text-sm text-gray-900">{agreementInfo.customerName}</span>
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Address: </span>
+              <span className="text-sm text-gray-900">{agreementInfo.customerAddress || 'N/A'}</span>
+            </div>
+          </div>
+          <div className="space-y-2 text-left sm:text-right print:text-right">
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Agreement: </span>
+              <span className="text-sm text-gray-900">-{agreementInfo.agreementNo || 'TBD'}</span>
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-gray-700">Date of Issue: </span>
+              <span className="text-sm text-gray-900">-{dateOfIssue}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Machine details table - Model/Description, Serial No, Motor/Box No, Monthly Res */}
+        {(agreementInfo.machines?.length ?? 0) > 0 && (
+          <div className="mb-4">
+            <table className="w-full border-collapse border border-gray-800">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-800 px-3 py-2 text-left text-sm font-semibold text-gray-900">
+                    Model - Description
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Serial No
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Motor / Box No
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Monthly Rent
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {agreementInfo.machines.map((machine, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-800 px-3 py-2 text-sm text-gray-900">
+                      {machine.machineDescription}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {machine.serialNo}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {machine.motorBoxNo || 'N/A'}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Tools / related items (from PO hiring agreement or requestedToolLines). */}
+        {(agreementInfo.tools?.length ?? 0) > 0 && (
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-gray-900 mb-2">Tools &amp; related items</div>
+            <table className="w-full border-collapse border border-gray-800">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-800 px-3 py-2 text-left text-sm font-semibold text-gray-900">
+                    Description
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Qty
+                  </th>
+                  <th className="border border-gray-800 px-3 py-2 text-center text-sm font-semibold text-gray-900">
+                    Monthly Rent
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {agreementInfo.tools!.map((row, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-800 px-3 py-2 text-sm text-gray-900">
+                      {row.description}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {row.quantity}
+                    </td>
+                    <td className="border border-gray-800 px-3 py-2 text-center text-sm text-gray-900">
+                      {row.monthlyRent.toLocaleString('en-LK', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mb-4">
+          <div className="mt-2 text-sm font-semibold text-gray-900">
+            Total monthly rent (machines &amp; tools):{' '}
+            {totalMonthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </div>
+        </div>
+
+        {/* Additional Parts */}
+        {agreementInfo.additionalParts && (
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-gray-700 mb-1">Additional Parts</div>
+            <div className="text-sm text-gray-900">- {agreementInfo.additionalParts}</div>
+          </div>
+        )}
+
+        {/* Terms & Conditions */}
+        <div className="mb-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">Terms & Conditions</h3>
+          <div className="space-y-2 text-sm text-gray-900">
+            <p>
+              <span className="font-semibold">(01)</span> You have to be paid in cash double monthly rental fee on the date of rent machine issues.
+              The excess payment would be immediately return to you as and when you returned the hired
+              machine within the stipulated period.
+            </p>
+            <p>
+              <span className="font-semibold">(02)</span> Above payment has to be paid 05 days prior to next month.
+            </p>
+            <p>
+              <span className="font-semibold">(03)</span> Customer has to take total responsibility with regard to security of the machine.
+            </p>
+            <p>
+              <span className="font-semibold">(04)</span> Both the parties can withdraw or return the machine with one month prior notice.
+            </p>
+            <p>
+              <span className="font-semibold">(05)</span> Company will examine the machine at the point of returning and will release due security deposit.
+            </p>
+          </div>
+        </div>
+      </>
+    );
+
+    const signatureBlock = (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 print:break-inside-avoid">
+        <div>
+          <div className="text-sm font-semibold text-gray-700 mb-2">Customer Signature</div>
+          <div className="border-b border-gray-800 pb-2 min-h-[44px]">
+            {agreementInfo.customerSignature && (
+              <div className="text-sm text-gray-900">{agreementInfo.customerSignature}</div>
+            )}
+          </div>
+          <div className="text-xs text-gray-600 mt-1">(Agreed upon the terms & Conditions)</div>
+        </div>
+        <div className="space-y-2">
+          <div>
+            <span className="text-sm font-semibold text-gray-700">ID NO: </span>
+            <span className="text-sm text-gray-900">{agreementInfo.customerIdNo ?? ''}</span>
+          </div>
+          <div>
+            <span className="text-sm font-semibold text-gray-700">Full Name: </span>
+            <span className="text-sm text-gray-900">{agreementInfo.customerFullName ?? ''}</span>
+          </div>
+          <div>
+            <span className="text-sm font-semibold text-gray-700">Date: </span>
+            <span className="text-sm text-gray-900">{signatureDate}</span>
           </div>
         </div>
       </div>

@@ -27,7 +27,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     // Normalize gate pass number (remove leading zeros padding, then pad to 6 digits)
     const normalizedNumber = gatePassNumber.replace(/^0+/, '').padStart(6, '0');
     
-    const gatePass = await prisma.gatePass.findFirst({
+    const gatePass = await (prisma as any).gatePass.findFirst({
       where: {
         OR: [
           { gatePassNumber: { contains: gatePassNumber, mode: 'insensitive' } },
@@ -50,6 +50,11 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
                 type: true,
               },
             },
+          },
+        },
+        tools: {
+          include: {
+            tool: true,
           },
         },
       },

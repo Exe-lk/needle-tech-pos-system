@@ -39,6 +39,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     
     // Transform for frontend
     const machines = Array.isArray(purchaseOrder.machines) ? purchaseOrder.machines : [];
+    const toolsRaw = (purchaseOrder as any).tools;
+    const toolsArr = Array.isArray(toolsRaw) ? toolsRaw : [];
     const requestedMachines = machines.reduce((sum: number, m: any) => sum + (m.quantity || 0), 0);
     
     const transformed = {
@@ -65,6 +67,20 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
         rentedQuantity: m.rentedQuantity || 0,
         pendingQuantity: m.quantity - (m.rentedQuantity || 0),
         expectedAvailabilityDate: m.expectedAvailabilityDate || null,
+      })),
+      tools: toolsArr.map((t: any) => ({
+        id: String(t.id ?? t.toolId ?? ''),
+        toolId: String(t.toolId ?? t.id ?? ''),
+        toolName: t.toolName,
+        toolType: t.toolType,
+        brand: t.brand ?? '',
+        model: t.model ?? '',
+        quantity: t.quantity,
+        availableStock: t.availableStock ?? 0,
+        unitPrice: t.unitPrice,
+        totalPrice: t.totalPrice,
+        rentedQuantity: t.rentedQuantity ?? 0,
+        pendingQuantity: t.pendingQuantity ?? Math.max(0, (t.quantity || 0) - Math.min(t.availableStock ?? 0, t.quantity || 0)),
       })),
       rentalAgreementIds: purchaseOrder.rentals.map((r: any) => r.id),
     };
@@ -106,6 +122,9 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     }
     if (body.machines !== undefined) {
       updateData.machines = body.machines;
+    }
+    if (body.tools !== undefined) {
+      updateData.tools = body.tools;
     }
     if (body.totalAmount !== undefined) {
       updateData.totalAmount = body.totalAmount;

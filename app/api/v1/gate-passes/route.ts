@@ -39,7 +39,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
     const totalItems = await prisma.gatePass.count({ where });
     const skip = (page - 1) * limit;
     
-    const gatePasses = await prisma.gatePass.findMany({
+    const gatePasses = await (prisma as any).gatePass.findMany({
       where,
       skip,
       take: limit,
@@ -61,6 +61,11 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
               }
             }
           }
+        },
+        tools: {
+          include: {
+            tool: true,
+          },
         }
       }
     });
@@ -106,7 +111,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer
       });
     }
     
-    const rental = await prisma.rental.findUnique({ 
+    const rental = await (prisma as any).rental.findUnique({ 
       where: { id: rentalId },
       include: { 
         customer: true,
@@ -120,7 +125,12 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer
               }
             }
           }
-        }
+        },
+        tools: {
+          include: {
+            tool: true,
+          },
+        },
       }
     });
     
@@ -176,7 +186,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer
     const gatePassNumber = `${prefix}${String(nextNumber).padStart(6, '0')}`;
     
     // Create gate pass with machines
-    const newGatePass = await prisma.gatePass.create({
+    const newGatePass = await (prisma as any).gatePass.create({
       data: {
         gatePassNumber,
         rentalId,
@@ -188,10 +198,17 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer
         status: 'PENDING',
         issuedByUserId: auth.id,
         machines: {
-          create: rental.machines.map(m => ({
+          create: (rental.machines ?? []).map((m: any) => ({
             machineId: m.machineId,
             quantity: 1,
           }))
+        },
+        tools: {
+          create: (rental.tools ?? []).map((t: any) => ({
+            toolId: t.toolId,
+            unitPrice: t.unitPrice,
+            quantity: t.quantity ?? 1,
+          })),
         }
       },
       include: { 
@@ -211,6 +228,11 @@ export const POST = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer
               }
             }
           }
+        },
+        tools: {
+          include: {
+            tool: true,
+          },
         }
       }
     });

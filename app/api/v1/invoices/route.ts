@@ -296,14 +296,16 @@ export const POST = withAuthAndRole(
     const invoiceNumber = `INV-${Date.now()}`;
     const userId = auth.id;
 
-    // If the client didn't provide line items but linked rental(s), derive line items and totals from rental machines.
-    // This matches the invoice UI flow where user selects agreements + period and expects backend to generate items.
+    // Line items:
+    // - For rental-linked invoices, machine line items must be derived from `rental_machines.dailyRate` (source of truth).
+    // - Clients may still send additional non-machine items (e.g. tools). Preserve those, but do not trust client pricing
+    //   for rental machine lines.
     let finalLineItems: any[] = hasProvidedLineItems ? lineItems : [];
     let finalSubtotal = typeof subtotal === 'number' ? subtotal : Number(subtotal) || 0;
     let finalVatAmount = typeof vatAmount === 'number' ? vatAmount : Number(vatAmount) || 0;
     let finalGrandTotal = typeof grandTotal === 'number' ? grandTotal : Number(grandTotal) || 0;
 
-    if (!hasProvidedLineItems && hasRentalLink) {
+    if (hasRentalLink) {
       const idsToFetch = rentalIdsArray && rentalIdsArray.length > 0 ? rentalIdsArray : rentalId ? [rentalId] : [];
       const rentals = await prisma.rental.findMany({
         where: { id: { in: idsToFetch } },
@@ -328,12 +330,20 @@ export const POST = withAuthAndRole(
         },
       });
 
-      const from = toValidDateOrNull(periodFromDate) ?? (issueDate ? toValidDateOrNull(issueDate) : null) ?? now;
-      const to = toValidDateOrNull(periodToDate) ?? (dueDate ? toValidDateOrNull(dueDate) : null) ?? now;
-      const months = computeDiffMonths(from, to);
+      // Preserve tool line items provided by the client (machine-assign flow includes tools).
+      // We identify tools by explicit kind or by the item code prefix used in the UI.
+      const preservedToolLines = Array.isArray(finalLineItems)
+        ? finalLineItems.filter((li: any) => {
+            const code = String(li?.itemCode ?? '');
+            return li?.kind === 'TOOL' || code.startsWith('212TL');
+          })
+        : [];
 
-      // Group machines by agreement + brand/model/type so multi-agreement invoices stay readable.
-      const categoryMap = new Map<string, { agreementNumber: string; brand: string; model: string; type: string; count: number; monthlyRatePerMachine: number }>();
+      // Group machines by agreement + brand/model/type + monthlyPerMachine so multi-agreement invoices stay readable.
+      const categoryMap = new Map<
+        string,
+        { agreementNumber: string; brand: string; model: string; type: string; count: number; monthlyRatePerMachine: number }
+      >();
       for (const r of rentals) {
         const agreementNo = r.agreementNumber ?? '';
         const rms = Array.isArray(r.machines) ? r.machines : [];
@@ -346,20 +356,29 @@ export const POST = withAuthAndRole(
           const monthlyPerMachine = daily * 30;
           const key = `${agreementNo}|${brand}|${model}|${mtype}|${monthlyPerMachine}`;
           if (!categoryMap.has(key)) {
-            categoryMap.set(key, { agreementNumber: agreementNo, brand, model, type: mtype, count: 0, monthlyRatePerMachine: monthlyPerMachine });
+            categoryMap.set(key, {
+              agreementNumber: agreementNo,
+              brand,
+              model,
+              type: mtype,
+              count: 0,
+              monthlyRatePerMachine: monthlyPerMachine,
+            });
           }
           categoryMap.get(key)!.count += qty;
         }
       }
 
       let itemIndex = 0;
-      finalLineItems = Array.from(categoryMap.values()).map((cat) => {
-        const baseDesc = [cat.brand, cat.model, cat.type].filter(Boolean).join(' ').toUpperCase() || 'Machine';
+      const derivedMachineLines = Array.from(categoryMap.values()).map((cat) => {
+        const baseDesc = [cat.brand, cat.model, cat.type].filter(Boolean).join(' ').toUpperCase() || 'MACHINE';
         const desc = cat.agreementNumber ? `${baseDesc} (AGREEMENT ${cat.agreementNumber})` : baseDesc;
         return {
           description: desc,
           quantity: cat.count,
-          unitPrice: round2(cat.monthlyRatePerMachine * months),
+          // Requirement: unitPrice must be monthly rate per machine derived from rental_machines.dailyRate.
+          // (unitPrice = dailyRate * 30)
+          unitPrice: round2(cat.monthlyRatePerMachine),
           machineId: null,
           brand: cat.brand,
           model: cat.model,
@@ -373,14 +392,10 @@ export const POST = withAuthAndRole(
         };
       });
 
-      // Totals derived from line items.
-      finalSubtotal = round2(finalLineItems.reduce((sum: number, li: any) => sum + (Number(li.quantity) || 0) * (Number(li.unitPrice) || 0), 0));
-      const shouldApplyVat = taxCategoryFromCustomerType === 'VAT';
-      finalVatAmount = shouldApplyVat ? round2(finalSubtotal * VAT_RATE) : 0;
-      finalGrandTotal = round2(finalSubtotal + finalVatAmount);
+      finalLineItems = [...derivedMachineLines, ...preservedToolLines];
 
-      if (!Array.isArray(finalLineItems) || finalLineItems.length === 0) {
-        return validationErrorResponse('Unable to derive line items from rentals', {
+      if (!Array.isArray(derivedMachineLines) || derivedMachineLines.length === 0) {
+        return validationErrorResponse('Unable to derive machine line items from rentals', {
           rentalId: rentalId ? ['Selected rental has no machines assigned to invoice'] : [],
           rentalIds: rentalIdsArray ? ['Selected rentals have no machines assigned to invoice'] : [],
         });
