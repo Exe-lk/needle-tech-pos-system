@@ -26,9 +26,9 @@ export const HiringMachineAgreementPrint: React.FC<Props> = ({ agreementInfo }) 
         documentTitle="HIRING MACHINE AGREEMENT"
         className="print:p-0 dark:!bg-white dark:!text-black"
       >
-        <div className="text-black dark:!text-black pt-4">
+        <div className="text-black dark:!text-black pt-1">
           {/* Header section (Customer and Agreement info) */}
-          <div className="grid grid-cols-[3fr_2fr] gap-4 mb-8 text-sm">
+          <div className="grid grid-cols-[3fr_2fr] gap-4 mb-4 text-sm">
             <div>
               <div className="flex mb-1">
                 <span className="w-20 font-semibold text-gray-900 dark:!text-black">Customer</span>
@@ -52,7 +52,7 @@ export const HiringMachineAgreementPrint: React.FC<Props> = ({ agreementInfo }) 
           </div>
 
           {/* Table */}
-          <div className="mb-6">
+          <div className="mb-4">
             <table className="w-full border-collapse">
               <thead>
                 <tr>
@@ -72,26 +72,26 @@ export const HiringMachineAgreementPrint: React.FC<Props> = ({ agreementInfo }) 
               </thead>
               <tbody>
                 <tr>
-                  <td colSpan={4} className="h-4"></td>
+                  <td colSpan={4} className="h-1"></td>
                 </tr>
                 {agreementInfo.machines.map((machine, index) => (
                   <tr key={index}>
-                    <td className="py-1.5 text-sm text-gray-900 dark:!text-black pl-1 align-top pr-4">
+                    <td className="py-0.5 text-sm text-gray-900 dark:!text-black pl-1 align-top pr-4">
                       {index + 1}. {machine.machineDescription}
                     </td>
-                    <td className="py-1.5 text-sm text-gray-900 dark:!text-black align-top pr-4">
+                    <td className="py-0.5 text-sm text-gray-900 dark:!text-black align-top pr-4">
                       {machine.serialNo}
                     </td>
-                    <td className="py-1.5 text-sm text-gray-900 dark:!text-black align-top pr-4">
+                    <td className="py-0.5 text-sm text-gray-900 dark:!text-black align-top pr-4">
                       {machine.motorBoxNo || ''}
                     </td>
-                    <td className="py-1.5 text-right text-sm text-gray-900 dark:!text-black pr-1 align-top">
+                    <td className="py-0.5 text-right text-sm text-gray-900 dark:!text-black pr-1 align-top">
                       {machine.monthlyRent.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}
                 <tr>
-                  <td colSpan={4} className="h-4"></td>
+                  <td colSpan={4} className="h-1"></td>
                 </tr>
                 <tr>
                   <td colSpan={4} className="border-t border-gray-800"></td>
@@ -112,7 +112,7 @@ export const HiringMachineAgreementPrint: React.FC<Props> = ({ agreementInfo }) 
           </div>
 
           {/* Additional Parts */}
-          <div className="mb-12">
+          <div className="mb-6">
             <span className="text-sm font-semibold text-gray-900 dark:!text-black">Additional Parts</span>
             {agreementInfo.additionalParts && (
               <div className="text-sm text-gray-900 dark:!text-black mt-2">
@@ -122,9 +122,9 @@ export const HiringMachineAgreementPrint: React.FC<Props> = ({ agreementInfo }) 
           </div>
 
           {/* Terms & Conditions */}
-          <div className="mb-10">
+          <div className="mb-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:!text-black mb-2">Terms & Conditions</h3>
-            <div className="space-y-4 text-sm text-gray-900 dark:!text-black text-justify leading-relaxed">
+            <div className="space-y-1.5 text-sm text-gray-900 dark:!text-black text-justify leading-relaxed">
               <p>
                 (01) You have to be paid in cash double monthly rental fee on the date of rent machine issues. The excess payment would be immediately return to you as and when you returned the hired machine within the stipulated period.
               </p>
@@ -136,9 +136,9 @@ export const HiringMachineAgreementPrint: React.FC<Props> = ({ agreementInfo }) 
           </div>
 
           {/* Signature block */}
-          <div className="grid grid-cols-2 gap-8 mb-12 mt-24">
+          <div className="grid grid-cols-2 gap-8 mb-6 mt-8">
             <div className="flex flex-col justify-end">
-              <div className="text-sm text-gray-900 dark:!text-black mb-16">
+              <div className="text-sm text-gray-900 dark:!text-black mb-8">
                 Customer Signature
               </div>
               <div className="border-t border-dotted border-gray-600 pt-1 text-sm text-gray-900 dark:!text-black w-64">
@@ -162,7 +162,7 @@ export const HiringMachineAgreementPrint: React.FC<Props> = ({ agreementInfo }) 
           </div>
           
           {/* QR Code */}
-          <div className="mt-12 flex flex-col items-start">
+          <div className="mt-4 flex flex-col items-start">
             <div className="border border-gray-200 p-1.5 bg-white rounded-md flex flex-col items-center">
               <QRCodeSVG value={agreementInfo.agreementNo || ''} size={80} />
               <span className="text-[9px] text-gray-500 mt-1 uppercase font-semibold">Scan QR</span>

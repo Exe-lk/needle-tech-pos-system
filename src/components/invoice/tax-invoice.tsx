@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
-import { QRCodeSVG } from 'qrcode.react';
 
 export interface TaxInvoiceProps {
   invoiceNumber: string;
@@ -98,7 +97,7 @@ export function TaxInvoice({
             </tbody>
           </table>
 
-          <div className="border border-gray-400 flex flex-col h-[130px]">
+          <div className="border border-gray-400 flex flex-col h-[165px]">
             <div className="bg-gray-50 font-bold p-2 border-b border-gray-400">Supplier's Name & Address</div>
             <div className="p-2 whitespace-pre-wrap flex-1 text-[13px] leading-tight">
               {info.fullName}<br />
@@ -141,7 +140,7 @@ export function TaxInvoice({
             </tbody>
           </table>
 
-          <div className="border border-gray-400 flex flex-col h-[130px]">
+          <div className="border border-gray-400 flex flex-col h-[165px]">
             <div className="bg-gray-50 font-bold p-2 border-b border-gray-400">Purchaser's Name & Address</div>
             <div className="p-2 whitespace-pre-wrap flex-1 text-[13px] leading-tight">
               {customerName}<br />
@@ -149,7 +148,7 @@ export function TaxInvoice({
             </div>
           </div>
 
-          <div className="border border-gray-400 flex flex-col mt-[44px]">
+          <div className="border border-gray-400 flex flex-col mt-2">
             <div className="bg-gray-50 font-bold p-2 border-b border-gray-400">Place of Supply</div>
             <div className="p-2 h-[42px] flex items-center">{placeOfSupply || customerAddress.split(',').pop()?.trim()}</div>
           </div>
@@ -210,12 +209,8 @@ export function TaxInvoice({
         </table>
       </div>
 
-      {/* Footer Instructions & QR */}
+      {/* Footer Instructions */}
       <div className="mt-auto flex items-end gap-8">
-        <div className="border border-gray-200 p-1.5 bg-white rounded-md flex flex-col items-center">
-          <QRCodeSVG value={invoiceNumber} size={70} />
-          <span className="text-[8px] text-gray-500 mt-1 uppercase font-semibold">Scan QR</span>
-        </div>
         <div className="text-xs space-y-1 text-gray-700 flex-1">
           <p>All cheques to be drawn in favour of <span className="font-bold text-black">" Needle Technologies Company (Pvt) Ltd "</span></p>
           <p className="font-bold text-black pt-2">Bank Details :</p>

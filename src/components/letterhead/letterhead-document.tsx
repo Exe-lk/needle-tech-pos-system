@@ -70,7 +70,7 @@ export function LetterheadDocument({
       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
       {/* Header - Logo top-left; tagline optional (hidden for tax invoice to match official format) */}
-      <div className="mb-6 print:mb-4">
+      <div className="mb-4 print:mb-2">
         <div className="flex flex-row items-center justify-between gap-4">
           {/* Logo - top-left corner (img for reliable print) */}
           <div className="flex-shrink-0">
@@ -89,12 +89,12 @@ export function LetterheadDocument({
         </div>
 
         {/* Separator line - below logo and tagline */}
-        <div className="border-b border-gray-800 dark:border-slate-500 mt-3 mb-4 print:border-gray-800" />
+        <div className="border-b border-gray-800 dark:border-slate-500 mt-2 mb-2 print:border-gray-800" />
 
         {/* Document title (e.g. GATEPASS, INVOICE, HIRING MACHINE AGREEMENT) */}
         {documentTitle && (
-          <div className="text-center mb-4">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white uppercase tracking-tight print:text-gray-900">
+          <div className="text-center mb-1 print:mb-1">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white uppercase tracking-tight print:text-gray-900">
               {documentTitle}
             </h2>
           </div>

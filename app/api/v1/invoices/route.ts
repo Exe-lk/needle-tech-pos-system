@@ -323,6 +323,7 @@ export const POST = withAuthAndRole(
                   brand: { select: { name: true } },
                   model: { select: { name: true } },
                   type: { select: { name: true } },
+                  serialNumber: true,
                 },
               },
             },
@@ -342,7 +343,7 @@ export const POST = withAuthAndRole(
       // Group machines by agreement + brand/model/type + monthlyPerMachine so multi-agreement invoices stay readable.
       const categoryMap = new Map<
         string,
-        { agreementNumber: string; brand: string; model: string; type: string; count: number; monthlyRatePerMachine: number }
+        { agreementNumber: string; brand: string; model: string; type: string; count: number; monthlyRatePerMachine: number; serials: string[] }
       >();
       for (const r of rentals) {
         const agreementNo = r.agreementNumber ?? '';
@@ -363,9 +364,14 @@ export const POST = withAuthAndRole(
               type: mtype,
               count: 0,
               monthlyRatePerMachine: monthlyPerMachine,
+              serials: [],
             });
           }
-          categoryMap.get(key)!.count += qty;
+          const cat = categoryMap.get(key)!;
+          cat.count += qty;
+          if (rm.machine?.serialNumber) {
+            cat.serials.push(rm.machine.serialNumber);
+          }
         }
       }
 
@@ -387,7 +393,7 @@ export const POST = withAuthAndRole(
           modelId: null,
           machineTypeId: null,
           itemCode: `212WG${String(++itemIndex).padStart(5, '0')}`,
-          serialNumber: undefined,
+          serialNumber: cat.serials.length > 0 ? cat.serials.join(', ') : undefined,
           vatRate: VAT_RATE,
         };
       });

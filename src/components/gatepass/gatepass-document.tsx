@@ -119,9 +119,9 @@ export function GatepassDocument({
       </div>
 
       {/* Table */}
-      <div className="flex-1 flex flex-col mb-4">
-        <table className="w-full border-collapse flex-1 flex flex-col border-t-2 border-b-2 border-gray-300">
-          <thead className="w-full table table-fixed">
+      <div className="flex-1 mb-4">
+        <table className="w-full border-collapse border-t-2 border-b-2 border-gray-300 table-fixed">
+          <thead>
             <tr className="border-b border-gray-300">
               <th className="p-2 py-3 text-left w-[50%] font-bold text-[13px]">Description</th>
               <th className="p-2 py-3 text-left w-[15%] font-bold text-[13px]">Status</th>
@@ -129,15 +129,15 @@ export function GatepassDocument({
               <th className="p-2 py-3 text-left w-[20%] font-bold text-[13px]">Motor / Box No</th>
             </tr>
           </thead>
-          <tbody className="w-full table table-fixed flex-1 pt-2">
+          <tbody className="align-top">
             {items.map((item, index) => (
-              <tr key={index} className="align-top h-8 text-[12px]">
-                <td className="p-2 text-left whitespace-pre-wrap leading-tight text-gray-700 uppercase">
+              <tr key={index} className="text-[12px] border-b border-gray-100 last:border-0">
+                <td className="p-2 py-3 text-left whitespace-pre-wrap leading-tight text-gray-700 uppercase">
                   {index + 1}. {item.description}
                 </td>
-                <td className="p-2 text-left text-gray-700 uppercase">{item.status}</td>
-                <td className="p-2 text-left text-gray-700 uppercase">{item.serialNo}</td>
-                <td className="p-2 text-left text-gray-700 uppercase">{item.motorBoxNo}</td>
+                <td className="p-2 py-3 text-left text-gray-700 uppercase">{item.status}</td>
+                <td className="p-2 py-3 text-left text-gray-700 uppercase">{item.serialNo}</td>
+                <td className="p-2 py-3 text-left text-gray-700 uppercase">{item.motorBoxNo}</td>
               </tr>
             ))}
           </tbody>
