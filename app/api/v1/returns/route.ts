@@ -18,7 +18,7 @@ import { logAuditAction } from '@/lib/audit-logger';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER', 'Stock_Keeper'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -80,7 +80,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'Stock_Keeper'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { 
