@@ -8,7 +8,7 @@ import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import { Eye, X, TrendingUp, TrendingDown } from 'lucide-react';
 import { authFetch } from '@/lib/auth-client';
 
-type MachineType = 'Industrial' | 'Domestic' | 'Embroidery' | 'Overlock' | 'Buttonhole' | 'Other';
+type MachineType = string;
 type TransactionType = 'Stock In' | 'Stock Out' | 'Rental Out' | 'Return In' | 'Maintenance Out' | 'Maintenance In' | 'Retired';
 
 interface BincardEntry {
@@ -42,7 +42,8 @@ const API_BASE_URL = '/api/v1';
 
 function normalizeMachineType(value: string): MachineType {
   const normalized = value?.trim() || '';
-  const map: Record<string, MachineType> = {
+  if (!normalized) return 'Other';
+  const map: Record<string, string> = {
     industrial: 'Industrial',
     domestic: 'Domestic',
     embroidery: 'Embroidery',
@@ -50,7 +51,7 @@ function normalizeMachineType(value: string): MachineType {
     buttonhole: 'Buttonhole',
     other: 'Other',
   };
-  return (map[normalized.toLowerCase()] as MachineType) || 'Other';
+  return map[normalized.toLowerCase()] || normalized;
 }
 
 function normalizeTransactionType(value: string): TransactionType {
@@ -240,7 +241,7 @@ const BincardPage: React.FC = () => {
       filterable: true,
       render: (value: MachineType) => {
         const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
-        const typeColors: Record<MachineType, string> = {
+        const typeColors: Record<string, string> = {
           Industrial: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
           Domestic: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
           Embroidery: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
@@ -439,7 +440,7 @@ const BincardPage: React.FC = () => {
   }, [filteredSummary]);
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+    <div className="min-h-full bg-gray-100 dark:bg-slate-950">
       {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
 
@@ -452,10 +453,10 @@ const BincardPage: React.FC = () => {
       />
 
       {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+      <main className={`pt-[84px] p-6 transition-all duration-300 ${
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="w-full xl:max-w-[1600px] mx-auto space-y-6">
           {/* Page header */}
           <div className="flex items-center justify-between">
             <div>

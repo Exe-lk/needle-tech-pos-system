@@ -61,7 +61,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 font-sans dark:bg-slate-900">
+    <div className="flex min-h-full items-center justify-center bg-zinc-50 px-4 font-sans dark:bg-slate-900">
       <main className="w-full max-w-md">
         <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="mb-8 flex flex-col items-center">

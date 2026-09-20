@@ -787,7 +787,7 @@ const ReturnsCreatePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+    <div className="min-h-full bg-gray-100 dark:bg-slate-950">
       <Navbar onMenuClick={() => setIsMobileSidebarOpen((p) => !p)} />
       <Sidebar
         onLogout={() => {}}
@@ -797,7 +797,7 @@ const ReturnsCreatePage: React.FC = () => {
       />
 
       <main
-        className={`pt-28 lg:pt-32 px-4 sm:px-6 pb-6 transition-all duration-300 ${
+        className={`pt-[84px] px-4 sm:px-6 pb-6 transition-all duration-300 ${
           isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
         }`}
       >

@@ -1540,7 +1540,7 @@ const GatePassPage: React.FC = () => {
         </div>
       )}
 
-      <div className="min-h-screen bg-gray-100 dark:bg-slate-950 print:hidden">
+      <div className="min-h-full bg-gray-100 dark:bg-slate-950 print:hidden">
         {/* Top navbar */}
         <Navbar onMenuClick={handleMenuClick} />
 
@@ -1554,10 +1554,10 @@ const GatePassPage: React.FC = () => {
 
         {/* Main content area */}
         <main
-          className={`pt-24 sm:pt-28 lg:pt-32 px-3 sm:px-4 md:px-6 pb-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+          className={`pt-24 sm:pt-[84px] px-3 sm:px-4 md:px-6 pb-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
             }`}
         >
-          <div className="max-w-7xl mx-auto space-y-4 sm:space-y-5">
+          <div className="w-full xl:max-w-[1600px] mx-auto space-y-4 sm:space-y-5">
             {/* Page header */}
             <div className="max-w-2xl">
               <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">

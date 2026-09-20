@@ -332,6 +332,25 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
             notes: `Return ${returnNumber} – machine ${rm.serialNumber} returned from agreement ${rental.agreementNumber}`,
           },
         });
+
+        // Add Transaction Log for return
+        await (tx as any).transactionLog.create({
+          data: {
+            transactionDate: returnDate,
+            category: 'RETURN',
+            transactionType: 'RETURN_IN',
+            reference: returnNumber,
+            description: `Return In – machine ${rm.serialNumber}`,
+            brand,
+            model,
+            customerId: rental.customerId,
+            quantity: 1,
+            location: 'Main Warehouse',
+            performedBy,
+            status: 'SUCCESS',
+            notes: `Returned from agreement ${rental.agreementNumber}`,
+          }
+        });
       }
       
       // Create damage reports (one per damaged/missing machine); link first to Return

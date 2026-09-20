@@ -111,6 +111,25 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
             notes: `Gate pass ${reference} approved – machine ${m.serialNumber} dispatched`,
           },
         });
+
+        // Add Transaction Log for dispatch
+        await (tx as any).transactionLog.create({
+          data: {
+            transactionDate: now,
+            category: 'RENTAL',
+            transactionType: 'RENTAL_OUT',
+            reference,
+            description: `Rental Dispatch (Gatepass ${reference}) – machine ${m.serialNumber}`,
+            brand,
+            model,
+            customerId: gatePass.customerId,
+            quantity: 1,
+            location: 'Main Warehouse', // Defaulting as location isn't explicit here
+            performedBy: auth?.fullName ?? auth?.username ?? 'Security',
+            status: 'SUCCESS',
+            notes: `Dispatched under agreement ${(gatePass.rental as any)?.agreementNumber}`,
+          },
+        });
       }
     });
     

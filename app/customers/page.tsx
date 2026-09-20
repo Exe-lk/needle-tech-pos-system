@@ -1315,7 +1315,7 @@ const CustomerListPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+    <div className="min-h-full bg-gray-100 dark:bg-slate-950">
       {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
 
@@ -1328,10 +1328,10 @@ const CustomerListPage: React.FC = () => {
       />
 
       {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+      <main className={`pt-[84px] p-6 transition-all duration-300 ${
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
-        <div className="max-w-7xl mx-auto space-y-4">
+        <div className="w-full xl:max-w-[1600px] mx-auto space-y-4">
           {/* Page header */}
           <div className="flex items-center justify-between">
             <div>

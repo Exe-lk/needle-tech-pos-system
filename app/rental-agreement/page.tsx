@@ -2922,7 +2922,7 @@ const RentalAgreementPage: React.FC = () => {
         </div>
       )}
 
-      <div className="min-h-screen bg-gray-100 dark:bg-slate-950 print:hidden">
+      <div className="min-h-full bg-gray-100 dark:bg-slate-950 print:hidden">
         {/* Top navbar */}
         <Navbar onMenuClick={handleMenuClick} />
 
@@ -2935,9 +2935,9 @@ const RentalAgreementPage: React.FC = () => {
         />
 
         {/* Main content area */}
-        <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+        <main className={`pt-[84px] p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
           }`}>
-          <div className="max-w-7xl mx-auto space-y-4">
+          <div className="w-full xl:max-w-[1600px] mx-auto space-y-4">
             {/* Page header */}
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Hiring Machine Agreement</h2>
@@ -2969,8 +2969,6 @@ const RentalAgreementPage: React.FC = () => {
               searchable
               filterable
               loading={loading}
-              onCreateClick={handleCreateAgreement}
-              createButtonLabel="Create Hiring Machine Agreement"
               getRowClassName={getRowClassName}
               emptyMessage={loading ? 'Loading rental agreements...' : 'No rental agreements found.'}
             />
