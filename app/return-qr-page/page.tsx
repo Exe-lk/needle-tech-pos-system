@@ -1025,7 +1025,7 @@ const ReturnQRPage: React.FC = () => {
 
   if (step === 1) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-950/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 px-4 py-4 flex items-center justify-between">
           <div className="flex items-center min-w-0">
@@ -1183,7 +1183,7 @@ const ReturnQRPage: React.FC = () => {
 
   if (step === 2 && view === 'menu' && selectedAgreement) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-950/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 px-4 py-4 flex items-center justify-between">
           <div className="flex items-center min-w-0">
@@ -1315,7 +1315,7 @@ const ReturnQRPage: React.FC = () => {
     const progressPct = totalMachines > 0 ? (scannedCount / totalMachines) * 100 : 0;
 
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-950/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
           <button
@@ -1520,7 +1520,7 @@ const ReturnQRPage: React.FC = () => {
     const progressPct = totalMachines > 0 ? (scannedCount / totalMachines) * 100 : 0;
 
     return (
-      <div className="min-h-screen w-full bg-gray-900 dark:bg-black flex flex-col transition-colors">
+      <div className="min-h-full w-full bg-gray-900 dark:bg-black flex flex-col transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-black/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
           <button

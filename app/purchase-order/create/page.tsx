@@ -1577,7 +1577,7 @@ export const CreatePurchaseOrderContent: React.FC<{
     };
 
     return (
-        <div className={variant === 'page' ? 'min-h-screen bg-gray-100 dark:bg-slate-950' : ''}>
+        <div className={variant === 'page' ? 'min-h-full bg-gray-100 dark:bg-slate-950' : ''}>
             {variant === 'page' && (
                 <Suspense fallback={null}>
                     <PurchaseModeFromSearchParams onModeChange={setPurchaseMode} />
@@ -1598,7 +1598,7 @@ export const CreatePurchaseOrderContent: React.FC<{
             <main
                 className={
                     variant === 'page'
-                        ? `pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'}`
+                        ? `pt-[84px] p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'}`
                         : 'p-0'
                 }
             >

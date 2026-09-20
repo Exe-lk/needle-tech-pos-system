@@ -612,7 +612,7 @@ const QRGeneratePage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+    <div className="min-h-full bg-gray-100 dark:bg-slate-950">
       <Script
         src="/browser-print/BrowserPrint-3.1.250.min.js"
         strategy="afterInteractive"
@@ -626,10 +626,10 @@ const QRGeneratePage: React.FC = () => {
         onExpandedChange={setIsSidebarExpanded}
       />
 
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+      <main className={`pt-[84px] p-6 transition-all duration-300 ${
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="w-full xl:max-w-[1600px] mx-auto space-y-6">
           <div>
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
               QR Code Generate

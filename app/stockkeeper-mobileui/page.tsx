@@ -60,7 +60,7 @@ export default function StockkeeperMobileUiPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors flex flex-col">
+    <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors flex flex-col">
       <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/50 px-4 py-4 shrink-0">
         <div className="max-w-md mx-auto flex items-start justify-between gap-3">
           <div>

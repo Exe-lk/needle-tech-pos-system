@@ -58,7 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     onMobileClose,
     onExpandedChange,
     hasNavbar = true,
-    navbarHeight = 70,
+    navbarHeight = 60,
 }) => {
     const router = useRouter();
     const { isSidebarExpanded: isExpanded, setIsSidebarExpanded } = useSidebar();

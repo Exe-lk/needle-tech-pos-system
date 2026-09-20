@@ -264,17 +264,17 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
   if (!mounted) {
     return (
       <nav
-        className={`bg-gradient-to-b from-[#F6F9FF] to-white dark:from-slate-900 dark:to-slate-950 shadow-sm border-b border-gray-200/80 dark:border-slate-800/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-40 h-[70px] w-full transition-all duration-300 ease-in-out ${className}`}
+        className={`bg-gradient-to-b from-[#F6F9FF] to-white dark:from-slate-900 dark:to-slate-950 shadow-sm border-b border-gray-200/80 dark:border-slate-800/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-40 h-[60px] w-full transition-all duration-300 ease-in-out ${className}`}
       >
         <div className="px-6 h-full">
           <div className="flex justify-between items-center h-full">
             <div className="flex items-center space-x-3.5">
-              <div className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-white dark:bg-slate-800/50 shadow-sm border border-gray-200/50 dark:border-slate-700/50">
+              <div className="relative w-10 h-10 flex-shrink-0 overflow-hidden">
                 <div className="w-full h-full bg-gray-100 dark:bg-slate-800 rounded-lg" />
               </div>
               <div className="flex flex-col">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
-                  Needle Tech
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
+                  Needle Tech Rental System
                 </h1>
               </div>
             </div>
@@ -289,7 +289,7 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
 
   return (
     <nav
-      className={`bg-gradient-to-b from-[#F6F9FF] to-white dark:from-slate-900 dark:to-slate-950 shadow-sm border-b border-gray-200/80 dark:border-slate-800/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-40 h-[70px] w-full transition-all duration-300 ease-in-out ${className}`}
+      className={`bg-gradient-to-b from-[#F6F9FF] to-white dark:from-slate-900 dark:to-slate-950 shadow-sm border-b border-gray-200/80 dark:border-slate-800/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-40 h-[60px] w-full transition-all duration-300 ease-in-out ${className}`}
     >
       <div className="px-6 h-full">
         <div className="flex justify-between items-center h-full">
@@ -308,21 +308,21 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
             </button>
 
             {/* Logo - Increased size for better visibility */}
-            <div className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-white dark:bg-slate-800/50 shadow-sm border border-gray-200/50 dark:border-slate-700/50">
+            <div className="relative w-10 h-10 flex-shrink-0 overflow-hidden">
               <Image
                 src="/logo.jpg"
                 alt="Needle Technologies Logo"
                 fill
                 className="object-contain p-1"
                 priority
-                sizes="56px"
+                sizes="40px"
               />
             </div>
 
             {/* Company Name */}
             <div className="flex flex-col">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
-                Needle Tech
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
+                Needle Tech Rental System
               </h1>
             </div>
            
@@ -367,7 +367,7 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
             aria-label="User profile"
             className="absolute right-0 top-0 h-full w-[360px] max-w-[92vw] bg-white dark:bg-slate-950 border-l border-gray-200/80 dark:border-slate-800/80 shadow-2xl"
           >
-            <div className="h-[70px] px-5 flex items-center justify-between border-b border-gray-200/80 dark:border-slate-800/80">
+            <div className="h-[60px] px-5 flex items-center justify-between border-b border-gray-200/80 dark:border-slate-800/80">
               <div className="flex items-center space-x-3">
                 <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-sm">
                   {getInitials(getUserName(loggedUser) || getUserEmail(loggedUser))}

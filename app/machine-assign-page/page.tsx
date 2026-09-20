@@ -864,7 +864,7 @@ const MachineAssignPage: React.FC = () => {
   // -------------------------------------------------------------------------
   if (step === 1) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/50 px-4 py-4">
           <div className="max-w-md mx-auto flex items-start justify-between gap-3">
@@ -1079,7 +1079,7 @@ const MachineAssignPage: React.FC = () => {
   if (viewMode === 'menu') {
     const remaining = totalExpected - totalScanned;
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
@@ -1241,7 +1241,7 @@ const MachineAssignPage: React.FC = () => {
     const toolsForAgreement = Array.isArray(selectedAgreement.tools) ? selectedAgreement.tools : [];
     const toolsMonthlySubtotal = toolsForAgreement.reduce((sum, t) => sum + (t.unitPrice || 0) * (t.quantity || 0), 0);
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
@@ -1525,7 +1525,7 @@ const MachineAssignPage: React.FC = () => {
   // STEP 2 / VIEW: SCANNING INTERFACE
   // -------------------------------------------------------------------------
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
+    <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
       {/* Header */}
       <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
         <button

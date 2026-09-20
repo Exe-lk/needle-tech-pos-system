@@ -151,11 +151,11 @@ const QRScannerContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
+    <div className="min-h-full bg-gray-50 dark:bg-slate-950">
       {/* Header Bar - Only shown when not scanning */}
       {!scanResult && (
         <div className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="w-full xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center space-x-4">
                 <button
@@ -277,7 +277,7 @@ const QRScannerContent: React.FC = () => {
               subtitle={subtitle}
             />
           ) : (
-            <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
+            <div className="min-h-full flex items-center justify-center p-4 sm:p-6 lg:p-8">
               <div className="w-full max-w-2xl">
                 {/* Success Card */}
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-gray-200 dark:border-slate-800 overflow-hidden">
@@ -375,7 +375,7 @@ const QRScannerContent: React.FC = () => {
 function QRScannerPageWithSuspense() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-full items-center justify-center">
         <div className="text-muted-foreground">Loading scanner...</div>
       </div>
     }>
