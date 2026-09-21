@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, errorResponse, paginatedResponse, validationErrorResponse } from '@/lib/api-response';
 import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole, AuthUser } from '@/lib/auth-middleware';
+import { isDatabaseUnavailable } from '@/lib/db-errors';
 import prisma from '@/lib/prisma';
 
 /**
@@ -127,8 +128,11 @@ export const GET = withAuthAndRole(['SUPER_ADMIN','ADMIN', 'Operational_Officer'
         ...(customerIdFilter && { customerId: customerIdFilter }),
       }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching invoices:', error);
+    if (isDatabaseUnavailable(error)) {
+      return errorResponse('Database temporarily unavailable. Please try again.', 503);
+    }
     return errorResponse('Failed to retrieve invoices', 500);
   }
 });

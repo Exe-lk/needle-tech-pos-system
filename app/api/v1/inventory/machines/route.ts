@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuthAndRole } from '@/lib/auth-middleware';
+import { isDatabaseUnavailable } from '@/lib/db-errors';
 import prisma from '@/lib/prisma';
 
 /**
@@ -61,6 +62,9 @@ export const GET = withAuthAndRole(
       );
     } catch (error: unknown) {
       console.error('Error fetching inventory machines:', error);
+      if (isDatabaseUnavailable(error)) {
+        return errorResponse('Database temporarily unavailable. Please try again.', 503);
+      }
       return errorResponse('Failed to retrieve machines', 500);
     }
   }

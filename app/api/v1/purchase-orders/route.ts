@@ -6,6 +6,46 @@ import prisma from '@/lib/prisma';
 import { Decimal } from '@prisma/client/runtime/client';
 import { logAuditAction } from '@/lib/audit-logger';
 
+function buildPurchaseOrderAddress(
+  customer?: {
+    billingAddressLine1?: string | null;
+    billingAddressLine2?: string | null;
+    billingCity?: string | null;
+    billingRegion?: string | null;
+    billingPostalCode?: string | null;
+    billingCountry?: string | null;
+  } | null,
+  location?: {
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    region?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  } | null,
+): string {
+  if (location) {
+    const locationParts = [
+      location.addressLine1,
+      location.addressLine2,
+      location.city,
+      location.region,
+      location.postalCode,
+      location.country,
+    ].filter(Boolean);
+    if (locationParts.length > 0) return locationParts.join(', ');
+  }
+  if (!customer) return '';
+  return [
+    customer.billingAddressLine1,
+    customer.billingAddressLine2,
+    customer.billingCity,
+    customer.billingRegion,
+    customer.billingPostalCode,
+    customer.billingCountry || 'Sri Lanka',
+  ].filter(Boolean).join(', ');
+}
+
 /**
  * @swagger
  * /api/v1/purchase-orders:
@@ -47,6 +87,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       orderBy: { [sortBy]: sortOrderDir },
       include: {
         customer: true,
+        customerLocation: true,
         rentals: {
           select: {
             id: true,
@@ -69,6 +110,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
         requestNumber: po.requestNumber,
         customerId: po.customerId,
         customerName: po.customer?.name || '',
+        customerAddress: buildPurchaseOrderAddress(po.customer, po.customerLocation),
         customerType: po.customer?.type === 'GARMENT_FACTORY' ? 'Business' : 'Individual',
         requestDate: po.requestDate,
         startDate: (po as any).startDate ?? null,

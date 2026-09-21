@@ -1,7 +1,18 @@
 import { NextRequest } from 'next/server';
-import { unauthorizedResponse, forbiddenResponse } from './api-response';
+import { unauthorizedResponse, forbiddenResponse, errorResponse } from './api-response';
 import { authenticateRequest, hasPermission } from './auth-supabase';
 import type { AuthUser } from './auth-supabase';
+import { isDatabaseUnavailable } from './db-errors';
+
+function authCatchResponse(error: unknown) {
+  if (isDatabaseUnavailable(error)) {
+    console.error('Database unavailable during authentication:', error);
+    return errorResponse('Database temporarily unavailable. Please try again.', 503);
+  }
+  console.error('Authentication error:', error);
+  const message = error instanceof Error ? error.message : 'Authentication required';
+  return unauthorizedResponse(message);
+}
 
 /**
  * Middleware wrapper for protected routes
@@ -14,9 +25,8 @@ export function withAuth<T extends any[]>(
     try {
       const auth = await authenticateRequest(request);
       return handler(request, auth, ...args);
-    } catch (error: any) {
-      console.error('Authentication error:', error);
-      return unauthorizedResponse(error.message || 'Authentication required');
+    } catch (error: unknown) {
+      return authCatchResponse(error);
     }
   };
 }
@@ -38,9 +48,8 @@ export function withAuthAndRole<T extends any[]>(
       }
       
       return handler(request, auth, ...args);
-    } catch (error: any) {
-      console.error('Authentication error:', error);
-      return unauthorizedResponse(error.message || 'Authentication required');
+    } catch (error: unknown) {
+      return authCatchResponse(error);
     }
   };
 }
@@ -67,9 +76,8 @@ export function withAuthAndPermission<T extends any[]>(
       }
       
       return handler(request, auth, ...args);
-    } catch (error: any) {
-      console.error('Authentication error:', error);
-      return unauthorizedResponse(error.message || 'Authentication required');
+    } catch (error: unknown) {
+      return authCatchResponse(error);
     }
   };
 }

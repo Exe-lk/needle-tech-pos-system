@@ -142,9 +142,11 @@ const InventoryManagementPage: React.FC = () => {
     }
   }, []);
 
+  // Load machines after inventory to avoid parallel DB pool spikes on page open.
   useEffect(() => {
+    if (inventoryLoading) return;
     fetchMachineUnits();
-  }, [fetchMachineUnits]);
+  }, [inventoryLoading, fetchMachineUnits]);
 
   // Fetch transactions for history modal (filtered by brand/model)
   const fetchTransactionsForItem = useCallback(async (brand: string, model: string) => {

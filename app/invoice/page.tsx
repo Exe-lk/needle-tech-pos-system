@@ -734,12 +734,11 @@ const InvoicePage: React.FC = () => {
   const loadInitialData = async () => {
     setIsLoading(true);
     try {
-      const [customersData, brandsData, typesData, invoicesData] = await Promise.all([
-        fetchCustomers(),
-        fetchBrands(),
-        fetchMachineTypes(),
-        fetchInvoices(),
-      ]);
+      // Stagger fetches so serverless DB pool is not exhausted on page load.
+      const customersData = await fetchCustomers();
+      const brandsData = await fetchBrands();
+      const typesData = await fetchMachineTypes();
+      const invoicesData = await fetchInvoices();
       
       setCustomers(customersData);
       setBrands(brandsData);

@@ -30,6 +30,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import Tooltip from '@/src/components/common/tooltip';
 import { authFetch } from '@/lib/auth-client';
+import { mapWithConcurrency } from '@/lib/utils';
 
 const API_BASE = '/api/v1';
 
@@ -192,8 +193,10 @@ const AnalyticsPage: React.FC = () => {
     setAnalyticsLoading(true);
     const months = getMonthsForPeriod(selectedPeriod);
     try {
-      const results = await Promise.all(
-        months.map(({ year, month }) => fetchMonthEndAnalytics(year, month))
+      const results = await mapWithConcurrency(
+        months,
+        2,
+        ({ year, month }) => fetchMonthEndAnalytics(year, month)
       );
       const valid = results.filter((r): r is MonthEndAnalyticsPayload => r != null);
       if (valid.length === 0) {

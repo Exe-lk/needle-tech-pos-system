@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
-import { Eye, X, FileText, CheckCircle2, Clock, Calendar, Printer, Pencil, Plus, Minus } from 'lucide-react';
+import { Eye, X, FileText, Calendar, Printer, Pencil, Plus, Minus } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
-import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
+import { PurchaseOrderPrint } from '@/src/components/purchase-order/purchase-order-print';
 import { authFetch } from '@/lib/auth-client';
 import { Swal, toast } from '@/src/lib/swal';
 import { CreatePurchaseOrderContent, type PurchaseOrderCreateMode } from './create/page';
@@ -23,6 +23,7 @@ interface PurchaseRequest {
     requestNumber: string;
     customerId: string | number;
     customerName: string;
+    customerAddress?: string | null;
     customerType: CustomerType;
     requestDate: string;
     startDate?: string | null;
@@ -87,10 +88,6 @@ const toDateInputValue = (value: string | Date | null | undefined): string => {
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
 };
-
-/** Printed quotation letterhead: VAT logo for business customers; non-VAT for individuals. */
-const purchaseOrderPrintLogoPath = (customerType: string): string =>
-    customerType === 'Business' ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg';
 
 const getEarliestExpectedAvailabilityDate = (request: PurchaseRequest): string | null => {
     if (!request.machines || request.machines.length === 0) return null;
@@ -771,230 +768,48 @@ const PurchaseOrderPage: React.FC = () => {
         },
     ];
 
-    const renderStatusBadge = (status: PurchaseRequestStatus) => {
-        const base = 'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
-        const s = typeof status === 'string' ? status.toUpperCase().replace(/\s/g, '_') : '';
-        if (s === 'APPROVED') return <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300`}>Approved</span>;
-        if (s === 'ACTIVE') return <span className={`${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300`}>Active</span>;
-        if (s === 'COMPLETED') return <span className={`${base} bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300`}>Completed</span>;
-        if (s === 'PARTIALLY_FULFILLED') return <span className={`${base} bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300`}>Partially Fulfilled</span>;
-        if (s === 'REJECTED') return <span className={`${base} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`}>Rejected</span>;
-        if (s === 'CANCELLED') return <span className={`${base} bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200`}>Cancelled</span>;
-        return <span className={`${base} bg-yellow-100 text-yellow-700 dark:text-yellow-900/30 dark:text-yellow-300`}>Pending</span>;
-    };
-
-    const renderRequestDetails = () => {
-        if (!selectedRequest) return null;
-        return (
-            <div className="space-y-6">
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Customer Details</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Customer</label>
-                            <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50 text-gray-900 dark:text-white">{selectedRequest.customerName}</div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Customer Type</label>
-                            <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50 text-gray-900 dark:text-white">{selectedRequest.customerType}</div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Request Date</label>
-                            <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50 text-gray-900 dark:text-white">{new Date(selectedRequest.requestDate).toLocaleDateString('en-LK')}</div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
-                            <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50 text-gray-900 dark:text-white">
-                                {selectedRequest.startDate ? new Date(selectedRequest.startDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date</label>
-                            <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50 text-gray-900 dark:text-white">
-                                {selectedRequest.endDate ? new Date(selectedRequest.endDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
-                            <div className="pt-1">{renderStatusBadge(selectedRequest.status)}</div>
-                        </div>
-                    </div>
-                </div>
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Machine Details</h3>
-                    {selectedRequest.machines?.map((machine, index) => {
-                        const available = Math.min(machine.availableStock, machine.quantity - (machine.rentedQuantity || 0));
-                        const rented = machine.rentedQuantity || 0;
-                        const pending = machine.pendingQuantity || 0;
-                        const isUnavailable = (machine.quantity - rented) > available;
-                        return (
-                            <div key={machine.id} className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 border border-gray-200 dark:border-slate-600">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Machine {index + 1}</span>
-                                    {machine.brand && machine.model && (
-                                        <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold ${available > 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>Available: {available}</div>
-                                    )}
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Brand</label><div className="text-sm text-gray-900 dark:text-white">{machine.brand}</div></div>
-                                    <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Model</label><div className="text-sm text-gray-900 dark:text-white">{machine.model}</div></div>
-                                    <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Type</label><div className="text-sm text-gray-900 dark:text-white">{machine.type}</div></div>
-                                    <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Quantity</label><div className="text-sm text-gray-900 dark:text-white">{machine.quantity}</div></div>
-                                </div>
-                                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-600 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                                    <span>Unit Price: Rs. {machine.unitPrice.toLocaleString('en-LK')}</span>
-                                    <span>Sub Total: Rs. {machine.totalPrice.toLocaleString('en-LK')} ({machine.unitPrice.toLocaleString('en-LK')} × {machine.quantity})</span>
-                                    {rented > 0 && <span className="flex items-center text-green-600 dark:text-green-400"><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Rented: {rented}</span>}
-                                    {pending > 0 && <span className="flex items-center text-yellow-600 dark:text-yellow-400"><Clock className="w-3.5 h-3.5 mr-1" /> Pending: {pending}</span>}
-                                    {isUnavailable && machine.expectedAvailabilityDate && <span className="flex items-center text-orange-600 dark:text-orange-400"><Calendar className="w-3.5 h-3.5 mr-1" />Expected: {new Date(machine.expectedAvailabilityDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-                {selectedRequest.tools && selectedRequest.tools.length > 0 && (
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Tool Details</h3>
-                        {selectedRequest.tools.map((tool, index) => {
-                            const available = Math.min(tool.availableStock ?? 0, tool.quantity - (tool.rentedQuantity || 0));
-                            const rented = tool.rentedQuantity || 0;
-                            const pending = tool.pendingQuantity ?? 0;
-                            return (
-                                <div key={`${tool.id}-${index}`} className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 border border-gray-200 dark:border-slate-600">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Tool {index + 1}</span>
-                                        {tool.toolName && (
-                                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold ${available > 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
-                                                In stock: {available}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Name</label><div className="text-sm text-gray-900 dark:text-white">{tool.toolName ?? '—'}</div></div>
-                                        <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Type</label><div className="text-sm text-gray-900 dark:text-white">{tool.toolType ?? '—'}</div></div>
-                                        <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Quantity</label><div className="text-sm text-gray-900 dark:text-white">{tool.quantity}</div></div>
-                                        <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Brand / Model</label><div className="text-sm text-gray-900 dark:text-white">{[tool.brand, tool.model].filter(Boolean).join(' · ') || '—'}</div></div>
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-600 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                                        <span>Unit Price: Rs. {(tool.unitPrice ?? 0).toLocaleString('en-LK')}</span>
-                                        <span>Sub Total: Rs. {(tool.totalPrice ?? 0).toLocaleString('en-LK')} ({(tool.unitPrice ?? 0).toLocaleString('en-LK')} × {tool.quantity})</span>
-                                        {rented > 0 && <span className="flex items-center text-green-600 dark:text-green-400"><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Allocated: {rented}</span>}
-                                        {pending > 0 && <span className="flex items-center text-yellow-600 dark:text-yellow-400"><Clock className="w-3.5 h-3.5 mr-1" /> Pending: {pending}</span>}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-                <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Pricing Summary</h3>
-                    <div className="flex justify-between items-center">
-                        <span className="text-gray-600 dark:text-gray-400">Total Amount:</span>
-                        <span className="text-2xl font-bold text-gray-900 dark:text-white">Rs. {selectedRequest.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                </div>
-                {selectedRequest.rentalAgreementIds && selectedRequest.rentalAgreementIds.length > 0 && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                        <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-2">Associated Rental Agreements</h4>
-                        <div className="text-sm text-blue-600 dark:text-blue-400">
-                            {selectedRequest.rentalAgreementIds.map((id, idx) => (
-                                <span key={id}>RA-2024-{String(id).padStart(3, '0')}{idx < selectedRequest.rentalAgreementIds!.length - 1 ? ', ' : ''}</span>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    /** Printable purchase order in letterhead (used when user clicks Print in view modal). */
-    const renderPurchaseOrderDocument = (request: PurchaseRequest) => (
-        <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto min-h-[297mm] flex flex-col print:bg-white print:p-8">
-            <LetterheadDocument
-                documentTitle="QUOTATION"
-                footerStyle="simple"
-                className="print:p-0 flex flex-col flex-1"
-                logoPath={purchaseOrderPrintLogoPath(request.customerType)}
-            >
-                <div className="text-center mb-4">
-                    <p className="text-lg font-bold text-gray-900 dark:text-slate-100 print:text-gray-900">{request.requestNumber}</p>
-                </div>
-                <div className="mb-4 space-y-2 text-sm">
-                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Customer:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.customerName}</span></div>
-                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Customer Type:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.customerType}</span></div>
-                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Request Date:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{new Date(request.requestDate).toLocaleDateString('en-LK')}</span></div>
-                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Start Date:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.startDate ? new Date(request.startDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
-                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">End Date:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.endDate ? new Date(request.endDate).toLocaleDateString('en-LK', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span></div>
-                    <div><span className="font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700">Status:</span> <span className="text-gray-900 dark:text-slate-100 print:text-gray-900">{request.status}</span></div>
-                </div>
-                <div className="mb-4 flex-1 overflow-x-auto print:overflow-visible">
-                    <table className="w-full border-collapse border border-gray-800 dark:border-slate-500 print:border-gray-800 min-w-[28rem] print:min-w-0">
-                        <thead>
-                            <tr className="bg-gray-100 dark:bg-slate-700/50 print:bg-gray-100">
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-left text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Brand</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-left text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Model</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-left text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Type</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-center text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Quantity</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-right text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Unit Price (Rs.)</th>
-                                <th className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-right text-sm print:text-xs font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Total (Rs.)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {request.machines?.map((m, i) => (
-                                <tr key={i}>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{m.brand}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{m.model}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{m.type}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{m.quantity}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.unitPrice.toLocaleString('en-LK')}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{m.totalPrice.toLocaleString('en-LK')}</td>
-                                </tr>
-                            ))}
-                            {request.tools?.map((t, i) => (
-                                <tr key={`tool-${i}`}>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{t.toolName ?? '—'}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{[t.brand, t.model].filter(Boolean).join(' · ') || '—'}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">{t.toolType ?? '—'}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-center text-gray-900 dark:text-slate-100 print:text-gray-900">{t.quantity}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{(t.unitPrice ?? 0).toLocaleString('en-LK')}</td>
-                                    <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-sm print:text-xs text-right text-gray-900 dark:text-slate-100 print:text-gray-900">{(t.totalPrice ?? 0).toLocaleString('en-LK')}</td>
-                                </tr>
-                            ))}
-                            <tr className="bg-gray-50 dark:bg-slate-700/30 print:bg-gray-50 font-semibold">
-                                <td colSpan={5} className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-right text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">Total Amount:</td>
-                                <td className="border border-gray-800 dark:border-slate-500 print:border-gray-800 px-4 py-2 print:px-2 text-right text-sm print:text-xs text-gray-900 dark:text-slate-100 print:text-gray-900">Rs. {request.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                {request.rentalAgreementIds && request.rentalAgreementIds.length > 0 && (
-                    <div className="border-t border-gray-300 dark:border-slate-600 print:border-gray-300 pt-4 mt-4">
-                        <div className="text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-1">Associated Rental Agreements</div>
-                        <div className="text-sm text-gray-900 dark:text-slate-100 print:text-gray-900">{request.rentalAgreementIds.map(id => `RA-2024-${String(id).padStart(3, '0')}`).join(', ')}</div>
-                    </div>
-                )}
-            </LetterheadDocument>
-        </div>
-    );
-
     const renderViewModalContent = () => {
         if (!selectedRequest) return null;
         return (
             <div className="print:hidden">
-                <div className="space-y-6">{renderRequestDetails()}</div>
+                <PurchaseOrderPrint request={selectedRequest} />
             </div>
         );
     };
 
     return (
         <>
+            <style jsx global>{`
+                @media print {
+                    @page {
+                        margin: 0;
+                    }
+                    html,
+                    body {
+                        background: #ffffff !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+
+                    #purchase-order-print {
+                        background: #ffffff !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    #purchase-order-print,
+                    #purchase-order-print * {
+                        color: #111827 !important;
+                    }
+                }
+            `}</style>
             {/* Print-only: purchase order in letterhead (shown when user clicks Print in view modal) */}
             {selectedRequest && (
                 <div
                     id="purchase-order-print"
-                    className="hidden print:block print:fixed print:inset-0 print:z-[9999] print:bg-white print:p-0 print:m-0"
+                    className="hidden print:block print:bg-white print:z-[9999] print:overflow-visible"
+                    style={{ printColorAdjust: 'exact' } as React.CSSProperties}
                 >
-                    {renderPurchaseOrderDocument(selectedRequest)}
+                    <PurchaseOrderPrint request={selectedRequest} />
                 </div>
             )}
             <div className="min-h-full bg-gray-100 dark:bg-slate-950 print:hidden">
@@ -1113,7 +928,7 @@ const PurchaseOrderPage: React.FC = () => {
 
                 {isViewModalOpen && selectedRequest && (
                     <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4 print:hidden">
-                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
                             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
                                 <div>
                                     <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Purchase Order Details</h2>
@@ -1133,7 +948,7 @@ const PurchaseOrderPage: React.FC = () => {
                                     </Tooltip>
                                 </div>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-6">{renderViewModalContent()}</div>
+                            <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-slate-900">{renderViewModalContent()}</div>
                         </div>
                     </div>
                 )}

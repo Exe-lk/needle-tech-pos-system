@@ -386,6 +386,12 @@ const StockInPage: React.FC = () => {
     );
   }, [isBrowserPrintLoaded]);
 
+  useEffect(() => {
+    if (showQrBatchModal && typeof window !== 'undefined' && (window as any).BrowserPrint) {
+      setIsBrowserPrintLoaded(true);
+    }
+  }, [showQrBatchModal]);
+
   // Get unique brand names (sorted) for dropdown
   const uniqueBrands = useMemo(() => {
     return [...new Set(brands.map((b) => b.name))].filter(Boolean).sort();
@@ -1139,11 +1145,13 @@ const StockInPage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-gray-100 dark:bg-slate-950">
-      <Script
-        src="/browser-print/BrowserPrint-3.1.250.min.js"
-        strategy="afterInteractive"
-        onLoad={() => setIsBrowserPrintLoaded(true)}
-      />
+      {showQrBatchModal && (
+        <Script
+          src="/browser-print/BrowserPrint-3.1.250.min.js"
+          strategy="afterInteractive"
+          onLoad={() => setIsBrowserPrintLoaded(true)}
+        />
+      )}
       {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
 
