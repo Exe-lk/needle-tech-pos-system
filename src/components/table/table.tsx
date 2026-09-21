@@ -371,7 +371,7 @@ const Table: React.FC<TableProps> = ({
 
   const getActionButtonStyles = (variant: string = 'primary') => {
     const base =
-      'px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800';
+      'px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800';
     switch (variant) {
       case 'primary':
         return `${base} bg-blue-600 dark:bg-indigo-600 text-white hover:bg-blue-700 dark:hover:bg-indigo-700 focus:ring-blue-500 dark:focus:ring-indigo-500`;
@@ -528,7 +528,7 @@ const Table: React.FC<TableProps> = ({
                     <th
                       key={column.key}
                       onClick={() => handleSort(column.key)}
-                      className={`px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${
+                      className={`px-6 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${
                         column.sortable
                           ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600'
                           : ''
@@ -555,7 +555,7 @@ const Table: React.FC<TableProps> = ({
                     </th>
                   ))}
                   {actions.length > 0 && (
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider sticky top-0 bg-gray-50 dark:bg-slate-700">
+                    <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider sticky top-0 bg-gray-50 dark:bg-slate-700">
                       Actions
                     </th>
                   )}
@@ -598,7 +598,7 @@ const Table: React.FC<TableProps> = ({
                         {visibleColumns.map((column) => (
                           <td
                             key={column.key}
-                            className="px-6 py-4 text-sm text-gray-900 dark:text-white whitespace-nowrap"
+                            className="px-6 py-2 text-sm leading-5 text-gray-900 dark:text-white whitespace-nowrap"
                           >
                             {column.render
                               ? column.render(row[column.key], row)
@@ -606,7 +606,7 @@ const Table: React.FC<TableProps> = ({
                           </td>
                         ))}
                         {visibleActions.length > 0 && (
-                          <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                          <td className="px-6 py-2 text-sm font-medium whitespace-nowrap">
                             <div className="flex space-x-2">
                               {visibleActions.map((action, actionIndex) => (
                                 <Tooltip
@@ -628,7 +628,7 @@ const Table: React.FC<TableProps> = ({
                           </td>
                         )}
                         {visibleActions.length === 0 && actions.length > 0 && (
-                          <td className="px-6 py-4 text-sm font-medium whitespace-nowrap" />
+                          <td className="px-6 py-2 text-sm font-medium whitespace-nowrap" />
                         )}
                       </tr>
                     );

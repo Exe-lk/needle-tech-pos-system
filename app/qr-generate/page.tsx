@@ -194,6 +194,13 @@ const QRGeneratePage: React.FC = () => {
     );
   }, [isBrowserPrintLoaded]);
 
+  // If SDK was already loaded from a previous modal open, mark ready immediately.
+  useEffect(() => {
+    if (isQRModalOpen && typeof window !== 'undefined' && (window as any).BrowserPrint) {
+      setIsBrowserPrintLoaded(true);
+    }
+  }, [isQRModalOpen]);
+
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
   };
@@ -613,11 +620,13 @@ const QRGeneratePage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-gray-100 dark:bg-slate-950">
-      <Script
-        src="/browser-print/BrowserPrint-3.1.250.min.js"
-        strategy="afterInteractive"
-        onLoad={() => setIsBrowserPrintLoaded(true)}
-      />
+      {isQRModalOpen && (
+        <Script
+          src="/browser-print/BrowserPrint-3.1.250.min.js"
+          strategy="afterInteractive"
+          onLoad={() => setIsBrowserPrintLoaded(true)}
+        />
+      )}
       <Navbar onMenuClick={handleMenuClick} />
       <Sidebar
         onLogout={handleLogout}

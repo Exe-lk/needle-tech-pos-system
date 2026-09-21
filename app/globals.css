@@ -116,6 +116,13 @@ body {
     margin: 0;
     padding: 0;
     overflow: visible;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.purchase-order-printing #purchase-order-print,
+  body.purchase-order-printing #purchase-order-print * {
+    color: #111827 !important;
   }
 }
 

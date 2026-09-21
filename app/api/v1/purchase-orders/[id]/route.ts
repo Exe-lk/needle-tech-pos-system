@@ -3,6 +3,46 @@ import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-resp
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
+function buildPurchaseOrderAddress(
+  customer?: {
+    billingAddressLine1?: string | null;
+    billingAddressLine2?: string | null;
+    billingCity?: string | null;
+    billingRegion?: string | null;
+    billingPostalCode?: string | null;
+    billingCountry?: string | null;
+  } | null,
+  location?: {
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    region?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  } | null,
+): string {
+  if (location) {
+    const locationParts = [
+      location.addressLine1,
+      location.addressLine2,
+      location.city,
+      location.region,
+      location.postalCode,
+      location.country,
+    ].filter(Boolean);
+    if (locationParts.length > 0) return locationParts.join(', ');
+  }
+  if (!customer) return '';
+  return [
+    customer.billingAddressLine1,
+    customer.billingAddressLine2,
+    customer.billingCity,
+    customer.billingRegion,
+    customer.billingPostalCode,
+    customer.billingCountry || 'Sri Lanka',
+  ].filter(Boolean).join(', ');
+}
+
 /**
  * @swagger
  * /api/v1/purchase-orders/{id}:
@@ -24,6 +64,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       where: { id },
       include: {
         customer: true,
+        customerLocation: true,
         rentals: {
           select: {
             id: true,
@@ -48,6 +89,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       requestNumber: purchaseOrder.requestNumber,
       customerId: purchaseOrder.customerId,
       customerName: purchaseOrder.customer?.name || '',
+      customerAddress: buildPurchaseOrderAddress(purchaseOrder.customer, purchaseOrder.customerLocation),
       customerType: purchaseOrder.customer?.type === 'GARMENT_FACTORY' ? 'Business' : 'Individual',
       requestDate: purchaseOrder.requestDate,
       startDate: (purchaseOrder as any).startDate ?? null,
