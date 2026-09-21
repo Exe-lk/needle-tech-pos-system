@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Moon, Sun, Menu, X, UserRound } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
@@ -116,6 +117,8 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [loggedUser, setLoggedUser] = useState<Record<string, any> | null>(null);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  const profilePanelRef = useRef<HTMLDivElement>(null);
 
   // Only run on client after mount
   useEffect(() => {
@@ -182,14 +185,24 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
     }
   }, [mounted]);
 
-  // Close profile panel with Escape
+  // Close profile popup with Escape or outside click
   useEffect(() => {
     if (!isProfileOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setIsProfileOpen(false);
     };
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (profileButtonRef.current?.contains(target)) return;
+      if (profilePanelRef.current?.contains(target)) return;
+      setIsProfileOpen(false);
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
   }, [isProfileOpen]);
 
   // Toggle dark mode
@@ -211,8 +224,8 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
-  const openProfile = () => {
-    setIsProfileOpen(true);
+  const toggleProfile = () => {
+    setIsProfileOpen((open) => !open);
   };
 
   const getUserEmail = (u: Record<string, any> | null): string | null => {
@@ -331,9 +344,13 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
           {/* Right side - Dark Mode Toggle */}
           <div className="flex items-center space-x-4">
             <button
-              onClick={openProfile}
+              ref={profileButtonRef}
+              type="button"
+              onClick={toggleProfile}
               className="group relative p-2.5 rounded-xl text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-indigo-400 transition-all duration-200 ease-in-out"
               aria-label="Open profile"
+              aria-expanded={isProfileOpen}
+              aria-haspopup="dialog"
             >
               <UserRound className="h-5 w-5 transition-transform duration-200 group-hover:scale-110 group-hover:text-blue-600 dark:group-hover:text-indigo-400" />
             </button>
@@ -352,31 +369,26 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
         </div>
       </div>
 
-      {/* Profile side popup */}
-      {isProfileOpen && (
-        <div className="fixed inset-0 z-50">
-          <button
-            type="button"
-            aria-label="Close profile panel"
-            onClick={() => setIsProfileOpen(false)}
-            className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
-          />
-          <aside
+      {/* Profile popup — portaled so navbar height/backdrop-filter cannot clip it */}
+      {isProfileOpen &&
+        createPortal(
+          <div
+            ref={profilePanelRef}
             role="dialog"
             aria-modal="true"
             aria-label="User profile"
-            className="absolute right-0 top-0 h-full w-[360px] max-w-[92vw] bg-white dark:bg-slate-950 border-l border-gray-200/80 dark:border-slate-800/80 shadow-2xl"
+            className="fixed z-[200] right-4 top-[68px] w-[320px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white dark:bg-slate-950 border border-gray-200/80 dark:border-slate-800/80 shadow-2xl"
           >
-            <div className="h-[60px] px-5 flex items-center justify-between border-b border-gray-200/80 dark:border-slate-800/80">
-              <div className="flex items-center space-x-3">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-sm">
+            <div className="px-4 py-3 flex items-center justify-between border-b border-gray-200/80 dark:border-slate-800/80">
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="h-10 w-10 flex-shrink-0 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-sm">
                   {getInitials(getUserName(loggedUser) || getUserEmail(loggedUser))}
                 </div>
-                <div className="flex flex-col leading-tight">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                <div className="flex flex-col leading-tight min-w-0">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                     {getUserName(loggedUser) || 'User Profile'}
                   </span>
-                  <span className="text-xs text-gray-500 dark:text-slate-400">
+                  <span className="text-xs text-gray-500 dark:text-slate-400 truncate">
                     {getUserRole(loggedUser) || '—'}
                   </span>
                 </div>
@@ -384,14 +396,14 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
               <button
                 type="button"
                 onClick={() => setIsProfileOpen(false)}
-                className="group relative p-2.5 rounded-xl text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-indigo-400 transition-all duration-200 ease-in-out"
+                className="group relative p-2 rounded-xl text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-indigo-400 transition-all duration-200 ease-in-out"
                 aria-label="Close"
               >
-                <X className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
+                <X className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="p-4 space-y-4">
               <div className="rounded-2xl border border-gray-200/70 dark:border-slate-800/70 bg-gradient-to-b from-white to-gray-50 dark:from-slate-950 dark:to-slate-900/40 p-4">
                 <div className="space-y-3">
                   <div>
@@ -421,9 +433,9 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
                 </div>
               )}
             </div>
-          </aside>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* Mobile menu dropdown */}
       {isMobileMenuOpen && (
@@ -433,7 +445,7 @@ const Navbar: React.FC<NavbarProps> = ({ className, onMenuClick }) => {
               <button
                 onClick={() => {
                   setIsMobileMenuOpen(false);
-                  openProfile();
+                  toggleProfile();
                 }}
                 className="group relative flex items-center w-full px-3 py-2.5 text-base font-medium text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/50 hover:shadow-sm rounded-xl transition-all duration-200 ease-in-out"
               >

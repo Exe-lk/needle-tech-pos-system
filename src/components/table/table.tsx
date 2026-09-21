@@ -403,8 +403,8 @@ const Table: React.FC<TableProps> = ({
       }}
     >
       {showHeader && (
-        <div className="p-6 bg-gray-50 dark:bg-slate-700/50 flex-shrink-0">
-          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <div className="px-6 py-3 bg-gray-50 dark:bg-slate-700/50 flex-shrink-0">
+          <div className={`flex items-center justify-between gap-3 flex-wrap ${filterable && showFilters ? 'mb-4' : ''}`}>
             <div className="flex items-center space-x-3 flex-1 min-w-0">
               {searchable && (
                 <div className="relative flex-1 max-w-md min-w-[180px]">
