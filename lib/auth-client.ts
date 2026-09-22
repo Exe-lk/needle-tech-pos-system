@@ -10,6 +10,10 @@ import {
 } from '@/lib/auth-constants';
 
 const REFRESH_API = '/api/v1/auth/refresh';
+/** Refresh a bit before JWT exp so the first request after idle does not 401. */
+const TOKEN_EXPIRY_SKEW_SECONDS = 60;
+
+let refreshInFlight: Promise<boolean> | null = null;
 
 function isClient(): boolean {
   return typeof window !== 'undefined';
@@ -49,11 +53,27 @@ export function redirectToLogin(): void {
   window.location.href = '/';
 }
 
-/**
- * Call refresh API with current refresh token; update storage on success.
- * @returns true if new tokens were stored, false otherwise
- */
-export async function refreshAccessToken(): Promise<boolean> {
+function decodeJwtPayload(token: string): { exp?: number } | null {
+  try {
+    const part = token.split('.')[1];
+    if (!part) return null;
+    const base64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function isAccessTokenExpiringSoon(token: string | null): boolean {
+  if (!token) return true;
+  const payload = decodeJwtPayload(token);
+  if (typeof payload?.exp !== 'number') return false;
+  const now = Math.floor(Date.now() / 1000);
+  return payload.exp <= now + TOKEN_EXPIRY_SKEW_SECONDS;
+}
+
+async function requestNewTokens(): Promise<boolean> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
 
@@ -83,6 +103,21 @@ export async function refreshAccessToken(): Promise<boolean> {
 }
 
 /**
+ * Call refresh API with current refresh token; update storage on success.
+ * Concurrent callers share one in-flight refresh (Supabase refresh tokens are single-use).
+ * @returns true if new tokens were stored, false otherwise
+ */
+export async function refreshAccessToken(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = requestNewTokens().finally(() => {
+    refreshInFlight = null;
+  });
+
+  return refreshInFlight;
+}
+
+/**
  * Headers with current access token for API requests.
  * Use with fetch() or pass to authFetch (it will add these when not provided).
  */
@@ -100,9 +135,11 @@ export type AuthFetchOptions = {
 };
 
 /**
- * Fetch with auth: adds Bearer token, on 401 tries refresh once and retries.
- * If refresh fails or retry still 401, clears auth and redirects to login.
+ * Fetch with auth: adds Bearer token, refreshes before JWT expiry, and on 401 retries once.
+ * If refresh fails or retry still 401, clears auth and redirects to login
+ * without throwing, so pages do not flash a session-expired error.
  * Use for all authenticated API calls so token refresh is handled in one place.
+ * 503 (DB temporarily unavailable) is returned as-is and does not clear the session.
  */
 export async function authFetch(
   input: RequestInfo | URL,
@@ -110,9 +147,12 @@ export async function authFetch(
   options: AuthFetchOptions = {}
 ): Promise<Response> {
   const { skipRefresh = false } = options;
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-  const method = init?.method ?? 'GET';
   const headers = new Headers(init?.headers);
+
+  if (!skipRefresh && isAccessTokenExpiringSoon(getAccessToken())) {
+    await refreshAccessToken();
+  }
+
   if (!headers.has('Authorization')) {
     const token = getAccessToken();
     if (token) headers.set('Authorization', `Bearer ${token}`);
@@ -123,6 +163,8 @@ export async function authFetch(
 
   let res = await fetch(input, { ...init, headers });
 
+  // Only treat real auth failures as session expiry. Pool exhaustion used to
+  // surface as 401 and caused logout/refresh storms; those now return 503.
   if (res.status === 401 && !skipRefresh) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
@@ -135,7 +177,8 @@ export async function authFetch(
     if (res.status === 401) {
       clearAuth();
       redirectToLogin();
-      throw new Error('Session expired. Please sign in again.');
+      // Do not throw: navigation is in progress and catch handlers would flash an error.
+      return new Promise<Response>(() => {});
     }
   }
 

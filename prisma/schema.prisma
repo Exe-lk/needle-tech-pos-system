@@ -137,6 +137,7 @@ model Customer {
   // Tax Profile
   vatApplicable           Boolean  @default(true)
   vatRegistrationNumber   String?
+  tinNumber               String?
   taxCategory             TaxCategory @default(VAT)
   
   // Financials
@@ -373,6 +374,10 @@ model Tool {
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
+  // Relations
+  rentalTools     RentalTool[]
+  gatePassTools   GatePassTool[]
+
   @@index([toolName])
   @@index([toolType])
   @@index([status])
@@ -414,7 +419,10 @@ model PurchaseOrder {
   
   // Purchase request machines (stored as JSON for flexibility)
   machines        Json[] // Array of machine requests with quantities
-  
+
+  // Purchase request tools (stored as JSON for flexibility); optional at creation
+  tools Json[] @default([]) // Array of tool requests with quantities
+
   notes           String?
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
@@ -521,6 +529,9 @@ model Rental {
   // For agreements created from PO without assigned machines: requested lines (brand, model, type, quantity, dailyRate)
   requestedMachineLines     Json?    // [{ brand, model, type?, quantity, dailyRate }]
   
+  // For agreements created from PO without assigned tools: requested lines (toolName, toolType, brand, model, quantity, unitPrice)
+  requestedToolLines        Json?    // [{ toolName, toolType, brand?, model?, quantity, unitPrice? }]
+  
   createdByUserId String   @db.Uuid
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
@@ -531,6 +542,7 @@ model Rental {
   createdBy       User      @relation("RentalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   
   machines        RentalMachine[]
+  tools           RentalTool[]
   invoices        Invoice[]
   invoiceRentals  InvoiceRental[]
   gatePasses      GatePass[]
@@ -571,6 +583,26 @@ model RentalMachine {
   @@index([rentalId])
   @@index([machineId])
   @@map("rental_machines")
+}
+
+model RentalTool {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rentalId   String   @db.Uuid
+  toolId     String   @db.Uuid
+
+  // Snapshot of tool usage/pricing at time of rental
+  unitPrice  Decimal? @db.Decimal(10, 2)
+  quantity   Int      @default(1)
+  dispatchedQuantity Int @default(0)
+
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  rental     Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  tool       Tool     @relation(fields: [toolId], references: [id], onDelete: Restrict)
+
+  @@index([rentalId])
+  @@index([toolId])
+  @@map("rental_tools")
 }
 
 enum RentalStatus {
@@ -742,6 +774,7 @@ model GatePass {
   issuedBy        User     @relation("GatePassIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
   
   machines        GatePassMachine[]
+  tools           GatePassTool[]
 
   @@index([gatePassNumber])
   @@index([rentalId])
@@ -765,6 +798,25 @@ model GatePassMachine {
   @@index([gatePassId])
   @@index([machineId])
   @@map("gate_pass_machines")
+}
+
+model GatePassTool {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gatePassId String   @db.Uuid
+  toolId     String   @db.Uuid
+
+  // Snapshot of tool quantity/pricing at time of gate pass
+  unitPrice  Decimal? @db.Decimal(10, 2)
+  quantity   Int      @default(1)
+
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  gatePass   GatePass @relation(fields: [gatePassId], references: [id], onDelete: Cascade)
+  tool       Tool     @relation(fields: [toolId], references: [id], onDelete: Restrict)
+
+  @@index([gatePassId])
+  @@index([toolId])
+  @@map("gate_pass_tools")
 }
 
 enum GatePassStatus {

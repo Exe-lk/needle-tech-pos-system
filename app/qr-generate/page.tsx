@@ -194,6 +194,13 @@ const QRGeneratePage: React.FC = () => {
     );
   }, [isBrowserPrintLoaded]);
 
+  // If SDK was already loaded from a previous modal open, mark ready immediately.
+  useEffect(() => {
+    if (isQRModalOpen && typeof window !== 'undefined' && (window as any).BrowserPrint) {
+      setIsBrowserPrintLoaded(true);
+    }
+  }, [isQRModalOpen]);
+
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
   };
@@ -612,12 +619,14 @@ const QRGeneratePage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
-      <Script
-        src="/browser-print/BrowserPrint-3.1.250.min.js"
-        strategy="afterInteractive"
-        onLoad={() => setIsBrowserPrintLoaded(true)}
-      />
+    <div className="min-h-full bg-gray-100 dark:bg-slate-950">
+      {isQRModalOpen && (
+        <Script
+          src="/browser-print/BrowserPrint-3.1.250.min.js"
+          strategy="afterInteractive"
+          onLoad={() => setIsBrowserPrintLoaded(true)}
+        />
+      )}
       <Navbar onMenuClick={handleMenuClick} />
       <Sidebar
         onLogout={handleLogout}
@@ -626,10 +635,10 @@ const QRGeneratePage: React.FC = () => {
         onExpandedChange={setIsSidebarExpanded}
       />
 
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+      <main className={`pt-[84px] p-6 transition-all duration-300 ${
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="w-full xl:max-w-[1600px] mx-auto space-y-6">
           <div>
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
               QR Code Generate
@@ -652,28 +661,16 @@ const QRGeneratePage: React.FC = () => {
             </div>
           )}
 
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
-            <div className="p-6 border-b border-gray-200 dark:border-slate-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Inventory Details
-              </h3>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                All machines ({machineUnitsLoading ? '—' : machineUnits.length} total). Click Generate QR Code to preview and print, or view printing history.
-              </p>
-            </div>
-            <div className="p-6">
-              <Table
-                data={machineUnits}
-                columns={tableColumns}
-                actions={tableActions}
-                itemsPerPage={10}
-                searchable
-                filterable
-                loading={machineUnitsLoading}
-                emptyMessage={machineUnitsLoading ? 'Loading machines...' : 'No machines found.'}
-              />
-            </div>
-          </div>
+          <Table
+            data={machineUnits}
+            columns={tableColumns}
+            actions={tableActions}
+            itemsPerPage={10}
+            searchable
+            filterable
+            loading={machineUnitsLoading}
+            emptyMessage={machineUnitsLoading ? 'Loading machines...' : 'No machines found.'}
+          />
         </div>
       </main>
 

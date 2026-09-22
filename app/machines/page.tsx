@@ -185,75 +185,6 @@ const fetchActiveMachineTypes = async (): Promise<MachineTypeData[]> => {
   }
 };
 
-// Tool type (from API)
-interface ToolRecord {
-  id: string;
-  toolName: string;
-  toolType: string;
-  brand: string | null;
-  model: string | null;
-  serialNumber?: string | null;
-  quantity?: number;
-  unitPrice?: number | string | null;
-  status?: string;
-  location?: string;
-  purchaseDate?: string | null;
-  condition?: string;
-  notes?: string | null;
-  [key: string]: any;
-}
-
-// Fetch tools for dropdown options (distinct tool names, types, brands, models)
-const fetchTools = async (): Promise<ToolRecord[]> => {
-  try {
-    const response = await authFetch(`${API_BASE_URL}/tools?limit=500`, {
-      method: 'GET',
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch tools');
-    }
-
-    const data = await response.json();
-    return data.data?.items || [];
-  } catch (error) {
-    console.error('Error fetching tools:', error);
-    return [];
-  }
-};
-
-// Create tool
-const createTool = async (toolData: Record<string, any>): Promise<{ success: boolean; data?: any; error?: string }> => {
-  try {
-    const response = await authFetch(`${API_BASE_URL}/tools`, {
-      method: 'POST',
-      credentials: 'include',
-      body: JSON.stringify(toolData),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: data.message || 'Failed to create tool',
-      };
-    }
-
-    return {
-      success: true,
-      data: data.data,
-    };
-  } catch (error: any) {
-    console.error('Error creating tool:', error);
-    return {
-      success: false,
-      error: error.message || 'Network error',
-    };
-  }
-};
-
 // Fetch machine by ID
 const fetchMachineById = async (machineId: string): Promise<MachineInfo | null> => {
   try {
@@ -438,12 +369,9 @@ const MachineListPage: React.FC = () => {
   const [selectedMachineDetail, setSelectedMachineDetail] = useState<MachineInfo | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
-  const [activeCreateTab, setActiveCreateTab] = useState<'machine' | 'tool'>('machine');
-  const [activeMainTab, setActiveMainTab] = useState<'machines' | 'tools'>('machines');
   const [machines, setMachines] = useState<Machine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [tools, setTools] = useState<ToolRecord[]>([]);
-  const [isLoadingTools, setIsLoadingTools] = useState(false);
+  const [activeTab, setActiveTab] = useState<'machine' | 'tool'>('machine');
   
   // New state for dropdown options
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -451,13 +379,6 @@ const MachineListPage: React.FC = () => {
   const [machineTypes, setMachineTypes] = useState<MachineTypeData[]>([]);
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
   const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(false);
-
-  // Tool dropdown options (distinct values from existing tools)
-  const [toolNames, setToolNames] = useState<string[]>([]);
-  const [toolTypes, setToolTypes] = useState<string[]>([]);
-  const [toolBrands, setToolBrands] = useState<string[]>([]);
-  const [toolModels, setToolModels] = useState<string[]>([]);
-  const [isLoadingToolOptions, setIsLoadingToolOptions] = useState(false);
 
   // Warranty status from machine form – when "Active", show Warranty Expires Date field
   const [machineFormWarrantyStatus, setMachineFormWarrantyStatus] = useState<string>('');
@@ -467,13 +388,6 @@ const MachineListPage: React.FC = () => {
     loadMachines();
   }, []);
 
-  // Lazy-load tools only when the Tools tab is opened
-  useEffect(() => {
-    if (activeMainTab === 'tools' && tools.length === 0) {
-      loadTools();
-    }
-  }, [activeMainTab]);
-
   // Fetch dropdown data when create modal opens (machine tab)
   useEffect(() => {
     if (isCreateModalOpen) {
@@ -481,12 +395,6 @@ const MachineListPage: React.FC = () => {
     }
   }, [isCreateModalOpen]);
 
-  // Fetch tool options when switching to tool tab
-  useEffect(() => {
-    if (isCreateModalOpen && activeCreateTab === 'tool') {
-      loadToolOptions();
-    }
-  }, [isCreateModalOpen, activeCreateTab]);
 
   // Fetch models when brand changes
   useEffect(() => {
@@ -506,18 +414,6 @@ const MachineListPage: React.FC = () => {
       console.error('Error loading machines:', error);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const loadTools = async () => {
-    setIsLoadingTools(true);
-    try {
-      const data = await fetchTools();
-      setTools(data);
-    } catch (error) {
-      console.error('Error loading tools:', error);
-    } finally {
-      setIsLoadingTools(false);
     }
   };
 
@@ -564,25 +460,6 @@ const MachineListPage: React.FC = () => {
     }
   };
 
-  const loadToolOptions = async () => {
-    setIsLoadingToolOptions(true);
-    try {
-      const toolsList = await fetchTools();
-      const names = [...new Set(toolsList.map((t) => t.toolName).filter((x): x is string => Boolean(x)))].sort();
-      const types = [...new Set(toolsList.map((t) => t.toolType).filter((x): x is string => Boolean(x)))].sort();
-      const brandsList = [...new Set(toolsList.map((t) => t.brand).filter((x): x is string => Boolean(x)))].sort();
-      const modelsList = [...new Set(toolsList.map((t) => t.model).filter((x): x is string => Boolean(x)))].sort();
-      setToolNames(names);
-      setToolTypes(types);
-      setToolBrands(brandsList);
-      setToolModels(modelsList);
-    } catch (error) {
-      console.error('Error loading tool options:', error);
-    } finally {
-      setIsLoadingToolOptions(false);
-    }
-  };
-
   const handleMenuClick = () => {
     setIsMobileSidebarOpen((prev) => !prev);
   };
@@ -597,14 +474,13 @@ const MachineListPage: React.FC = () => {
 
   const handleOpenRegister = () => {
     setIsCreateModalOpen(true);
-    setActiveCreateTab(activeMainTab === 'tools' ? 'tool' : 'machine');
+    setActiveTab('machine');
     setSelectedBrandId(''); // Reset brand selection
     setMachineFormWarrantyStatus(''); // Reset warranty-based field visibility
   };
 
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
-    setActiveCreateTab('machine');
     setSelectedBrandId(''); // Reset brand selection
     setMachineFormWarrantyStatus('');
   };
@@ -814,21 +690,21 @@ const MachineListPage: React.FC = () => {
       label: 'Manufacture Year',
       type: 'date',
       placeholder: 'Select date',
-      required: true,
+      required: false,
     },
     {
       name: 'country',
       label: 'Country',
       type: 'text',
       placeholder: 'Enter country',
-      required: true,
+      required: false,
     },
     {
       name: 'conditionOnArrival',
       label: 'Condition on Arrival',
       type: 'select',
       placeholder: 'Select condition',
-      required: true,
+      required: false,
       options: [
         { label: 'New', value: 'New' },
         { label: 'Used', value: 'Used' },
@@ -902,6 +778,33 @@ const MachineListPage: React.FC = () => {
   // Create form: same fields as above but without Invoice/GRN (simplified registration)
   const getMachineCreateFields = (): FormField[] =>
     getMachineFields().filter((f) => f.name !== 'invoiceGrn');
+
+  const getToolCreateFields = (): FormField[] => [
+    { name: 'toolName', label: 'Tool Name', type: 'text', placeholder: 'Enter tool name', required: true },
+    { name: 'toolType', label: 'Tool Type', type: 'text', placeholder: 'Enter tool type', required: true },
+    { name: 'brand', label: 'Brand', type: 'text', placeholder: 'Enter brand', required: false },
+    { name: 'model', label: 'Model', type: 'text', placeholder: 'Enter model', required: false },
+    { name: 'serialNumber', label: 'Serial Number', type: 'text', placeholder: 'Enter serial number', required: false },
+    { name: 'quantity', label: 'Quantity', type: 'number', placeholder: 'Enter quantity', required: true },
+    { name: 'unitPrice', label: 'Unit Price', type: 'number', placeholder: 'Enter unit price', required: false },
+    { name: 'location', label: 'Location', type: 'text', placeholder: 'Enter location', required: false },
+    { name: 'purchaseDate', label: 'Purchase Date', type: 'date', placeholder: 'Select date', required: false },
+    {
+      name: 'condition',
+      label: 'Condition',
+      type: 'select',
+      placeholder: 'Select condition',
+      required: false,
+      options: [
+        { label: 'New', value: 'NEW' },
+        { label: 'Good', value: 'GOOD' },
+        { label: 'Fair', value: 'FAIR' },
+        { label: 'Poor', value: 'POOR' },
+      ],
+    },
+    { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Additional notes', required: false, rows: 3 },
+    { name: 'toolPhotoUrls', label: 'Tool Photos', type: 'file-multiple', accept: 'image/*', required: false, multiple: true },
+  ];
 
   // Update form: full machine details (all Machine table columns editable except id/qr/onboarded)
   const getMachineUpdateFields = (): FormField[] => [
@@ -1024,120 +927,6 @@ const MachineListPage: React.FC = () => {
     { name: 'referencePhoto', label: 'Reference Photo', type: 'file-multiple', accept: 'image/*', required: false, multiple: true },
     { name: 'serialPlatePhoto', label: 'Serial Plate Photo', type: 'file-multiple', accept: 'image/*', required: false, multiple: true },
     { name: 'invoiceGrn', label: 'Invoice/GRN', type: 'file-multiple', accept: 'application/pdf,image/*', required: false, multiple: true },
-  ];
-
-  // Form fields for Tool Registration (options from existing tools, searchable + creatable)
-  const getToolFields = (): FormField[] => [
-    {
-      name: 'toolName',
-      label: 'Tool Name',
-      type: 'select',
-      placeholder: isLoadingToolOptions ? 'Loading...' : 'Search or select tool name, or type new',
-      required: true,
-      searchable: true,
-      creatable: true,
-      options: toolNames.map((n) => ({ label: n, value: n })),
-    },
-    {
-      name: 'toolType',
-      label: 'Tool Type',
-      type: 'select',
-      placeholder: isLoadingToolOptions ? 'Loading...' : 'Search or select tool type, or type new',
-      required: true,
-      searchable: true,
-      creatable: true,
-      options: toolTypes.map((t) => ({ label: t, value: t })),
-    },
-    {
-      name: 'brand',
-      label: 'Brand',
-      type: 'select',
-      placeholder: isLoadingToolOptions ? 'Loading...' : 'Search or select brand, or type new',
-      required: false,
-      searchable: true,
-      creatable: true,
-      options: toolBrands.map((b) => ({ label: b, value: b })),
-    },
-    {
-      name: 'model',
-      label: 'Model',
-      type: 'select',
-      placeholder: isLoadingToolOptions ? 'Loading...' : 'Search or select model, or type new',
-      required: false,
-      searchable: true,
-      creatable: true,
-      options: toolModels.map((m) => ({ label: m, value: m })),
-    },
-    {
-      name: 'serialNumber',
-      label: 'Serial Number',
-      type: 'text',
-      placeholder: 'Enter serial number (if applicable)',
-      required: false,
-    },
-    {
-      name: 'quantity',
-      label: 'Quantity',
-      type: 'number',
-      placeholder: 'Enter quantity',
-      required: true,
-    },
-    {
-      name: 'unitPrice',
-      label: 'Unit Price',
-      type: 'number',
-      placeholder: 'Enter unit price',
-      required: false,
-    },
-    {
-      name: 'location',
-      label: 'Location',
-      type: 'select',
-      placeholder: 'Select location',
-      required: true,
-      options: [
-        { label: 'Main Warehouse', value: 'Main Warehouse' },
-        { label: 'Branch Office 1', value: 'Branch Office 1' },
-        { label: 'Branch Office 2', value: 'Branch Office 2' },
-        { label: 'Storage Facility', value: 'Storage Facility' },
-      ],
-    },
-    {
-      name: 'purchaseDate',
-      label: 'Purchase Date',
-      type: 'date',
-      placeholder: 'Select date',
-      required: false,
-    },
-    {
-      name: 'condition',
-      label: 'Condition',
-      type: 'select',
-      placeholder: 'Select condition',
-      required: true,
-      options: [
-        { label: 'New', value: 'NEW' },
-        { label: 'Good', value: 'GOOD' },
-        { label: 'Fair', value: 'FAIR' },
-        { label: 'Poor', value: 'POOR' },
-      ],
-    },
-    {
-      name: 'notes',
-      label: 'Notes',
-      type: 'textarea',
-      placeholder: 'Enter any additional notes',
-      required: false,
-      rows: 3,
-    },
-    {
-      name: 'toolPhoto',
-      label: 'Tool Photo',
-      type: 'file-multiple',
-      accept: 'image/*',
-      required: false,
-      multiple: true,
-    },
   ];
 
   // Format date for HTML date input (YYYY-MM-DD)
@@ -1271,36 +1060,30 @@ const MachineListPage: React.FC = () => {
   const handleToolSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      const payload = {
-        toolName: (data.toolName || '').trim(),
-        toolType: (data.toolType || '').trim(),
-        brand: data.brand ? String(data.brand).trim() : null,
-        model: data.model ? String(data.model).trim() : null,
-        serialNumber: data.serialNumber ? String(data.serialNumber).trim() : null,
-        quantity: parseInt(data.quantity, 10) || 1,
-        unitPrice: data.unitPrice != null && data.unitPrice !== '' ? parseFloat(data.unitPrice) : null,
-        status: 'AVAILABLE', // Status field removed from form; new tools default to Available
-        location: (data.location || '').trim(),
-        purchaseDate: data.purchaseDate || null,
-        condition: data.condition || 'NEW',
-        notes: data.notes ? String(data.notes).trim() : null,
-        toolPhotoUrls: [], // File upload to URL not implemented in this flow; can be extended later
-      };
-      const result = await createTool(payload);
-      if (result.success) {
+      const payload: Record<string, any> = { ...data };
+      if (payload.quantity) payload.quantity = parseInt(payload.quantity, 10);
+      if (payload.unitPrice) payload.unitPrice = parseFloat(payload.unitPrice);
+
+      const response = await authFetch(`${API_BASE_URL}/tools`, {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      const resultData = await response.json();
+
+      if (response.ok) {
         await Swal.fire({
           icon: 'success',
           title: 'Registered',
           text: `Tool "${payload.toolName}" registered successfully.`,
         });
         handleCloseCreateModal();
-        await loadToolOptions(); // Refresh tool options for next time
-        await loadTools(); // Refresh tool list (Tools tab)
       } else {
         await Swal.fire({
           icon: 'error',
           title: 'Failed to register',
-          text: `Failed to create tool: ${result.error}`,
+          text: `Failed to create tool: ${resultData.message || 'Unknown error'}`,
         });
       }
     } catch (error) {
@@ -1410,50 +1193,6 @@ const MachineListPage: React.FC = () => {
       tooltip: 'Delete Machine',
       className: 'w-8 h-8 p-0 flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 focus:ring-red-500 dark:focus:ring-red-500',
     },
-  ];
-
-  const toolColumns: TableColumn[] = [
-    { key: 'toolName', label: 'Tool Name', sortable: true, filterable: true },
-    { key: 'toolType', label: 'Tool Type', sortable: true, filterable: true },
-    { key: 'brand', label: 'Brand', sortable: true, filterable: true },
-    { key: 'model', label: 'Model', sortable: true, filterable: true },
-    { key: 'serialNumber', label: 'Serial Number', sortable: true, filterable: true },
-    { key: 'quantity', label: 'Qty', sortable: true, filterable: true },
-    {
-      key: 'status',
-      label: 'Status',
-      sortable: true,
-      filterable: true,
-      render: (value: string) => {
-        const v = (value || '').toUpperCase();
-        const base =
-          'px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center justify-center';
-        const colors: Record<string, string> = {
-          AVAILABLE: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-          IN_USE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-          MAINTENANCE: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
-          RETIRED: 'bg-gray-100 text-gray-700 dark:bg-slate-700/60 dark:text-gray-200',
-        };
-        return <span className={`${base} ${colors[v] || colors.RETIRED}`}>{v || '-'}</span>;
-      },
-    },
-    { key: 'location', label: 'Location', sortable: true, filterable: true },
-    {
-      key: 'purchaseDate',
-      label: 'Purchase Date',
-      sortable: true,
-      filterable: true,
-      render: (value: string | null) => {
-        if (!value) return <span className="text-gray-500 dark:text-gray-400">-</span>;
-        const d = new Date(value);
-        return (
-          <span className="text-gray-900 dark:text-white font-medium">
-            {isNaN(d.getTime()) ? String(value) : d.toLocaleDateString('en-LK')}
-          </span>
-        );
-      },
-    },
-    { key: 'condition', label: 'Condition', sortable: true, filterable: true },
   ];
 
   // Rental History Table Columns
@@ -1743,7 +1482,7 @@ const MachineListPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+    <div className="min-h-full bg-gray-100 dark:bg-slate-950">
       <Navbar onMenuClick={handleMenuClick} />
       <Sidebar
         onLogout={handleLogout}
@@ -1752,132 +1491,86 @@ const MachineListPage: React.FC = () => {
         onExpandedChange={setIsSidebarExpanded}
       />
 
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+      <main className={`pt-[84px] p-6 transition-all duration-300 ${
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
-        <div className="max-w-7xl mx-auto space-y-4">
+        <div className="w-full xl:max-w-[1600px] mx-auto space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Machine & Tool Management
+                Machine Management
               </h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Overview of all sewing machines and tools with searchable tables, filters, and pagination.
+                Overview of all sewing machines with searchable tables, filters, and pagination.
               </p>
             </div>
           </div>
 
-          <div className="border-b border-gray-200 dark:border-slate-700">
-            <div className="flex space-x-4">
-              <Tooltip content="Machines">
-                <button
-                  onClick={() => setActiveMainTab('machines')}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeMainTab === 'machines'
-                      ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Machines
-                </button>
-              </Tooltip>
-              <Tooltip content="Tools">
-                <button
-                  onClick={() => setActiveMainTab('tools')}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeMainTab === 'tools'
-                      ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Tools
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-
-          {activeMainTab === 'machines' ? (
-            <Table
-              data={machines}
-              columns={columns}
-              actions={actions}
-              itemsPerPage={10}
-              searchable
-              filterable
-              loading={isLoading}
-              onCreateClick={handleOpenRegister}
-              createButtonLabel="Register"
-              emptyMessage={isLoading ? "Loading machines..." : "No machines found."}
-            />
-          ) : (
-            <Table
-              data={tools}
-              columns={toolColumns}
-              itemsPerPage={10}
-              searchable
-              filterable
-              loading={isLoadingTools}
-              onCreateClick={handleOpenRegister}
-              createButtonLabel="Register"
-              emptyMessage={isLoadingTools ? "Loading tools..." : "No tools found."}
-            />
-          )}
+          <Table
+            data={machines}
+            columns={columns}
+            actions={actions}
+            itemsPerPage={10}
+            searchable
+            filterable
+            loading={isLoading}
+            onCreateClick={handleOpenRegister}
+            createButtonLabel="Register"
+            emptyMessage={isLoading ? "Loading machines..." : "No machines found."}
+          />
         </div>
       </main>
 
-      {/* Create Machine/Tool Modal */}
+      {/* Create Machine Modal */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Register
-              </h2>
-              <Tooltip content="Close">
+            <div className="flex flex-col border-b border-gray-200 dark:border-slate-700">
+              <div className="flex items-center justify-between p-6 pb-2">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  Register
+                </h2>
+                <Tooltip content="Close">
+                  <button
+                    onClick={handleCloseCreateModal}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </Tooltip>
+              </div>
+              <div className="flex px-6 space-x-4">
                 <button
-                  onClick={handleCloseCreateModal}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'machine'
+                      ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                  onClick={() => setActiveTab('machine')}
                 >
-                  <X className="w-5 h-5" />
+                  Machine Registration
                 </button>
-              </Tooltip>
-            </div>
-
-            <div className="border-b border-gray-200 dark:border-slate-700 px-6">
-              <div className="flex space-x-4">
-                <Tooltip content="Machine">
-                  <button
-                    onClick={() => setActiveCreateTab('machine')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'machine'
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      }`}
-                  >
-                    Machine
-                  </button>
-                </Tooltip>
-                <Tooltip content="Tool">
-                  <button
-                    onClick={() => setActiveCreateTab('tool')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeCreateTab === 'tool'
-                        ? 'border-blue-600 dark:border-indigo-600 text-blue-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      }`}
-                  >
-                    Tool
-                  </button>
-                </Tooltip>
+                <button
+                  className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'tool'
+                      ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                  onClick={() => setActiveTab('tool')}
+                >
+                  Tool Registration
+                </button>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
-              {activeCreateTab === 'machine' ? (
+              {activeTab === 'machine' ? (
                 <CreateForm
-                  title="Machine Registration"
+                  title=""
                   fields={getMachineCreateFields()}
                   onSubmit={handleMachineSubmit}
                   onClear={handleClear}
-                  submitButtonLabel="Register"
+                  submitButtonLabel="Register Machine"
                   clearButtonLabel="Clear"
                   loading={isSubmitting}
                   enableDynamicSpecs={false}
@@ -1885,11 +1578,11 @@ const MachineListPage: React.FC = () => {
                 />
               ) : (
                 <CreateForm
-                  title="Tool Registration"
-                  fields={getToolFields()}
+                  title=""
+                  fields={getToolCreateFields()}
                   onSubmit={handleToolSubmit}
                   onClear={handleClear}
-                  submitButtonLabel="Register"
+                  submitButtonLabel="Register Tool"
                   clearButtonLabel="Clear"
                   loading={isSubmitting}
                   enableDynamicSpecs={false}

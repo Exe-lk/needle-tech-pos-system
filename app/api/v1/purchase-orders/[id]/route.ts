@@ -3,6 +3,46 @@ import { successResponse, errorResponse, notFoundResponse } from '@/lib/api-resp
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 
+function buildPurchaseOrderAddress(
+  customer?: {
+    billingAddressLine1?: string | null;
+    billingAddressLine2?: string | null;
+    billingCity?: string | null;
+    billingRegion?: string | null;
+    billingPostalCode?: string | null;
+    billingCountry?: string | null;
+  } | null,
+  location?: {
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    region?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  } | null,
+): string {
+  if (location) {
+    const locationParts = [
+      location.addressLine1,
+      location.addressLine2,
+      location.city,
+      location.region,
+      location.postalCode,
+      location.country,
+    ].filter(Boolean);
+    if (locationParts.length > 0) return locationParts.join(', ');
+  }
+  if (!customer) return '';
+  return [
+    customer.billingAddressLine1,
+    customer.billingAddressLine2,
+    customer.billingCity,
+    customer.billingRegion,
+    customer.billingPostalCode,
+    customer.billingCountry || 'Sri Lanka',
+  ].filter(Boolean).join(', ');
+}
+
 /**
  * @swagger
  * /api/v1/purchase-orders/{id}:
@@ -24,6 +64,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       where: { id },
       include: {
         customer: true,
+        customerLocation: true,
         rentals: {
           select: {
             id: true,
@@ -39,6 +80,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     
     // Transform for frontend
     const machines = Array.isArray(purchaseOrder.machines) ? purchaseOrder.machines : [];
+    const toolsRaw = (purchaseOrder as any).tools;
+    const toolsArr = Array.isArray(toolsRaw) ? toolsRaw : [];
     const requestedMachines = machines.reduce((sum: number, m: any) => sum + (m.quantity || 0), 0);
     
     const transformed = {
@@ -46,6 +89,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       requestNumber: purchaseOrder.requestNumber,
       customerId: purchaseOrder.customerId,
       customerName: purchaseOrder.customer?.name || '',
+      customerAddress: buildPurchaseOrderAddress(purchaseOrder.customer, purchaseOrder.customerLocation),
       customerType: purchaseOrder.customer?.type === 'GARMENT_FACTORY' ? 'Business' : 'Individual',
       requestDate: purchaseOrder.requestDate,
       startDate: (purchaseOrder as any).startDate ?? null,
@@ -65,6 +109,20 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
         rentedQuantity: m.rentedQuantity || 0,
         pendingQuantity: m.quantity - (m.rentedQuantity || 0),
         expectedAvailabilityDate: m.expectedAvailabilityDate || null,
+      })),
+      tools: toolsArr.map((t: any) => ({
+        id: String(t.id ?? t.toolId ?? ''),
+        toolId: String(t.toolId ?? t.id ?? ''),
+        toolName: t.toolName,
+        toolType: t.toolType,
+        brand: t.brand ?? '',
+        model: t.model ?? '',
+        quantity: t.quantity,
+        availableStock: t.availableStock ?? 0,
+        unitPrice: t.unitPrice,
+        totalPrice: t.totalPrice,
+        rentedQuantity: t.rentedQuantity ?? 0,
+        pendingQuantity: t.pendingQuantity ?? Math.max(0, (t.quantity || 0) - Math.min(t.availableStock ?? 0, t.quantity || 0)),
       })),
       rentalAgreementIds: purchaseOrder.rentals.map((r: any) => r.id),
     };
@@ -106,6 +164,9 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     }
     if (body.machines !== undefined) {
       updateData.machines = body.machines;
+    }
+    if (body.tools !== undefined) {
+      updateData.tools = body.tools;
     }
     if (body.totalAmount !== undefined) {
       updateData.totalAmount = body.totalAmount;

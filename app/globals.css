@@ -116,5 +116,22 @@ body {
     margin: 0;
     padding: 0;
     overflow: visible;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.purchase-order-printing #purchase-order-print,
+  body.purchase-order-printing #purchase-order-print * {
+    color: #111827 !important;
+  }
+}
+
+/* Hide default browser header/footer (URL, Date) on printed pages */
+@media print {
+  @page {
+    margin: 0;
+  }
+  body {
+    margin: 1cm;
   }
 }

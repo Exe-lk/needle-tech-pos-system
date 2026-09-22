@@ -20,6 +20,7 @@ import {
 import Tooltip from '@/src/components/common/tooltip';
 import QRScannerComponent from '@/src/components/qr-scanner';
 import { LetterheadDocument } from '@/src/components/letterhead/letterhead-document';
+import { GatepassDocument } from '@/src/components/gatepass/gatepass-document';
 import { authFetch } from '@/lib/auth-client';
 import { Swal, toast } from '@/src/lib/swal';
 
@@ -101,6 +102,20 @@ interface ApiGatePass {
       };
     };
   }[];
+  tools?: {
+    id: string;
+    toolId: string;
+    quantity: number;
+    unitPrice?: number | string | null;
+    tool?: {
+      id: string;
+      toolName: string;
+      toolType: string;
+      brand?: string | null;
+      model?: string | null;
+      serialNumber?: string | null;
+    };
+  }[];
   issuedBy?: {
     id: string;
     fullName: string;
@@ -117,6 +132,13 @@ interface GatePassMachine {
   machineId?: string;
 }
 
+interface GatePassToolItem {
+  id: string;
+  description: string;
+  quantity: number;
+  serialNo?: string;
+}
+
 interface GatePass {
   id: string;
   gatepassNo: string;
@@ -130,6 +152,7 @@ interface GatePass {
   vehicleNumber: string;
   driverName: string;
   items: GatePassMachine[];
+  tools?: GatePassToolItem[];
   issuedBy?: string;
   receivedBy?: string;
   rentalId?: string;
@@ -165,6 +188,7 @@ const buildCustomerAddress = (customer: any): string => {
 const mapApiGatePassToFrontend = (apiGatePass: ApiGatePass): GatePass => {
   const customer = apiGatePass.customer || apiGatePass.rental?.customer;
   const machines = apiGatePass.machines || [];
+  const tools = apiGatePass.tools || [];
   
   return {
     id: apiGatePass.id,
@@ -186,6 +210,24 @@ const mapApiGatePassToFrontend = (apiGatePass: ApiGatePass): GatePass => {
       motorBoxNo: m.machine?.boxNumber || '',
       machineId: m.machineId,
     })),
+    tools: tools.map((t) => {
+      const tool = t.tool;
+      const description = [
+        tool?.toolName,
+        tool?.toolType ? `(${tool.toolType})` : '',
+        tool?.brand,
+        tool?.model,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      return {
+        id: t.id,
+        description: description || 'Tool',
+        quantity: typeof t.quantity === 'number' ? t.quantity : 1,
+        serialNo: tool?.serialNumber || undefined,
+      };
+    }),
     issuedBy: apiGatePass.issuedBy?.fullName || '',
     receivedBy: '',
     rentalId: apiGatePass.rentalId,
@@ -1254,7 +1296,7 @@ const GatePassPage: React.FC = () => {
     },
   ];
 
-  /** Gatepass body content (details + table) for use inside LetterheadDocument */
+  /** Gatepass body content (details + table) for use inside LetterheadDocument (used in create form) */
   const renderGatePassLetterheadBody = (gatePass: GatePass) => (
     <>
       {/* Top row: left = FROM/TO/Vehicle/Driver, right = Gatepass/Date/Returnable/Entry */}
@@ -1325,6 +1367,39 @@ const GatePassPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Tools Table (if any) */}
+      {gatePass.tools && gatePass.tools.length > 0 && (
+        <div className="mb-4 sm:mb-6 overflow-x-auto">
+          <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 print:text-gray-700 mb-2">
+            Tools
+          </div>
+          <table className="w-full border-collapse text-xs sm:text-sm min-w-[18rem]">
+            <thead>
+              <tr className="border-b border-gray-800 dark:border-slate-500 print:border-gray-800">
+                <th className="text-left py-2 pr-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Description</th>
+                <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900 w-20">Qty</th>
+                <th className="text-center py-2 px-2 font-semibold text-gray-900 dark:text-slate-100 print:text-gray-900">Serial No</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gatePass.tools.map((t, idx) => (
+                <tr key={t.id} className="border-b border-gray-200 dark:border-slate-600 print:border-gray-200">
+                  <td className="py-2 pr-2 text-gray-900 dark:text-slate-100 print:text-gray-900 break-words align-top">
+                    {idx + 1}. {t.description}
+                  </td>
+                  <td className="py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900 align-top">
+                    {t.quantity}
+                  </td>
+                  <td className="py-2 px-2 text-center text-gray-900 dark:text-slate-100 print:text-gray-900 break-all align-top">
+                    {t.serialNo || '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 
@@ -1351,40 +1426,44 @@ const GatePassPage: React.FC = () => {
     </div>
   );
 
-  /** Full gatepass on letterhead - for both screen preview and print. Footer: address, telephone, fax, email only. */
-  const renderGatePassOnLetterhead = (gatePass: GatePass) => (
-    <div className="bg-white dark:bg-slate-800 w-full p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 dark:border-slate-600 rounded-lg print:shadow-none print:border-0 print:rounded-none print:bg-white print:w-[210mm] print:max-w-[210mm] print:p-8">
-      <LetterheadDocument
-        documentTitle="GATEPASS"
-        footerStyle="simple"
-        footerContent={renderGatePassSignatures(gatePass)}
-        className="print:p-0"
-      >
-        {renderGatePassLetterheadBody(gatePass)}
-      </LetterheadDocument>
-    </div>
-  );
-
   // View Gate Pass Content: same letterhead layout on screen and in print
   const renderGatePassDetails = () => {
     if (!selectedGatePass) return null;
 
     return (
       <div>
-        {/* Screen View - letterhead layout (matches print) */}
-        <div className="print:hidden">{renderGatePassOnLetterhead(selectedGatePass)}</div>
-
-        {/* Print View - only visible when printing; normal flow so footer prints (matches view mode) */}
-        <div className="hidden print:block print:bg-white print:min-h-0 print:p-0 print:m-0">
-          <div className="p-8 max-w-[210mm] mx-auto">
-            <LetterheadDocument
-              documentTitle="GATEPASS"
-              footerStyle="simple"
-              footerContent={renderGatePassSignatures(selectedGatePass)}
-            >
-              {renderGatePassLetterheadBody(selectedGatePass)}
-            </LetterheadDocument>
+        {/* Screen View */}
+        <div className="print:hidden w-full p-4 sm:p-6 md:p-8 max-w-[210mm] mx-auto shadow-sm border border-gray-200 dark:border-slate-600 rounded-lg bg-gray-200">
+          <div className="overflow-x-auto overflow-y-hidden" style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
+            <GatepassDocument
+              from={selectedGatePass.from}
+              to={selectedGatePass.to}
+              toAddress={selectedGatePass.toAddress}
+              vehicleNumber={selectedGatePass.vehicleNumber}
+              driverName={selectedGatePass.driverName}
+              gatepassNo={selectedGatePass.gatepassNo}
+              dateOfIssue={selectedGatePass.dateOfIssue}
+              returnable={selectedGatePass.returnable}
+              entry={selectedGatePass.entry}
+              items={selectedGatePass.items}
+            />
           </div>
+        </div>
+
+        {/* Print View */}
+        <div className="hidden print:block print:bg-white print:min-h-0 print:p-0 print:m-0">
+          <GatepassDocument
+            from={selectedGatePass.from}
+            to={selectedGatePass.to}
+            toAddress={selectedGatePass.toAddress}
+            vehicleNumber={selectedGatePass.vehicleNumber}
+            driverName={selectedGatePass.driverName}
+            gatepassNo={selectedGatePass.gatepassNo}
+            dateOfIssue={selectedGatePass.dateOfIssue}
+            returnable={selectedGatePass.returnable}
+            entry={selectedGatePass.entry}
+            items={selectedGatePass.items}
+          />
         </div>
       </div>
     );
@@ -1446,11 +1525,22 @@ const GatePassPage: React.FC = () => {
           id="gatepass-print-area"
           className="hidden print:block print:bg-white print:min-h-0"
         >
-          {renderGatePassOnLetterhead(selectedGatePass)}
+          <GatepassDocument
+            from={selectedGatePass.from}
+            to={selectedGatePass.to}
+            toAddress={selectedGatePass.toAddress}
+            vehicleNumber={selectedGatePass.vehicleNumber}
+            driverName={selectedGatePass.driverName}
+            gatepassNo={selectedGatePass.gatepassNo}
+            dateOfIssue={selectedGatePass.dateOfIssue}
+            returnable={selectedGatePass.returnable}
+            entry={selectedGatePass.entry}
+            items={selectedGatePass.items}
+          />
         </div>
       )}
 
-      <div className="min-h-screen bg-gray-100 dark:bg-slate-950 print:hidden">
+      <div className="min-h-full bg-gray-100 dark:bg-slate-950 print:hidden">
         {/* Top navbar */}
         <Navbar onMenuClick={handleMenuClick} />
 
@@ -1464,10 +1554,10 @@ const GatePassPage: React.FC = () => {
 
         {/* Main content area */}
         <main
-          className={`pt-24 sm:pt-28 lg:pt-32 px-3 sm:px-4 md:px-6 pb-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+          className={`pt-24 sm:pt-[84px] px-3 sm:px-4 md:px-6 pb-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
             }`}
         >
-          <div className="max-w-7xl mx-auto space-y-4 sm:space-y-5">
+          <div className="w-full xl:max-w-[1600px] mx-auto space-y-4 sm:space-y-5">
             {/* Page header */}
             <div className="max-w-2xl">
               <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">

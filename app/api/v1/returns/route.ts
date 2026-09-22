@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma';
 import type { AuthUser } from '@/lib/auth-supabase';
 import { getReturnedMachineIdsForRental } from '@/lib/rental-returns';
 import { processReturnPostProcessing } from '@/lib/return-post-processing';
+import { logAuditAction } from '@/lib/audit-logger';
 
 /**
  * @swagger
@@ -17,7 +18,7 @@ import { processReturnPostProcessing } from '@/lib/return-post-processing';
  *     security:
  *       - bearerAuth: []
  */
-export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER'], async (request: NextRequest) => {
+export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'OPERATOR', 'USER', 'Stock_Keeper'], async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const { page, limit, sortBy, sortOrder, search } = parseQueryParams(searchParams);
@@ -79,7 +80,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, auth: AuthUser) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER', 'Stock_Keeper'], async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
     const { 
@@ -331,6 +332,25 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
             notes: `Return ${returnNumber} – machine ${rm.serialNumber} returned from agreement ${rental.agreementNumber}`,
           },
         });
+
+        // Add Transaction Log for return
+        await (tx as any).transactionLog.create({
+          data: {
+            transactionDate: returnDate,
+            category: 'RETURN',
+            transactionType: 'RETURN_IN',
+            reference: returnNumber,
+            description: `Return In – machine ${rm.serialNumber}`,
+            brand,
+            model,
+            customerId: rental.customerId,
+            quantity: 1,
+            location: 'Main Warehouse',
+            performedBy,
+            status: 'SUCCESS',
+            notes: `Returned from agreement ${rental.agreementNumber}`,
+          }
+        });
       }
       
       // Create damage reports (one per damaged/missing machine); link first to Return
@@ -404,6 +424,15 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
         photosCount: rm.photos.length,
       })),
     };
+    
+    // Log audit action
+    await logAuditAction(request, auth, {
+      action: 'CREATE',
+      entityType: 'Return',
+      entityId: newReturn!.id,
+      description: `Return ${newReturn!.returnNumber} created for Rental ${rental.agreementNumber} (${machines.length} machines)`,
+      after: transformed,
+    });
     
     return successResponse(
       { ...transformed, ...postProcessingResult },

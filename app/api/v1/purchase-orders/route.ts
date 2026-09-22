@@ -4,6 +4,47 @@ import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole } from '@/lib/auth-middleware';
 import prisma from '@/lib/prisma';
 import { Decimal } from '@prisma/client/runtime/client';
+import { logAuditAction } from '@/lib/audit-logger';
+
+function buildPurchaseOrderAddress(
+  customer?: {
+    billingAddressLine1?: string | null;
+    billingAddressLine2?: string | null;
+    billingCity?: string | null;
+    billingRegion?: string | null;
+    billingPostalCode?: string | null;
+    billingCountry?: string | null;
+  } | null,
+  location?: {
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    region?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  } | null,
+): string {
+  if (location) {
+    const locationParts = [
+      location.addressLine1,
+      location.addressLine2,
+      location.city,
+      location.region,
+      location.postalCode,
+      location.country,
+    ].filter(Boolean);
+    if (locationParts.length > 0) return locationParts.join(', ');
+  }
+  if (!customer) return '';
+  return [
+    customer.billingAddressLine1,
+    customer.billingAddressLine2,
+    customer.billingCity,
+    customer.billingRegion,
+    customer.billingPostalCode,
+    customer.billingCountry || 'Sri Lanka',
+  ].filter(Boolean).join(', ');
+}
 
 /**
  * @swagger
@@ -46,6 +87,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
       orderBy: { [sortBy]: sortOrderDir },
       include: {
         customer: true,
+        customerLocation: true,
         rentals: {
           select: {
             id: true,
@@ -58,6 +100,8 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     // Transform for frontend
     const transformed = purchaseOrders.map((po: any) => {
       const machines = Array.isArray(po.machines) ? po.machines : [];
+      const toolsRaw = po.tools;
+      const toolsArr = Array.isArray(toolsRaw) ? toolsRaw : [];
       const requestedMachines = machines.reduce((sum: number, m: any) => sum + (m.quantity || 0), 0);
       const rentedQuantity = machines.reduce((sum: number, m: any) => sum + (m.rentedQuantity || 0), 0);
       
@@ -66,6 +110,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
         requestNumber: po.requestNumber,
         customerId: po.customerId,
         customerName: po.customer?.name || '',
+        customerAddress: buildPurchaseOrderAddress(po.customer, po.customerLocation),
         customerType: po.customer?.type === 'GARMENT_FACTORY' ? 'Business' : 'Individual',
         requestDate: po.requestDate,
         startDate: (po as any).startDate ?? null,
@@ -85,6 +130,20 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
           rentedQuantity: m.rentedQuantity || 0,
           pendingQuantity: m.quantity - (m.rentedQuantity || 0),
           expectedAvailabilityDate: m.expectedAvailabilityDate || null,
+        })),
+        tools: toolsArr.map((t: any) => ({
+          id: String(t.id ?? t.toolId ?? ''),
+          toolId: String(t.toolId ?? t.id ?? ''),
+          toolName: t.toolName,
+          toolType: t.toolType,
+          brand: t.brand ?? '',
+          model: t.model ?? '',
+          quantity: t.quantity,
+          availableStock: t.availableStock ?? 0,
+          unitPrice: t.unitPrice,
+          totalPrice: t.totalPrice,
+          rentedQuantity: t.rentedQuantity ?? 0,
+          pendingQuantity: t.pendingQuantity ?? Math.max(0, (t.quantity || 0) - Math.min(t.availableStock ?? 0, t.quantity || 0)),
         })),
         rentalAgreementIds: po.rentals.map((r: any) => r.id),
       };
@@ -118,7 +177,7 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
  *     security:
  *       - bearerAuth: []
  */
-export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest) => {
+export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer', 'MANAGER'], async (request: NextRequest, auth: any) => {
   try {
     const body = await request.json();
     const {
@@ -129,6 +188,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
       endDate,
       requestDate,
       machines = [],
+      tools: bodyTools,
       totalAmount,
     } = body;
     
@@ -188,6 +248,22 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
       rentedQuantity: m.rentedQuantity || 0,
       pendingQuantity: m.pendingQuantity || 0,
     }));
+
+    const rawTools = Array.isArray(bodyTools) ? bodyTools : [];
+    const toolData = rawTools.map((t: any) => ({
+      id: t.id || t.toolId,
+      toolId: t.toolId || t.id,
+      toolName: t.toolName,
+      toolType: t.toolType,
+      brand: t.brand ?? null,
+      model: t.model ?? null,
+      quantity: t.quantity,
+      availableStock: t.availableStock ?? 0,
+      unitPrice: t.unitPrice,
+      totalPrice: t.totalPrice,
+      rentedQuantity: t.rentedQuantity ?? 0,
+      pendingQuantity: t.pendingQuantity ?? 0,
+    }));
     
     const newPurchaseOrder = await prisma.purchaseOrder.create({
       data: {
@@ -200,6 +276,7 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
         totalAmount: new Decimal(totalAmount || 0),
         status: 'PENDING',
         machines: machineData,
+        ...(toolData.length > 0 ? { tools: toolData } : {}),
       },
       include: {
         customer: true,
@@ -219,7 +296,17 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
       totalAmount: parseFloat(newPurchaseOrder.totalAmount.toString()),
       status: newPurchaseOrder.status,
       machines: machineData,
+      tools: toolData,
     };
+    
+    // Log audit action
+    await logAuditAction(request, auth, {
+      action: 'CREATE',
+      entityType: 'PurchaseOrder',
+      entityId: newPurchaseOrder.id,
+      description: `Purchase Order ${newPurchaseOrder.requestNumber} created`,
+      after: transformed,
+    });
     
     return successResponse(transformed, 'Purchase request created successfully', 201);
   } catch (error: any) {

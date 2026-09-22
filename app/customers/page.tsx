@@ -9,7 +9,7 @@ import UpdateForm from '@/src/components/form-popup/update';
 import DeleteForm from '@/src/components/form-popup/delete';
 import { Eye, Pencil, Trash2, X, Plus } from 'lucide-react';
 import Tooltip from '@/src/components/common/tooltip';
-import { validateVATTIN, validateNICNumber, validateEmail } from '@/src/utils/validation';
+import { validateVATNumber, validateTINNumber, validateNICNumber, validateEmail } from '@/src/utils/validation';
 import { authFetch, clearAuth, redirectToLogin } from '@/lib/auth-client';
 import { Swal, toast } from '@/src/lib/swal';
 
@@ -67,6 +67,7 @@ interface ApiCustomer {
   shippingPostalCode?: string;
   shippingCountry?: string;
   vatRegistrationNumber?: string;
+  tinNumber?: string;
   currentBalance: number;
   status: ApiCustomerStatus;
   createdAt: string;
@@ -79,7 +80,8 @@ interface CustomerInfo {
   name: string;
   type: CustomerType;
   nicNumber?: string;
-  vatTin?: string;
+  vatNumber?: string;
+  tinNumber?: string;
   address: string;
   phone: string;
   email: string;
@@ -569,12 +571,20 @@ const CustomerListPage: React.FC = () => {
       required: true,
     },
     {
-      name: 'vatTin',
-      label: 'VAT / TIN Number',
+      name: 'vatNumber',
+      label: 'VAT Number',
       type: 'text',
-      placeholder: 'Enter VAT or TIN number',
-      required: false,
-      validation: validateVATTIN,
+      placeholder: 'Enter VAT number',
+      required: true,
+      validation: validateVATNumber,
+    },
+    {
+      name: 'tinNumber',
+      label: 'TIN Number',
+      type: 'text',
+      placeholder: 'Enter TIN number',
+      required: true,
+      validation: validateTINNumber,
     },
     {
       name: 'businessAddress',
@@ -693,7 +703,8 @@ const CustomerListPage: React.FC = () => {
     if (customer.type === 'Business') {
       return {
         companyName: selectedCustomerDetails.name,
-        vatTin: selectedCustomerDetails.vatRegistrationNumber || '',
+        vatNumber: selectedCustomerDetails.vatRegistrationNumber || '',
+        tinNumber: selectedCustomerDetails.tinNumber || '',
         businessAddress: address,
         contactPerson: selectedCustomerDetails.contactPerson || '',
         phone: selectedCustomerDetails.phones[0] || '',
@@ -753,7 +764,8 @@ const CustomerListPage: React.FC = () => {
         billingRegion: addressParts.region,
         billingPostalCode: addressParts.postalCode,
         billingCountry: addressParts.country,
-        vatRegistrationNumber: data.vatTin || null,
+        vatRegistrationNumber: data.vatNumber || null,
+        tinNumber: data.tinNumber || null,
         status: 'ACTIVE' as ApiCustomerStatus,
         ...(locationsPayload.length > 0 && { locations: locationsPayload }),
       };
@@ -863,7 +875,8 @@ const CustomerListPage: React.FC = () => {
         billingRegion: addressParts.region,
         billingPostalCode: addressParts.postalCode,
         billingCountry: addressParts.country,
-        vatRegistrationNumber: data.vatTin || null,
+        vatRegistrationNumber: data.vatNumber || null,
+        tinNumber: data.tinNumber || null,
         status: mapFrontendStatusToApi(data.status),
         locations: locationsPayload,
       };
@@ -1004,7 +1017,14 @@ const CustomerListPage: React.FC = () => {
       id: selectedCustomerDetails.id,
       name: selectedCustomerDetails.name,
       type: mapApiTypeToFrontend(selectedCustomerDetails.type),
-      vatTin: selectedCustomerDetails.type === 'GARMENT_FACTORY' ? selectedCustomerDetails.vatRegistrationNumber : undefined,
+      vatNumber:
+        selectedCustomerDetails.type === 'GARMENT_FACTORY'
+          ? selectedCustomerDetails.vatRegistrationNumber
+          : undefined,
+      tinNumber:
+        selectedCustomerDetails.type === 'GARMENT_FACTORY'
+          ? selectedCustomerDetails.tinNumber
+          : undefined,
       nicNumber: selectedCustomerDetails.type === 'INDIVIDUAL' ? selectedCustomerDetails.vatRegistrationNumber : undefined,
       address: formatAddress(selectedCustomerDetails, 'billing'),
       phone: selectedCustomerDetails.phones[0] || 'N/A',
@@ -1042,11 +1062,19 @@ const CustomerListPage: React.FC = () => {
                   {customerInfo.type}
                 </span>
               </div>
-              {customerInfo.vatTin && (
+              {customerInfo.vatNumber && (
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">VAT/TIN:</span>
+                  <span className="text-gray-500 dark:text-gray-400">VAT Number:</span>
                   <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                    {customerInfo.vatTin}
+                    {customerInfo.vatNumber}
+                  </span>
+                </div>
+              )}
+              {customerInfo.tinNumber && (
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">TIN Number:</span>
+                  <span className="ml-2 text-gray-900 dark:text-white font-medium">
+                    {customerInfo.tinNumber}
                   </span>
                 </div>
               )}
@@ -1287,7 +1315,7 @@ const CustomerListPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+    <div className="min-h-full bg-gray-100 dark:bg-slate-950">
       {/* Top navbar */}
       <Navbar onMenuClick={handleMenuClick} />
 
@@ -1300,10 +1328,10 @@ const CustomerListPage: React.FC = () => {
       />
 
       {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${
+      <main className={`pt-[84px] p-6 transition-all duration-300 ${
         isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
       }`}>
-        <div className="max-w-7xl mx-auto space-y-4">
+        <div className="w-full xl:max-w-[1600px] mx-auto space-y-4">
           {/* Page header */}
           <div className="flex items-center justify-between">
             <div>

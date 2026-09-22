@@ -19,7 +19,10 @@ export const GET = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
     const searchParams = request.nextUrl.searchParams;
     const parsed = parseQueryParams(searchParams);
     const page = parsed.page;
-    const limit = parsed.limit;
+    const requestedLimit = parseInt(searchParams.get('limit') || String(parsed.limit), 10);
+    const limit = Number.isNaN(requestedLimit)
+      ? parsed.limit
+      : Math.min(1000, Math.max(1, requestedLimit));
     const sortBy = searchParams.get('sortBy') || 'transactionDate';
     const sortOrder = parsed.sortOrder;
     const search = parsed.search;

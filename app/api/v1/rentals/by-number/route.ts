@@ -37,6 +37,11 @@ export const GET = withAuthAndRole(
       include: {
         customer: true,
         purchaseOrder: true,
+        tools: {
+          include: {
+            tool: true,
+          },
+        },
         machines: {
           include: {
             machine: {
@@ -99,6 +104,25 @@ export const GET = withAuthAndRole(
       boxNumber: rm.machine.boxNumber || '',
       description: `${rm.machine.brand?.name || ''} ${rm.machine.model?.name || ''} - ${rm.machine.type?.name || ''}`.trim(),
     }));
+
+    // Transform tools (if present)
+    const toolsRaw = Array.isArray((rental as any).tools) ? (rental as any).tools : [];
+    const tools = toolsRaw.map((rt: any) => ({
+      id: rt?.id,
+      toolId: rt?.toolId,
+      quantity: typeof rt?.quantity === 'number' ? rt.quantity : parseInt(String(rt?.quantity ?? '0'), 10) || 0,
+      unitPrice: typeof rt?.unitPrice === 'number' ? rt.unitPrice : parseFloat(String(rt?.unitPrice ?? '0')) || 0,
+      tool: rt?.tool
+        ? {
+            id: rt.tool.id,
+            name: rt.tool.name ?? '',
+            type: rt.tool.type ?? '',
+            brand: rt.tool.brand ?? null,
+            model: rt.tool.model ?? null,
+            serialNumber: rt.tool.serialNumber ?? null,
+          }
+        : null,
+    }));
     
     // Get expected machine categories: from requestedMachineLines (agreements from PO without assigned machines) or from purchase order
     let expectedMachineCategories: any[] = [];
@@ -159,6 +183,7 @@ export const GET = withAuthAndRole(
       dispatchedDate: rental.startDate,
       expectedReturnDate: rental.expectedEndDate,
       machines,
+      tools,
       expectedMachines: expectedMachineCategories.reduce((sum, cat) => sum + cat.quantity, 0),
       addedMachines: activeMachines.length,
       expectedMachineCategories,

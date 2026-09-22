@@ -112,6 +112,7 @@ export const getApiDocs = async () => {
                 properties: {
                   vatApplicable: { type: 'boolean' },
                   vatRegistrationNumber: { type: 'string' },
+                  tinNumber: { type: 'string' },
                   taxCategory: { type: 'string' },
                 },
               },

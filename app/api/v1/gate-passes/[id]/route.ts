@@ -11,7 +11,7 @@ export const GET = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER', '
   try {
     const { id } = await params;
     
-    const gatePass = await prisma.gatePass.findUnique({
+    const gatePass = await (prisma as any).gatePass.findUnique({
       where: { id },
       include: { 
         rental: {
@@ -30,6 +30,11 @@ export const GET = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER', '
               }
             }
           }
+        },
+        tools: {
+          include: {
+            tool: true,
+          },
         }
       }
     });
@@ -59,7 +64,7 @@ export const PUT = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER'], 
       return notFoundResponse('Gate pass not found');
     }
     
-    const updatedGatePass = await prisma.gatePass.update({
+    const updatedGatePass = await (prisma as any).gatePass.update({
       where: { id },
       data: {
         ...(body.status && { status: body.status }),
@@ -85,6 +90,11 @@ export const PUT = withAuthAndRole(['ADMIN', 'Operational_Officer', 'MANAGER'], 
               }
             }
           }
+        },
+        tools: {
+          include: {
+            tool: true,
+          },
         }
       }
     });

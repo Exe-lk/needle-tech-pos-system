@@ -22,6 +22,7 @@ import {
   User,
   FileText,
   XCircle,
+  Scan,
   Sun,
   Moon,
   Loader2,
@@ -180,6 +181,8 @@ const GatePassQRPage: React.FC = () => {
   const [gatePassNumberInput, setGatePassNumberInput] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [isScanningDocument, setIsScanningDocument] = useState(false);
+  const [documentScannerKey, setDocumentScannerKey] = useState(0);
   const [gatePass, setGatePass] = useState<GatePass | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -537,7 +540,7 @@ const GatePassQRPage: React.FC = () => {
 
   if (step === 1) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/50 px-4 py-4">
           <div className="max-w-md mx-auto flex items-start justify-between gap-3">
@@ -583,21 +586,60 @@ const GatePassQRPage: React.FC = () => {
               >
                 Gatepass Number
               </label>
-              <input
-                id="gatepass-input"
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                value={gatePassNumberInput}
-                onChange={(e) => {
-                  setGatePassNumberInput(e.target.value);
-                  setLookupError(null);
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleContinueFromStep1()}
-                placeholder="e.g. GP-016633"
-                className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
-                autoFocus
-              />
+              {isScanningDocument ? (
+                <div className="space-y-4">
+                  <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-slate-700">
+                    <QRScannerComponent
+                      key={`doc-scan-${documentScannerKey}`}
+                      onScanSuccess={(decoded) => {
+                        const val = decoded.trim();
+                        if (val) {
+                          setGatePassNumberInput(val);
+                          setIsScanningDocument(false);
+                          setLookupError(null);
+                          setTimeout(() => {
+                             const btn = document.getElementById('step1-continue-btn');
+                             if (btn) btn.click();
+                          }, 300);
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsScanningDocument(false)}
+                    className="w-full py-3 text-sm font-semibold text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    Cancel Scan
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    id="gatepass-input"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    value={gatePassNumberInput}
+                    onChange={(e) => {
+                      setGatePassNumberInput(e.target.value);
+                      setLookupError(null);
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleContinueFromStep1()}
+                    placeholder="e.g. GP-016633"
+                    className="w-full min-h-[52px] px-4 py-3 text-base border rounded-xl bg-gray-50 dark:bg-slate-900/50 text-gray-900 dark:text-white border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder-slate-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setIsScanningDocument(true); setDocumentScannerKey(k => k + 1); }}
+                    className="px-4 min-h-[52px] bg-blue-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-slate-600 rounded-xl hover:bg-blue-100 dark:hover:bg-slate-600 flex items-center justify-center transition-colors shrink-0"
+                    aria-label="Scan Document QR"
+                  >
+                    <Scan className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
               {lookupError && (
                 <p
                   className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2"
@@ -611,6 +653,7 @@ const GatePassQRPage: React.FC = () => {
                 Enter the gatepass number and continue to verify.
               </p>
               <button
+                id="step1-continue-btn"
                 type="button"
                 onClick={() => void handleContinueFromStep1()}
                 disabled={lookupLoading}
@@ -648,7 +691,7 @@ const GatePassQRPage: React.FC = () => {
 
   if (mode === 'menu') {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
@@ -792,7 +835,7 @@ const GatePassQRPage: React.FC = () => {
 
   if (mode === 'details') {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
+      <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
         {/* Header */}
         <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700/60 px-4 py-3 flex items-center justify-between">
           <button
@@ -927,7 +970,7 @@ const GatePassQRPage: React.FC = () => {
 
   // default: mode === 'scan'
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
+    <div className="min-h-full w-full bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col transition-colors">
       {/* Post-scan popup: serial, box, result, Next */}
       {scanResultPopup && (
         <div

@@ -30,6 +30,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import Tooltip from '@/src/components/common/tooltip';
 import { authFetch } from '@/lib/auth-client';
+import { mapWithConcurrency } from '@/lib/utils';
 
 const API_BASE = '/api/v1';
 
@@ -82,40 +83,13 @@ interface IdleMachine {
 }
 
 // Mock Data - In production, this would come from API
-const mockMonthlyRevenue: MonthlyRevenue[] = [
-  { month: 'Jan 2024', monthNumber: 1, vatRevenue: 450000, nonVatRevenue: 120000, totalRevenue: 570000 },
-  { month: 'Feb 2024', monthNumber: 2, vatRevenue: 520000, nonVatRevenue: 150000, totalRevenue: 670000 },
-  { month: 'Mar 2024', monthNumber: 3, vatRevenue: 480000, nonVatRevenue: 180000, totalRevenue: 660000 },
-  { month: 'Apr 2024', monthNumber: 4, vatRevenue: 550000, nonVatRevenue: 200000, totalRevenue: 750000 },
-  { month: 'May 2024', monthNumber: 5, vatRevenue: 600000, nonVatRevenue: 220000, totalRevenue: 820000 },
-  { month: 'Jun 2024', monthNumber: 6, vatRevenue: 580000, nonVatRevenue: 190000, totalRevenue: 770000 },
-];
+const mockMonthlyRevenue: MonthlyRevenue[] = [];
 
-const mockMachineUtilization: MachineUtilization[] = [
-  { model: 'XL2600i', brand: 'Brother', totalRentals: 45, totalDaysRented: 320, utilizationRate: 85.2, revenue: 160000 },
-  { model: 'Heavy Duty 4423', brand: 'Singer', totalRentals: 38, totalDaysRented: 280, utilizationRate: 78.5, revenue: 224000 },
-  { model: 'HD3000', brand: 'Janome', totalRentals: 42, totalDaysRented: 295, utilizationRate: 82.1, revenue: 88500 },
-  { model: 'SE600', brand: 'Brother', totalRentals: 35, totalDaysRented: 245, utilizationRate: 68.3, revenue: 122500 },
-  { model: 'MO-654DE', brand: 'Juki', totalRentals: 30, totalDaysRented: 210, utilizationRate: 58.6, revenue: 105000 },
-];
+const mockMachineUtilization: MachineUtilization[] = [];
 
-const mockDamageFrequency: DamageFrequency[] = [
-  { model: 'XL2600i', brand: 'Brother', totalDamages: 8, repairCost: 40000, damageRate: 17.8 },
-  { model: 'Heavy Duty 4423', brand: 'Singer', totalDamages: 12, repairCost: 75000, damageRate: 31.6 },
-  { model: 'HD3000', brand: 'Janome', totalDamages: 5, repairCost: 25000, damageRate: 11.9 },
-  { model: 'SE600', brand: 'Brother', totalDamages: 6, repairCost: 30000, damageRate: 17.1 },
-  { model: 'MO-654DE', brand: 'Juki', totalDamages: 4, repairCost: 20000, damageRate: 13.3 },
-  { model: 'CS6000i', brand: 'Brother', totalDamages: 3, repairCost: 15000, damageRate: 10.0 },
-  { model: 'MB-4S', brand: 'Janome', totalDamages: 7, repairCost: 35000, damageRate: 20.0 },
-];
+const mockDamageFrequency: DamageFrequency[] = [];
 
-const mockIdleMachines: IdleMachine[] = [
-  { id: 1, barcode: 'BROTHER-XL2600I-SN-2024-001', serialNumber: 'SN-2024-001', brand: 'Brother', model: 'XL2600i', type: 'Domestic', status: 'Available', daysIdle: 15, lastRentalDate: '2024-05-01' },
-  { id: 2, barcode: 'JANOME-HD3000-SN-2024-003', serialNumber: 'SN-2024-003', brand: 'Janome', model: 'HD3000', type: 'Domestic', status: 'Available', daysIdle: 28, lastRentalDate: '2024-04-15' },
-  { id: 3, barcode: 'BROTHER-CS6000I-SN-2024-007', serialNumber: 'SN-2024-007', brand: 'Brother', model: 'CS6000i', type: 'Domestic', status: 'Available', daysIdle: 45, lastRentalDate: '2024-03-20' },
-  { id: 4, barcode: 'SINGER-BUTTONHOLE-160-SN-2024-006', serialNumber: 'SN-2024-006', brand: 'Singer', model: 'Buttonhole 160', type: 'Buttonhole', status: 'Maintenance', daysIdle: 60, lastRentalDate: '2024-02-25' },
-  { id: 5, barcode: 'JANOME-MB-4S-SN-2024-008', serialNumber: 'SN-2024-008', brand: 'Janome', model: 'MB-4S', type: 'Industrial', status: 'Available', daysIdle: 90, lastRentalDate: '2024-01-10' },
-];
+const mockIdleMachines: IdleMachine[] = [];
 
 // Additional analytics types (dummy data for UI)
 interface RentalStatusItem {
@@ -152,42 +126,19 @@ interface GatepassVolumeItem {
   label: string;
 }
 
-const mockRentalStatusDistribution: RentalStatusItem[] = [
-  { status: 'Active', count: 42, percentage: 58, color: 'rgb(34, 197, 94)' },
-  { status: 'Completed', count: 24, percentage: 33, color: 'rgb(59, 130, 246)' },
-  { status: 'Pending', count: 4, percentage: 6, color: 'rgb(234, 179, 8)' },
-  { status: 'Cancelled', count: 2, percentage: 3, color: 'rgb(148, 163, 184)' },
-];
+const mockRentalStatusDistribution: RentalStatusItem[] = [];
 
-const mockRevenueByBrand: RevenueByBrandItem[] = [
-  { brand: 'Brother', revenue: 1250000, percentage: 32, color: 'rgb(59, 130, 246)' },
-  { brand: 'Singer', revenue: 980000, percentage: 25, color: 'rgb(168, 85, 247)' },
-  { brand: 'Janome', revenue: 850000, percentage: 22, color: 'rgb(236, 72, 153)' },
-  { brand: 'Juki', revenue: 520000, percentage: 13, color: 'rgb(249, 115, 22)' },
-  { brand: 'Others', revenue: 320000, percentage: 8, color: 'rgb(100, 116, 139)' },
-];
+const mockRevenueByBrand: RevenueByBrandItem[] = [];
 
-const mockOutstandingAging: OutstandingAgingItem[] = [
-  { bucket: '0-30 days', amount: 450000, count: 12, color: 'rgb(34, 197, 94)' },
-  { bucket: '31-60 days', amount: 280000, count: 5, color: 'rgb(234, 179, 8)' },
-  { bucket: '61+ days', amount: 180000, count: 3, color: 'rgb(239, 68, 68)' },
-];
+const mockOutstandingAging: OutstandingAgingItem[] = [];
 
-const mockAlertsByType: AlertByTypeItem[] = [
-  { type: 'Payment Overdue', count: 8, severity: 'High', color: 'rgb(239, 68, 68)' },
-  { type: 'High Balance', count: 5, severity: 'Medium', color: 'rgb(249, 115, 22)' },
-  { type: 'Agreement Expiring', count: 12, severity: 'Low', color: 'rgb(234, 179, 8)' },
-  { type: 'Credit Limit Exceeded', count: 2, severity: 'Critical', color: 'rgb(127, 29, 29)' },
-];
+const mockAlertsByType: AlertByTypeItem[] = [];
 
-const mockGatepassVolume: GatepassVolumeItem[] = [
-  { entry: 'OUT', count: 156, label: 'Outbound' },
-  { entry: 'IN', count: 142, label: 'Inbound' },
-];
+const mockGatepassVolume: GatepassVolumeItem[] = [];
 
-const MOCK_ALERTS_COUNT = 27;
-const MOCK_TOP_BRAND = 'Brother';
-const MOCK_TOP_BRAND_REVENUE = 1250000;
+const MOCK_ALERTS_COUNT = 0;
+const MOCK_TOP_BRAND = '-';
+const MOCK_TOP_BRAND_REVENUE = 0;
 
 /** Get list of { year, month } for the selected period (oldest first for charts) */
 function getMonthsForPeriod(period: '6M' | '12M' | 'YTD'): { year: number; month: number }[] {
@@ -242,8 +193,10 @@ const AnalyticsPage: React.FC = () => {
     setAnalyticsLoading(true);
     const months = getMonthsForPeriod(selectedPeriod);
     try {
-      const results = await Promise.all(
-        months.map(({ year, month }) => fetchMonthEndAnalytics(year, month))
+      const results = await mapWithConcurrency(
+        months,
+        2,
+        ({ year, month }) => fetchMonthEndAnalytics(year, month)
       );
       const valid = results.filter((r): r is MonthEndAnalyticsPayload => r != null);
       if (valid.length === 0) {
@@ -335,7 +288,7 @@ const AnalyticsPage: React.FC = () => {
     const totalNonVatRevenue = source.reduce((sum, m) => sum + m.nonVatRevenue, 0);
     const vatPercentage = totalRevenue > 0 ? (totalVatRevenue / totalRevenue) * 100 : 0;
 
-    const totalMachines = latestAnalytics?.machines?.total ?? 50;
+    const totalMachines = latestAnalytics?.machines?.total ?? 0;
     const utilizationRate = latestAnalytics?.machines?.utilizationRate ?? (totalMachines > 0 ? ((totalMachines - mockIdleMachines.length) / totalMachines) * 100 : 0);
     const idleMachines = latestAnalytics ? (totalMachines - (latestAnalytics.machines?.rented ?? 0)) : mockIdleMachines.length;
 
@@ -361,9 +314,9 @@ const AnalyticsPage: React.FC = () => {
   const maxUtilization = Math.max(...mockMachineUtilization.map(m => m.utilizationRate));
   const maxDamageRate = Math.max(...mockDamageFrequency.map(d => d.damageRate));
 
-  const activeRentals = latestAnalytics?.rentals?.active ?? 42;
-  const outstandingAmount = latestAnalytics?.financials?.totalOutstanding ?? 910000;
-  const newAgreementsThisMonth = latestAnalytics?.rentals?.total ?? 8;
+  const activeRentals = latestAnalytics?.rentals?.active ?? 0;
+  const outstandingAmount = latestAnalytics?.financials?.totalOutstanding ?? 0;
+  const newAgreementsThisMonth = latestAnalytics?.rentals?.total ?? 0;
 
   // Export to PDF
   const handleExportToPDF = () => {
@@ -846,7 +799,7 @@ const AnalyticsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-slate-950">
+    <div className="min-h-full bg-gray-100 dark:bg-slate-950">
       {detailPopup && (
         <DetailModal title={detailPopup.title} onClose={() => setDetailPopup(null)}>
           {detailPopup.content}
@@ -864,7 +817,7 @@ const AnalyticsPage: React.FC = () => {
       />
 
       {/* Main content area */}
-      <main className={`pt-28 lg:pt-32 p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
+      <main className={`pt-[84px] p-6 transition-all duration-300 ${isSidebarExpanded ? 'lg:ml-[300px]' : 'lg:ml-16'
         }`}>
         <div className="max-w-screen-2xl mx-auto space-y-6">
           {/* Page header */}
@@ -1583,7 +1536,7 @@ const AnalyticsPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Total Machines</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{latestAnalytics?.machines?.total ?? 50}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{latestAnalytics?.machines?.total ?? 0}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Active Rentals</p>
