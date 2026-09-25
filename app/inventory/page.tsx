@@ -7,7 +7,7 @@ import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import type { FormField } from '@/src/components/form-popup/update';
-import { Eye, Clock, Pencil, X } from 'lucide-react';
+import { Eye, Clock, Pencil, X, Download, Loader2 } from 'lucide-react';
 import { authFetch } from '@/lib/auth-client';
 import { Swal } from '@/src/lib/swal';
 
@@ -81,6 +81,7 @@ const InventoryManagementPage: React.FC = () => {
   const [sellSerialInput, setSellSerialInput] = useState('');
   const [sellBoxInput, setSellBoxInput] = useState('');
   const [sellSubmitting, setSellSubmitting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Fetch inventory from API
   const fetchInventory = useCallback(async () => {
@@ -147,6 +148,44 @@ const InventoryManagementPage: React.FC = () => {
     if (inventoryLoading) return;
     fetchMachineUnits();
   }, [inventoryLoading, fetchMachineUnits]);
+
+  const handleExportToExcel = useCallback(async () => {
+    setExporting(true);
+    try {
+      const res = await authFetch(`${API_BASE}/inventory/export`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.message || 'Export failed');
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition');
+      const match = disposition?.match(/filename="?([^";\n]+)"?/);
+      const filename =
+        match?.[1] || `Inventory_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to export inventory';
+      await Swal.fire({
+        icon: 'error',
+        title: 'Export failed',
+        text: message,
+      });
+    } finally {
+      setExporting(false);
+    }
+  }, []);
 
   // Fetch transactions for history modal (filtered by brand/model)
   const fetchTransactionsForItem = useCallback(async (brand: string, model: string) => {
@@ -722,7 +761,7 @@ const InventoryManagementPage: React.FC = () => {
       }`}>
         <div className="w-full xl:max-w-[1600px] mx-auto space-y-6">
           {/* Page header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
                 Inventory Management
@@ -731,6 +770,19 @@ const InventoryManagementPage: React.FC = () => {
                 Track and manage machine stock levels, view inventory history, and perform stock operations.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={handleExportToExcel}
+              disabled={exporting || inventoryLoading}
+              className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed self-start sm:self-auto"
+            >
+              {exporting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>{exporting ? 'Exporting…' : 'Export Excel'}</span>
+            </button>
           </div>
 
           {/* Inventory table card */}
