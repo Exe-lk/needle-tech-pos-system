@@ -10,6 +10,13 @@ import { LetterheadDocument, LETTERHEAD_COMPANY_INFO } from '@/src/components/le
 import { authFetch } from '@/lib/auth-client';
 import { Swal, toast } from '@/src/lib/swal';
 import { TaxInvoice } from '@/src/components/invoice/tax-invoice';
+import {
+  buildMonthSlices,
+  latestBilledPeriodTo,
+  round2,
+  sumMonthFactors,
+  type RentalBillingMode,
+} from '@/lib/invoice-month-billing';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
@@ -163,6 +170,16 @@ interface ApiInvoice {
   }[];
 }
 
+interface ApiRentalMachineLite {
+  quantity: number;
+  dailyRate: number;
+  monthlyRentalFee?: number | null;
+  brand?: string;
+  model?: string;
+  type?: string;
+  serialNumber?: string;
+}
+
 interface ApiRentalLite {
   id: string;
   agreementNumber: string;
@@ -170,7 +187,14 @@ interface ApiRentalLite {
   expectedEndDate: string | null;
   status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
   purchaseOrder?: { id: string; requestNumber: string } | null;
+  machines: ApiRentalMachineLite[];
 }
+
+type AgreementBillingConfig = {
+  mode: RentalBillingMode;
+  /** Keys are `${periodFrom}|${periodTo}` for SELECTED_MONTHS */
+  selectedMonthKeys: Set<string>;
+};
 
 // Customer dropdown type
 interface CustomerOption {
@@ -314,10 +338,10 @@ const fetchMachineTypes = async (): Promise<MachineTypeData[]> => {
   }
 };
 
-const fetchActiveRentalsForInvoice = async (customerId: string, periodFrom: string, periodTo: string): Promise<ApiRentalLite[]> => {
-  if (!customerId || !periodFrom || !periodTo) return [];
+const fetchActiveRentalsForInvoice = async (customerId: string): Promise<ApiRentalLite[]> => {
+  if (!customerId) return [];
   try {
-    const url = `${API_BASE_URL}/rentals?customerId=${encodeURIComponent(customerId)}&status=ACTIVE&periodFrom=${encodeURIComponent(periodFrom)}&periodTo=${encodeURIComponent(periodTo)}&limit=1000`;
+    const url = `${API_BASE_URL}/rentals?customerId=${encodeURIComponent(customerId)}&status=ACTIVE&limit=1000`;
     const response = await authFetch(url, {
       method: 'GET',
       credentials: 'include',
@@ -327,14 +351,28 @@ const fetchActiveRentalsForInvoice = async (customerId: string, periodFrom: stri
     }
     const data = await response.json();
     const rentals: any[] = data.data?.items || [];
-    return rentals.map((r: any) => ({
-      id: r.id,
-      agreementNumber: r.agreementNumber,
-      startDate: r.startDate,
-      expectedEndDate: r.expectedEndDate ?? null,
-      status: r.status,
-      purchaseOrder: r.purchaseOrder ? { id: r.purchaseOrder.id, requestNumber: r.purchaseOrder.requestNumber } : null,
-    }));
+    return rentals.map((r: any) => {
+      const machinesRaw = Array.isArray(r.machines) ? r.machines : [];
+      const machines: ApiRentalMachineLite[] = machinesRaw.map((rm: any) => ({
+        quantity: typeof rm.quantity === 'number' ? rm.quantity : Number(rm.quantity) || 1,
+        dailyRate: Number(rm.dailyRate) || 0,
+        monthlyRentalFee:
+          rm.machine?.monthlyRentalFee != null ? Number(rm.machine.monthlyRentalFee) : null,
+        brand: rm.machine?.brand?.name ?? '',
+        model: rm.machine?.model?.name ?? '',
+        type: rm.machine?.type?.name ?? '',
+        serialNumber: rm.machine?.serialNumber,
+      }));
+      return {
+        id: r.id,
+        agreementNumber: r.agreementNumber,
+        startDate: r.startDate,
+        expectedEndDate: r.expectedEndDate ?? null,
+        status: r.status,
+        purchaseOrder: r.purchaseOrder ? { id: r.purchaseOrder.id, requestNumber: r.purchaseOrder.requestNumber } : null,
+        machines,
+      };
+    });
   } catch (error) {
     console.error('Error fetching rentals:', error);
     return [];
@@ -621,8 +659,8 @@ const columns: TableColumn[] = [
 const InvoicePage: React.FC = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isInvoiceTypeSelectOpen, setIsInvoiceTypeSelectOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createStep, setCreateStep] = useState<1 | 2 | 3 | 4>(1);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isMonthlyInvoiceModalOpen, setIsMonthlyInvoiceModalOpen] = useState(false);
@@ -653,6 +691,7 @@ const InvoicePage: React.FC = () => {
   const [periodTo, setPeriodTo] = useState('');
   const [availableRentalsForPeriod, setAvailableRentalsForPeriod] = useState<ApiRentalLite[]>([]);
   const [selectedRentalIds, setSelectedRentalIds] = useState<Set<string>>(new Set());
+  const [agreementBillingConfigs, setAgreementBillingConfigs] = useState<Record<string, AgreementBillingConfig>>({});
   const [isLoadingRentalsForPeriod, setIsLoadingRentalsForPeriod] = useState(false);
   // Manual itemised item entry removed; invoice line items come from backend based on rentals
   const [items, setItems] = useState<Omit<InvoiceItem, 'id' | 'subtotal'>[]>([]);
@@ -695,32 +734,35 @@ const InvoicePage: React.FC = () => {
     setInvoiceDate((prev) => (prev ? prev : getTodayISODate()));
   }, [isCreateModalOpen]);
 
-  // Load active rentals matching customer + period (optional feature; does not affect existing flows)
+  // Load ACTIVE hiring agreements for selected customer (create invoice flow)
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
       if (!isCreateModalOpen) return;
-      if (!customerId || !periodFrom || !periodTo) {
+      if (!customerId) {
         setAvailableRentalsForPeriod([]);
         setSelectedRentalIds(new Set());
-        return;
-      }
-      if (!isDateRangeValid(periodFrom, periodTo)) {
-        setAvailableRentalsForPeriod([]);
-        setSelectedRentalIds(new Set());
+        setAgreementBillingConfigs({});
         return;
       }
       setIsLoadingRentalsForPeriod(true);
       try {
-        const rentals = await fetchActiveRentalsForInvoice(customerId, periodFrom, periodTo);
+        const rentals = await fetchActiveRentalsForInvoice(customerId);
         if (cancelled) return;
-        // Requirement: only show agreements whose startDate is within Period From..Period To
-        const rentalsStartingInPeriod = rentals.filter((r) =>
-          isDateWithinInclusiveRange(r.startDate, periodFrom, periodTo)
-        );
-        setAvailableRentalsForPeriod(rentalsStartingInPeriod);
-        // keep selected ids that still exist
-        setSelectedRentalIds((prev) => new Set([...prev].filter((id) => rentalsStartingInPeriod.some((r) => r.id === id))));
+        // Only agreements that have assigned machines can be invoiced
+        const withMachines = rentals.filter((r) => (r.machines?.length ?? 0) > 0);
+        setAvailableRentalsForPeriod(withMachines);
+        setSelectedRentalIds((prev) => {
+          const next = new Set([...prev].filter((id) => withMachines.some((r) => r.id === id)));
+          return next;
+        });
+        setAgreementBillingConfigs((prev) => {
+          const next: Record<string, AgreementBillingConfig> = {};
+          for (const id of Object.keys(prev)) {
+            if (withMachines.some((r) => r.id === id)) next[id] = prev[id];
+          }
+          return next;
+        });
       } finally {
         if (!cancelled) setIsLoadingRentalsForPeriod(false);
       }
@@ -729,7 +771,7 @@ const InvoicePage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isCreateModalOpen, customerId, periodFrom, periodTo]);
+  }, [isCreateModalOpen, customerId]);
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -782,15 +824,17 @@ const InvoicePage: React.FC = () => {
     console.log('Logout clicked');
   };
 
-  const handleCreateInvoice = () => {
-    setIsInvoiceTypeSelectOpen(true);
-    // Reset form (invoice type is chosen next)
+  const resetCreateFormState = () => {
+    setCreateStep(1);
     setCustomerId('');
     setInvoiceType('VAT');
     setCreateInvoiceMode(null);
     setInvoiceDate('');
     setPeriodFrom('');
     setPeriodTo('');
+    setAvailableRentalsForPeriod([]);
+    setSelectedRentalIds(new Set());
+    setAgreementBillingConfigs({});
     setItems([]);
     setPaymentMethod('');
     setPaymentDate('');
@@ -801,42 +845,42 @@ const InvoicePage: React.FC = () => {
     setAvailableModelsPerItem({});
   };
 
-  const handleCloseInvoiceTypeSelectModal = () => {
-    setIsInvoiceTypeSelectOpen(false);
-  };
-
-  const handleInvoiceTypeSelect = (mode: 'VAT' | 'Non-VAT') => {
-    setCreateInvoiceMode(mode);
-    setInvoiceType(mode);
-    setCustomerId('');
-    setFormErrors({});
-    setIsInvoiceTypeSelectOpen(false);
+  const handleCreateInvoice = () => {
+    resetCreateFormState();
     setIsCreateModalOpen(true);
     setInvoiceDate(getTodayISODate());
   };
 
+  const handleInvoiceTypeSelect = (mode: 'VAT' | 'Non-VAT') => {
+    const typeChanged = createInvoiceMode !== null && createInvoiceMode !== mode;
+    setCreateInvoiceMode(mode);
+    setInvoiceType(mode);
+    setFormErrors({});
+    if (typeChanged) {
+      setCustomerId('');
+      setSelectedRentalIds(new Set());
+      setAgreementBillingConfigs({});
+      setPeriodTo('');
+      setAvailableRentalsForPeriod([]);
+      setPaymentMethod('');
+      setPaymentDate('');
+      setReceiptNumber('');
+      setReceiptFile(null);
+    }
+    setCreateStep(2);
+    setInvoiceDate((prev) => prev || getTodayISODate());
+  };
+
   const handleCloseCreateModal = () => {
     setIsCreateModalOpen(false);
-    setCustomerId('');
-    setInvoiceType('VAT');
-    setCreateInvoiceMode(null);
-    setInvoiceDate('');
-    setPeriodFrom('');
-    setPeriodTo('');
-  setAvailableRentalsForPeriod([]);
-  setSelectedRentalIds(new Set());
-  setItems([]);
-    setPaymentMethod('');
-    setPaymentDate('');
-    setReceiptNumber('');
-    setReceiptFile(null);
-    setFormErrors({});
-    setSelectedBrandIds({});
-    setAvailableModelsPerItem({});
+    resetCreateFormState();
   };
 
   const handleCustomerChange = (customerId: string) => {
     setCustomerId(customerId);
+    setSelectedRentalIds(new Set());
+    setAgreementBillingConfigs({});
+    setPeriodTo('');
     if (createInvoiceMode) {
       setInvoiceType(createInvoiceMode);
       return;
@@ -851,11 +895,166 @@ const InvoicePage: React.FC = () => {
     return item.numberOfMachines * item.monthlyRentPerMachine;
   };
 
+  const getDefaultBillingConfig = (rental: ApiRentalLite): AgreementBillingConfig => {
+    const slices = buildMonthSlices(rental.startDate, rental.expectedEndDate);
+    return {
+      mode: 'FULL_FEE_ALL_MONTHS',
+      selectedMonthKeys: new Set(slices.map((s) => `${s.periodFrom}|${s.periodTo}`)),
+    };
+  };
+
+  const ensureBillingConfig = (rentalId: string, rental?: ApiRentalLite): AgreementBillingConfig => {
+    if (agreementBillingConfigs[rentalId]) return agreementBillingConfigs[rentalId];
+    const r = rental ?? availableRentalsForPeriod.find((x) => x.id === rentalId);
+    if (!r) return { mode: 'FULL_FEE_ALL_MONTHS', selectedMonthKeys: new Set() };
+    return getDefaultBillingConfig(r);
+  };
+
+  const buildRentalBillingPayload = () => {
+    return Array.from(selectedRentalIds).map((id) => {
+      const rental = availableRentalsForPeriod.find((r) => r.id === id);
+      const cfg = ensureBillingConfig(id, rental);
+      if (cfg.mode === 'FULL_FEE_ALL_MONTHS') {
+        return { rentalId: id, mode: 'FULL_FEE_ALL_MONTHS' as const };
+      }
+      const months = [...cfg.selectedMonthKeys].map((key) => {
+        const [periodFromKey, periodToKey] = key.split('|');
+        return { periodFrom: periodFromKey, periodTo: periodToKey };
+      });
+      return { rentalId: id, mode: 'SELECTED_MONTHS' as const, months };
+    });
+  };
+
+  const computeCreatePreviewTotals = () => {
+    let subtotal = 0;
+    for (const id of selectedRentalIds) {
+      const rental = availableRentalsForPeriod.find((r) => r.id === id);
+      if (!rental) continue;
+      const cfg = ensureBillingConfig(id, rental);
+      const billing =
+        cfg.mode === 'FULL_FEE_ALL_MONTHS'
+          ? { mode: 'FULL_FEE_ALL_MONTHS' as const }
+          : {
+              mode: 'SELECTED_MONTHS' as const,
+              months: [...cfg.selectedMonthKeys].map((key) => {
+                const [periodFromKey, periodToKey] = key.split('|');
+                return { periodFrom: periodFromKey, periodTo: periodToKey };
+              }),
+            };
+      const factor = sumMonthFactors(rental.startDate, rental.expectedEndDate, billing);
+      for (const m of rental.machines || []) {
+        let daily = Number(m.dailyRate) || 0;
+        const catalogMonthly = m.monthlyRentalFee != null ? Number(m.monthlyRentalFee) : NaN;
+        if (Number.isFinite(catalogMonthly) && catalogMonthly > 0 && daily * 30 < catalogMonthly * 0.5) {
+          daily = catalogMonthly / 30;
+        }
+        const monthly = daily * 30;
+        const qty = Number(m.quantity) || 1;
+        subtotal += monthly * factor * qty;
+      }
+    }
+    subtotal = round2(subtotal);
+    const vatAmount = invoiceType === 'VAT' ? round2(subtotal * 0.18) : 0;
+    const totalAmount = round2(subtotal + vatAmount);
+    return { subtotal, vatAmount, totalAmount };
+  };
+
+  const computeDefaultDueDate = (): string => {
+    let latest: string | null = null;
+    for (const id of selectedRentalIds) {
+      const rental = availableRentalsForPeriod.find((r) => r.id === id);
+      if (!rental) continue;
+      const cfg = ensureBillingConfig(id, rental);
+      const billing =
+        cfg.mode === 'FULL_FEE_ALL_MONTHS'
+          ? { mode: 'FULL_FEE_ALL_MONTHS' as const }
+          : {
+              mode: 'SELECTED_MONTHS' as const,
+              months: [...cfg.selectedMonthKeys].map((key) => {
+                const [periodFromKey, periodToKey] = key.split('|');
+                return { periodFrom: periodFromKey, periodTo: periodToKey };
+              }),
+            };
+      const end = latestBilledPeriodTo(rental.startDate, rental.expectedEndDate, billing);
+      if (end && (!latest || end > latest)) latest = end;
+    }
+    return latest || invoiceDate || getTodayISODate();
+  };
+
   const calculateTotals = () => {
+    if (selectedRentalIds.size > 0) {
+      return computeCreatePreviewTotals();
+    }
     const subtotal = items.reduce((sum, item) => sum + calculateItemSubtotal(item), 0);
     const vatAmount = invoiceType === 'VAT' ? subtotal * 0.18 : 0;
     const totalAmount = subtotal + vatAmount;
     return { subtotal, vatAmount, totalAmount };
+  };
+
+  const toggleAgreementSelection = (rental: ApiRentalLite) => {
+    setSelectedRentalIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rental.id)) {
+        next.delete(rental.id);
+        setAgreementBillingConfigs((cfgs) => {
+          const copy = { ...cfgs };
+          delete copy[rental.id];
+          return copy;
+        });
+      } else {
+        next.add(rental.id);
+        setAgreementBillingConfigs((cfgs) => ({
+          ...cfgs,
+          [rental.id]: cfgs[rental.id] || getDefaultBillingConfig(rental),
+        }));
+      }
+      return next;
+    });
+  };
+
+  const setAgreementBillingMode = (rental: ApiRentalLite, mode: RentalBillingMode) => {
+    const slices = buildMonthSlices(rental.startDate, rental.expectedEndDate);
+    setAgreementBillingConfigs((prev) => {
+      const current = prev[rental.id] || getDefaultBillingConfig(rental);
+      return {
+        ...prev,
+        [rental.id]: {
+          mode,
+          selectedMonthKeys:
+            mode === 'FULL_FEE_ALL_MONTHS'
+              ? new Set(slices.map((s) => `${s.periodFrom}|${s.periodTo}`))
+              : current.selectedMonthKeys.size > 0
+                ? current.selectedMonthKeys
+                : new Set(slices.map((s) => `${s.periodFrom}|${s.periodTo}`)),
+        },
+      };
+    });
+  };
+
+  const toggleAgreementMonth = (rental: ApiRentalLite, monthKey: string) => {
+    setAgreementBillingConfigs((prev) => {
+      const current = prev[rental.id] || getDefaultBillingConfig(rental);
+      const nextKeys = new Set(current.selectedMonthKeys);
+      if (nextKeys.has(monthKey)) nextKeys.delete(monthKey);
+      else nextKeys.add(monthKey);
+      return {
+        ...prev,
+        [rental.id]: { ...current, mode: 'SELECTED_MONTHS', selectedMonthKeys: nextKeys },
+      };
+    });
+  };
+
+  const selectAllAgreementMonths = (rental: ApiRentalLite, selectAll: boolean) => {
+    const slices = buildMonthSlices(rental.startDate, rental.expectedEndDate);
+    setAgreementBillingConfigs((prev) => ({
+      ...prev,
+      [rental.id]: {
+        mode: 'SELECTED_MONTHS',
+        selectedMonthKeys: selectAll
+          ? new Set(slices.map((s) => `${s.periodFrom}|${s.periodTo}`))
+          : new Set(),
+      },
+    }));
   };
 
   const validateForm = (): Record<string, string> => {
@@ -863,10 +1062,15 @@ const InvoicePage: React.FC = () => {
 
     if (!customerId) errors.customerId = 'Customer is required';
     if (!invoiceDate) errors.invoiceDate = 'Invoice Date is required';
-  if (!periodFrom) errors.periodFrom = 'Period From is required';
-  if (!periodTo) errors.periodTo = 'Period To is required';
-    if (periodFrom && periodTo && !isDateRangeValid(periodFrom, periodTo)) {
-      errors.periodTo = 'Period To cannot be earlier than Period From';
+    if (selectedRentalIds.size === 0) {
+      errors.rentalIds = 'Select at least one hiring agreement';
+    }
+    for (const id of selectedRentalIds) {
+      const rental = availableRentalsForPeriod.find((r) => r.id === id);
+      const cfg = ensureBillingConfig(id, rental);
+      if (cfg.mode === 'SELECTED_MONTHS' && cfg.selectedMonthKeys.size === 0) {
+        errors[`rentalBilling_${id}`] = `Select at least one month for ${rental?.agreementNumber || 'agreement'}`;
+      }
     }
 
     if (!paymentMethod) errors.paymentMethod = 'Payment Method is required';
@@ -877,7 +1081,7 @@ const InvoicePage: React.FC = () => {
   };
 
   const scrollToFirstErrorField = (errors: Record<string, string>) => {
-    const fieldOrder = ['invoiceDate', 'customerId', 'periodFrom', 'periodTo', 'paymentMethod', 'paymentDate'];
+    const fieldOrder = ['invoiceType', 'invoiceDate', 'customerId', 'rentalIds', 'paymentMethod', 'paymentDate'];
     const firstKey = fieldOrder.find((k) => Boolean(errors[k])) || Object.keys(errors)[0];
     if (!firstKey) return;
 
@@ -893,6 +1097,57 @@ const InvoicePage: React.FC = () => {
     });
   };
 
+  const validateCreateStep = (step: 1 | 2 | 3 | 4): Record<string, string> => {
+    const errors: Record<string, string> = {};
+
+    if (step === 1) {
+      if (!createInvoiceMode) errors.invoiceType = 'Select VAT or Non-VAT invoice type';
+    }
+
+    if (step === 2) {
+      if (!customerId) errors.customerId = 'Customer is required';
+      if (!invoiceDate) errors.invoiceDate = 'Invoice Date is required';
+    }
+
+    if (step === 3) {
+      if (selectedRentalIds.size === 0) {
+        errors.rentalIds = 'Select at least one hiring agreement';
+      }
+      for (const id of selectedRentalIds) {
+        const rental = availableRentalsForPeriod.find((r) => r.id === id);
+        const cfg = ensureBillingConfig(id, rental);
+        if (cfg.mode === 'SELECTED_MONTHS' && cfg.selectedMonthKeys.size === 0) {
+          errors[`rentalBilling_${id}`] = `Select at least one month for ${rental?.agreementNumber || 'agreement'}`;
+        }
+      }
+    }
+
+    if (step === 4) {
+      return validateForm();
+    }
+
+    setFormErrors(errors);
+    return errors;
+  };
+
+  const handleCreateWizardNext = () => {
+    const errors = validateCreateStep(createStep);
+    if (Object.keys(errors).length > 0) {
+      scrollToFirstErrorField(errors);
+      return;
+    }
+    if (createStep < 4) {
+      setFormErrors({});
+      setCreateStep((prev) => (prev + 1) as 1 | 2 | 3 | 4);
+    }
+  };
+
+  const handleCreateWizardBack = () => {
+    if (createStep <= 1) return;
+    setFormErrors({});
+    setCreateStep((prev) => (prev - 1) as 1 | 2 | 3 | 4);
+  };
+
   const handleSubmitCreate = async () => {
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
@@ -903,20 +1158,21 @@ const InvoicePage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const { subtotal, vatAmount, totalAmount } = calculateTotals();
-      
+      const rentalIds = Array.from(selectedRentalIds);
+      const rentalBilling = buildRentalBillingPayload();
+      const dueDate = periodTo || computeDefaultDueDate();
+
       const invoicePayload = {
         customerId: customerId,
-        type: 'RENTAL', // or appropriate invoice type
+        type: 'RENTAL',
         taxCategory: invoiceType === 'VAT' ? 'VAT' : 'NON_VAT',
-  // Line items are derived from linked rentals on the backend
         issueDate: invoiceDate,
-        dueDate: periodTo,
-        periodFrom,
-        periodTo,
-        subtotal: subtotal,
-        vatAmount: vatAmount,
+        dueDate,
+        subtotal,
+        vatAmount,
         grandTotal: totalAmount,
-        ...(selectedRentalIds.size > 0 ? { rentalIds: Array.from(selectedRentalIds) } : {}),
+        rentalIds,
+        rentalBilling,
       };
 
       const newInvoice = await createInvoice(invoicePayload);
@@ -1705,7 +1961,7 @@ const InvoicePage: React.FC = () => {
     );
   };
 
-  // Create form content — layout matches printed TAX INVOICE for familiar UX
+  // Create form content — stepped wizard (type → customer → agreements → review)
   const renderInvoiceForm = () => {
     const { subtotal, vatAmount, totalAmount } = calculateTotals();
     const filteredCustomers =
@@ -1723,47 +1979,102 @@ const InvoicePage: React.FC = () => {
     const inputBorder = 'border-gray-300 dark:border-slate-500';
     const focusRing = 'focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-indigo-400';
 
-    return (
-      <div className="bg-white dark:bg-transparent text-gray-900 dark:text-gray-100 max-w-[210mm] mx-auto" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-        <LetterheadDocument
-          documentTitle={invoiceType === 'VAT' ? 'TAX INVOICE' : 'INVOICE'}
-          footerStyle="simple"
-          logoPath={invoiceType === 'VAT' ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg'}
-          hideTagline={invoiceType === 'VAT'}
-        >
-          {/* Invoice number and date — right-aligned (matches print) */}
-          <div className="text-right text-sm text-gray-700 dark:text-gray-300 mb-1">
+    const selectedAgreements = availableRentalsForPeriod.filter((r) => selectedRentalIds.has(r.id));
+
+    // Step 1: VAT / Non-VAT type
+    if (createStep === 1) {
+      return (
+        <div id="create-invoice-invoiceType" className="max-w-2xl mx-auto">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Select invoice type to continue. This sets the letterhead logo and filters customers.
+          </p>
+          {formErrors.invoiceType && (
+            <p className="mb-3 text-xs text-red-500 dark:text-red-400">{formErrors.invoiceType}</p>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => handleInvoiceTypeSelect('VAT')}
+              className={`px-4 py-4 rounded-lg border transition-colors text-left ${
+                createInvoiceMode === 'VAT'
+                  ? 'border-blue-500 dark:border-indigo-400 ring-2 ring-blue-200 dark:ring-indigo-900 bg-blue-50/50 dark:bg-indigo-900/20'
+                  : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-20 h-12 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                  <img src="/vat_logo.jpeg" alt="VAT logo" className="w-full h-full object-contain" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">VAT Invoice</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Business customers only</div>
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInvoiceTypeSelect('Non-VAT')}
+              className={`px-4 py-4 rounded-lg border transition-colors text-left ${
+                createInvoiceMode === 'Non-VAT'
+                  ? 'border-blue-500 dark:border-indigo-400 ring-2 ring-blue-200 dark:ring-indigo-900 bg-blue-50/50 dark:bg-indigo-900/20'
+                  : 'border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-20 h-12 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                  <img src="/non_vat_logo.jpeg" alt="Non-VAT logo" className="w-full h-full object-contain" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">Non‑VAT Invoice</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Individual customers only</div>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Step 2: Customer + invoice date
+    if (createStep === 2) {
+      return (
+        <div className="bg-white dark:bg-transparent text-gray-900 dark:text-gray-100 max-w-[210mm] mx-auto space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Customer details</h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {createInvoiceMode === 'VAT'
+                ? 'Showing business (Company) customers for VAT invoices.'
+                : 'Showing individual customers for Non-VAT invoices.'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Invoice: </span>
-              <span className="text-gray-900 dark:text-white">Auto-generated</span>
-            </div>
-            <div>
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Date: </span>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Invoice Date<span className="text-red-500">*</span>
+              </label>
               <input
                 id="create-invoice-invoiceDate"
                 type="date"
                 value={invoiceDate}
                 onChange={(e) => setInvoiceDate(e.target.value)}
-                className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
+                className={`w-full px-3 py-2 border rounded text-sm ${inputBase} ${
                   formErrors.invoiceDate ? inputError : inputBorder
                 } ${focusRing}`}
               />
               {formErrors.invoiceDate && (
-                <span className="block text-xs text-red-500 dark:text-red-400 mt-0.5">{formErrors.invoiceDate}</span>
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.invoiceDate}</p>
               )}
             </div>
-          </div>
-          <div className="border-b border-gray-800 dark:border-slate-600 my-2" />
-
-          {/* Customer and period info */}
-          <div className="mb-3 text-sm text-gray-700 dark:text-gray-300 space-y-1.5">
             <div>
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Customer: </span>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Customer<span className="text-red-500">*</span>
+              </label>
               <select
                 id="create-invoice-customerId"
                 value={customerId}
                 onChange={(e) => handleCustomerChange(e.target.value)}
-                className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
+                className={`w-full px-3 py-2 border rounded text-sm ${inputBase} ${
                   formErrors.customerId ? inputError : inputBorder
                 } ${focusRing}`}
               >
@@ -1775,50 +2086,302 @@ const InvoicePage: React.FC = () => {
                 ))}
               </select>
               {formErrors.customerId && (
-                <span className="ml-2 text-xs text-red-500 dark:text-red-400">{formErrors.customerId}</span>
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.customerId}</p>
               )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/20 px-4 py-3 text-sm space-y-2">
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Address: </span>
+              <span className="text-gray-900 dark:text-white">{selectedCustomer?.address || '—'}</span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">
+                {invoiceType === 'VAT' ? 'Customer VAT No: ' : 'Customer NIC: '}
+              </span>
+              <span className="text-gray-900 dark:text-white">{selectedCustomer?.vatTinNic || '—'}</span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Invoice type: </span>
+              <span className="text-gray-900 dark:text-white">{createInvoiceMode || '—'}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Step 3: Hiring agreements + billing method
+    if (createStep === 3) {
+      return (
+        <div className="bg-white dark:bg-transparent text-gray-900 dark:text-gray-100 max-w-[210mm] mx-auto">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Hiring agreements & billing</h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Select agreements and how each should be calculated for this invoice.
+            </p>
+          </div>
+
+          <div className="mb-3 text-sm">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Due Date
+            </label>
+            <input
+              id="create-invoice-periodTo"
+              type="date"
+              value={periodTo || computeDefaultDueDate()}
+              onChange={(e) => setPeriodTo(e.target.value)}
+              className={`inline-block w-auto px-2 py-1.5 border rounded text-sm ${inputBase} ${inputBorder} ${focusRing}`}
+            />
+            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(defaults from selected billing months)</span>
+          </div>
+
+          <div id="create-invoice-rentalIds" className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="text-gray-600 dark:text-gray-400 font-medium">Hiring Agreements: </span>
+                <span className="text-gray-900 dark:text-white">
+                  {selectedRentalIds.size > 0 ? `${selectedRentalIds.size} selected` : 'None selected'}
+                </span>
+              </div>
+              {isLoadingRentalsForPeriod && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">Loading agreements…</span>
+              )}
+            </div>
+            {formErrors.rentalIds && (
+              <p className="mt-1 text-xs text-red-500 dark:text-red-400">{formErrors.rentalIds}</p>
+            )}
+
+            {!customerId && (
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Select a customer to load their ACTIVE hiring agreements.
+              </div>
+            )}
+
+            {customerId && availableRentalsForPeriod.length === 0 && !isLoadingRentalsForPeriod && (
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                No ACTIVE hiring agreements with assigned machines for this customer.
+              </div>
+            )}
+
+            {availableRentalsForPeriod.length > 0 && (
+              <div className="mt-2 border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden">
+                <div className="max-h-[420px] overflow-auto">
+                  {availableRentalsForPeriod.map((r) => {
+                    const checked = selectedRentalIds.has(r.id);
+                    const cfg = checked ? ensureBillingConfig(r.id, r) : null;
+                    const slices = buildMonthSlices(r.startDate, r.expectedEndDate);
+                    const allMonthKeys = slices.map((s) => `${s.periodFrom}|${s.periodTo}`);
+                    const allSelected =
+                      !!cfg &&
+                      cfg.mode === 'SELECTED_MONTHS' &&
+                      allMonthKeys.length > 0 &&
+                      allMonthKeys.every((k) => cfg.selectedMonthKeys.has(k));
+                    const machineCount = (r.machines || []).reduce((sum, m) => sum + (m.quantity || 0), 0);
+
+                    return (
+                      <div
+                        key={r.id}
+                        className="border-b border-gray-100 dark:border-slate-700 last:border-b-0 px-3 py-2"
+                      >
+                        <label className="flex items-start gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/30 -mx-1 px-1 rounded">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAgreementSelection(r)}
+                            className="mt-1"
+                          />
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <span className="font-semibold text-gray-900 dark:text-white">
+                                {r.agreementNumber}
+                              </span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+                                {r.status}
+                              </span>
+                              <span className="text-xs text-gray-600 dark:text-gray-400">
+                                {machineCount} machine{machineCount === 1 ? '' : 's'}
+                              </span>
+                              {r.purchaseOrder?.requestNumber && (
+                                <span className="text-xs text-gray-600 dark:text-gray-400">
+                                  PO: {r.purchaseOrder.requestNumber}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                              {new Date(r.startDate).toLocaleDateString('en-LK')} →{' '}
+                              {r.expectedEndDate
+                                ? new Date(r.expectedEndDate).toLocaleDateString('en-LK')
+                                : 'Open-ended (through current month)'}
+                            </div>
+                          </div>
+                        </label>
+
+                        {checked && cfg && (
+                          <div className="mt-2 ml-7 space-y-2 rounded-md border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-900/10 p-2">
+                            <div className="space-y-1.5">
+                              <label className="flex items-center gap-2 cursor-pointer text-xs">
+                                <input
+                                  type="radio"
+                                  name={`billing-mode-${r.id}`}
+                                  checked={cfg.mode === 'FULL_FEE_ALL_MONTHS'}
+                                  onChange={() => setAgreementBillingMode(r, 'FULL_FEE_ALL_MONTHS')}
+                                />
+                                <span className="font-medium text-gray-800 dark:text-gray-200">
+                                  Use full monthly rental fee for all months (no proration)
+                                </span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer text-xs">
+                                <input
+                                  type="radio"
+                                  name={`billing-mode-${r.id}`}
+                                  checked={cfg.mode === 'SELECTED_MONTHS'}
+                                  onChange={() => setAgreementBillingMode(r, 'SELECTED_MONTHS')}
+                                />
+                                <span className="font-medium text-gray-800 dark:text-gray-200">
+                                  Select months (full monthly fee each)
+                                </span>
+                              </label>
+                            </div>
+
+                            {cfg.mode === 'SELECTED_MONTHS' && (
+                              <div className="space-y-1.5">
+                                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={allSelected}
+                                    onChange={(e) => selectAllAgreementMonths(r, e.target.checked)}
+                                  />
+                                  <span className="font-medium text-gray-700 dark:text-gray-300">Select all months</span>
+                                </label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-40 overflow-auto">
+                                  {slices.map((slice) => {
+                                    const key = `${slice.periodFrom}|${slice.periodTo}`;
+                                    const selected = cfg.selectedMonthKeys.has(key);
+                                    return (
+                                      <label
+                                        key={key}
+                                        className={`flex items-start gap-2 text-xs px-2 py-1.5 rounded border cursor-pointer ${
+                                          selected
+                                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                                            : 'border-gray-200 dark:border-slate-600'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={selected}
+                                          onChange={() => toggleAgreementMonth(r, key)}
+                                          className="mt-0.5"
+                                        />
+                                        <span>
+                                          <span className="font-medium text-gray-900 dark:text-white">{slice.monthLabel}</span>
+                                          <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                                            {slice.periodFrom} → {slice.periodTo}
+                                            {slice.isPartialMonth ? ' · partial' : ''}
+                                          </span>
+                                        </span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                                {formErrors[`rentalBilling_${r.id}`] && (
+                                  <p className="text-xs text-red-500 dark:text-red-400">
+                                    {formErrors[`rentalBilling_${r.id}`]}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="px-3 py-2 bg-gray-50 dark:bg-slate-700/20 flex items-center justify-between">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    One invoice will include machines from all selected agreements.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedRentalIds(new Set());
+                      setAgreementBillingConfigs({});
+                    }}
+                    className="text-xs font-medium text-blue-700 dark:text-indigo-300 hover:underline"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mb-1 rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/20 px-3 py-2 text-sm">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              <span>
+                <span className="text-gray-600 dark:text-gray-400">Subtotal: </span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  LKR {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </span>
+              </span>
+              <span>
+                <span className="text-gray-600 dark:text-gray-400">VAT: </span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  LKR {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </span>
+              </span>
+              <span>
+                <span className="text-gray-600 dark:text-gray-400">Grand Total: </span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  LKR {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </span>
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Preview uses assigned machine rates (dailyRate × 30 × billed months at full monthly fee). Tools are added on save when present on the agreements.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Step 4: Review + payment details
+    return (
+      <div className="bg-white dark:bg-transparent text-gray-900 dark:text-gray-100 max-w-[210mm] mx-auto" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+        <LetterheadDocument
+          documentTitle={invoiceType === 'VAT' ? 'TAX INVOICE' : 'INVOICE'}
+          footerStyle="simple"
+          logoPath={invoiceType === 'VAT' ? '/vat_logo.jpeg' : '/non_vat_logo.jpeg'}
+          hideTagline={invoiceType === 'VAT'}
+        >
+          <div className="text-right text-sm text-gray-700 dark:text-gray-300 mb-1">
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Invoice: </span>
+              <span className="text-gray-900 dark:text-white">Auto-generated</span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Date: </span>
+              <span className="text-gray-900 dark:text-white">{invoiceDate || '—'}</span>
+            </div>
+          </div>
+          <div className="border-b border-gray-800 dark:border-slate-600 my-2" />
+
+          <div className="mb-3 text-sm text-gray-700 dark:text-gray-300 space-y-1.5">
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Type: </span>
+              <span className="text-gray-900 dark:text-white">{createInvoiceMode || invoiceType}</span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Customer: </span>
+              <span className="text-gray-900 dark:text-white">{selectedCustomer?.name || '—'}</span>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">Address: </span>
               <span className="text-gray-900 dark:text-white">{selectedCustomer?.address || '—'}</span>
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Period From: </span>
-              <input
-                id="create-invoice-periodFrom"
-                type="date"
-                value={periodFrom}
-                onChange={(e) => {
-                  const nextFrom = e.target.value;
-                  setPeriodFrom(nextFrom);
-                  // Keep date range valid; prevent "to" being earlier than "from"
-                  if (periodTo && nextFrom && periodTo < nextFrom) {
-                    setPeriodTo('');
-                  }
-                }}
-                className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
-                  formErrors.periodFrom ? inputError : inputBorder
-                } ${focusRing}`}
-              />
-              {formErrors.periodFrom && (
-                <span className="ml-2 text-xs text-red-500 dark:text-red-400">{formErrors.periodFrom}</span>
-              )}
-            </div>
-            <div>
-              <span className="text-gray-600 dark:text-gray-400 font-medium">Period To: </span>
-              <input
-                id="create-invoice-periodTo"
-                type="date"
-                value={periodTo}
-                min={periodFrom || undefined}
-                onChange={(e) => setPeriodTo(e.target.value)}
-                className={`inline-block w-auto px-2 py-0.5 border rounded text-sm ${inputBase} ${
-                  formErrors.periodTo ? inputError : inputBorder
-                } ${focusRing}`}
-              />
-              {formErrors.periodTo && (
-                <span className="ml-2 text-xs text-red-500 dark:text-red-400">{formErrors.periodTo}</span>
-              )}
+              <span className="text-gray-600 dark:text-gray-400 font-medium">Due Date: </span>
+              <span className="text-gray-900 dark:text-white">{periodTo || computeDefaultDueDate() || '—'}</span>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400 font-medium">
@@ -1829,92 +2392,59 @@ const InvoicePage: React.FC = () => {
           </div>
           <div className="border-b border-gray-800 dark:border-slate-600 my-3" />
 
-          {/* Optional: link multiple active hiring agreements (rentals) to this invoice */}
           <div className="mb-4 text-sm text-gray-700 dark:text-gray-300">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <span className="text-gray-600 dark:text-gray-400 font-medium">Hiring Agreements (optional): </span>
-                <span className="text-gray-900 dark:text-white">
-                  {selectedRentalIds.size > 0 ? `${selectedRentalIds.size} selected` : 'None selected'}
-                </span>
-              </div>
-              {isLoadingRentalsForPeriod && (
-                <span className="text-xs text-gray-500 dark:text-gray-400">Loading agreements…</span>
-              )}
-            </div>
-
-            {customerId && periodFrom && periodTo && availableRentalsForPeriod.length === 0 && !isLoadingRentalsForPeriod && (
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                No ACTIVE agreements start within this period.
-              </div>
-            )}
-
-            {availableRentalsForPeriod.length > 0 && (
-              <div className="mt-2 border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden">
-                <div className="max-h-48 overflow-auto">
-                  {availableRentalsForPeriod.map((r) => {
-                    const checked = selectedRentalIds.has(r.id);
-                    return (
-                      <label
-                        key={r.id}
-                        className="flex items-start gap-3 px-3 py-2 border-b border-gray-100 dark:border-slate-700 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/30"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            setSelectedRentalIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(r.id)) next.delete(r.id);
-                              else next.add(r.id);
-                              return next;
-                            });
-                          }}
-                          className="mt-1"
-                        />
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span className="font-semibold text-gray-900 dark:text-white">
-                              {r.agreementNumber}
-                            </span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
-                              {r.status}
-                            </span>
-                            {r.purchaseOrder?.requestNumber && (
-                              <span className="text-xs text-gray-600 dark:text-gray-400">
-                                PO: {r.purchaseOrder.requestNumber}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
-                            {new Date(r.startDate).toLocaleDateString('en-LK')} →{' '}
-                            {r.expectedEndDate ? new Date(r.expectedEndDate).toLocaleDateString('en-LK') : 'Open-ended'}
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="px-3 py-2 bg-gray-50 dark:bg-slate-700/20 flex items-center justify-between">
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                    Selected agreements will be linked to the invoice (no automatic line item changes).
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRentalIds(new Set())}
-                    className="text-xs font-medium text-blue-700 dark:text-indigo-300 hover:underline"
-                  >
-                    Clear selection
-                  </button>
-                </div>
-              </div>
+            <div className="font-medium text-gray-800 dark:text-gray-200 mb-2">Selected hiring agreements</div>
+            {selectedAgreements.length === 0 ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400">No agreements selected.</p>
+            ) : (
+              <ul className="space-y-2">
+                {selectedAgreements.map((r) => {
+                  const cfg = ensureBillingConfig(r.id, r);
+                  const monthCount =
+                    cfg.mode === 'FULL_FEE_ALL_MONTHS'
+                      ? buildMonthSlices(r.startDate, r.expectedEndDate).length
+                      : cfg.selectedMonthKeys.size;
+                  return (
+                    <li
+                      key={r.id}
+                      className="rounded border border-gray-200 dark:border-slate-600 px-3 py-2"
+                    >
+                      <div className="font-semibold text-gray-900 dark:text-white">{r.agreementNumber}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                        {cfg.mode === 'FULL_FEE_ALL_MONTHS'
+                          ? `Full monthly fee for all months (${monthCount})`
+                          : `Selected months (${monthCount}) at full monthly fee`}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
 
-          {/* Itemised details section removed; amounts will be calculated from rentals/backend. */}
-          <div className="border-b border-gray-800 dark:border-slate-600 my-3" />
+          <div className="mb-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/20 px-3 py-2 text-sm">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              <span>
+                <span className="text-gray-600 dark:text-gray-400">Subtotal: </span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  LKR {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </span>
+              </span>
+              <span>
+                <span className="text-gray-600 dark:text-gray-400">VAT: </span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  LKR {vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </span>
+              </span>
+              <span>
+                <span className="text-gray-600 dark:text-gray-400">Grand Total: </span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  LKR {totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                </span>
+              </span>
+            </div>
+          </div>
 
-          {/* Authorized By / Received By — matches print */}
           <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 my-4">
             <div className="w-40">
               <div className="border-b border-gray-400 dark:border-slate-500 pt-6">Authorized By</div>
@@ -1925,7 +2455,6 @@ const InvoicePage: React.FC = () => {
           </div>
           <div className="border-b border-gray-300 dark:border-slate-600 my-2" />
 
-          {/* Payment Details Section */}
           <div className="mt-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-300 dark:border-slate-600 pb-1">
               Payment Details
@@ -2284,84 +2813,72 @@ const InvoicePage: React.FC = () => {
           </div>
         </main>
 
-        {/* Invoice Type Selection Modal (VAT vs Non-VAT) */}
-        {isInvoiceTypeSelectOpen && (
-          <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-slate-700">
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create Invoice</h2>
-                <button
-                  onClick={handleCloseInvoiceTypeSelectModal}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-6">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  Select invoice type to continue. This sets the letterhead logo and filters customers.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => handleInvoiceTypeSelect('VAT')}
-                    className="px-4 py-4 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-20 h-12 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
-                        <img src="/vat_logo.jpeg" alt="VAT logo" className="w-full h-full object-contain" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900 dark:text-white">VAT Invoice</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Business customers only</div>
-                      </div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInvoiceTypeSelect('Non-VAT')}
-                    className="px-4 py-4 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-20 h-12 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
-                        <img src="/non_vat_logo.jpeg" alt="Non-VAT logo" className="w-full h-full object-contain" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900 dark:text-white">Non‑VAT Invoice</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Individual customers only</div>
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Create Invoice Modal — document-style layout matching printed TAX INVOICE */}
+        {/* Create Invoice Wizard Modal */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 backdrop-blur-md bg-black/30 z-50 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-600">
-              {/* Modal Header — minimal; title is inside letterhead */}
-              <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create Invoice</h2>
-                <button
-                  onClick={handleCloseCreateModal}
-                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                </button>
+              {/* Modal Header + step indicator */}
+              <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create Invoice</h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Step {createStep} of 4
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleCloseCreateModal}
+                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                    aria-label="Close"
+                  >
+                    <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(
+                    [
+                      { step: 1 as const, label: 'Type' },
+                      { step: 2 as const, label: 'Customer' },
+                      { step: 3 as const, label: 'Agreements' },
+                      { step: 4 as const, label: 'Review' },
+                    ] as const
+                  ).map(({ step, label }) => {
+                    const isActive = createStep === step;
+                    const isDone = createStep > step;
+                    return (
+                      <div
+                        key={step}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                          isActive
+                            ? 'bg-blue-600 dark:bg-indigo-600 text-white border-blue-700 dark:border-indigo-700'
+                            : isDone
+                              ? 'bg-blue-50 dark:bg-indigo-900/30 text-blue-700 dark:text-indigo-300 border-blue-200 dark:border-indigo-800'
+                              : 'bg-white dark:bg-slate-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600'
+                        }`}
+                      >
+                        <span
+                          className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] ${
+                            isActive || isDone
+                              ? 'bg-white/20 text-inherit'
+                              : 'bg-gray-100 dark:bg-slate-600 text-gray-500 dark:text-gray-300'
+                          }`}
+                        >
+                          {step}
+                        </span>
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Modal Body — scrollable form */}
+              {/* Modal Body — scrollable step content */}
               <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                 {renderInvoiceForm()}
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
+              {/* Modal Footer — Back / Next / Create */}
+              <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
                 <button
                   onClick={handleCloseCreateModal}
                   className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded border border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
@@ -2369,23 +2886,46 @@ const InvoicePage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={handleSubmitCreate}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 hover:bg-blue-700 dark:hover:bg-indigo-700 rounded border border-blue-700 dark:border-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-4 h-4" />
-                      Create Invoice
-                    </>
+                <div className="flex items-center gap-2">
+                  {createStep > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleCreateWizardBack}
+                      disabled={isSubmitting}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded border border-gray-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
+                    >
+                      Back
+                    </button>
                   )}
-                </button>
+                  {createStep < 4 ? (
+                    <button
+                      type="button"
+                      onClick={handleCreateWizardNext}
+                      disabled={isSubmitting}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 hover:bg-blue-700 dark:hover:bg-indigo-700 rounded border border-blue-700 dark:border-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSubmitCreate}
+                      disabled={isSubmitting}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 hover:bg-blue-700 dark:hover:bg-indigo-700 rounded border border-blue-700 dark:border-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4" />
+                          Create Invoice
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -74,8 +74,16 @@ export const POST = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Office
         }
         const requested = req.quantity || 0;
         if (requested < 1) continue;
-        // PO unitPrice is monthly; store daily rate for RentalMachine compatibility (monthly / 30)
-        const monthlyRate = typeof req.unitPrice === 'number' ? req.unitPrice : parseFloat(String(req.unitPrice || 0)) || 0;
+        // Prefer explicit monthly rental fee on the PO line; fall back to unitPrice (legacy).
+        // Never treat purchase-only unitPrice as monthly when monthlyRentalFee is present.
+        const monthlyFromLine =
+          line.monthlyRentalFee != null && line.monthlyRentalFee !== ''
+            ? parseFloat(String(line.monthlyRentalFee))
+            : NaN;
+        const monthlyFromReq =
+          typeof req.unitPrice === 'number' ? req.unitPrice : parseFloat(String(req.unitPrice || 0)) || 0;
+        const monthlyRate =
+          Number.isFinite(monthlyFromLine) && monthlyFromLine > 0 ? monthlyFromLine : monthlyFromReq;
         const dailyRate = monthlyRate / 30;
         requestedMachineLines.push({
           brand: String(line.brand || '').trim(),

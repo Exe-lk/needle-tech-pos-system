@@ -290,7 +290,21 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
           }
           nextCountsByKey.set(key, nextCount);
 
-          const dailyRateCandidate = expectedCat.dailyRate ?? perMachineDailyRate;
+          const catalogMonthly =
+            machine.monthlyRentalFee != null ? Number(machine.monthlyRentalFee) : NaN;
+          const catalogDaily =
+            Number.isFinite(catalogMonthly) && catalogMonthly > 0 ? catalogMonthly / 30 : undefined;
+          let dailyRateCandidate =
+            expectedCat.dailyRate ?? catalogDaily ?? perMachineDailyRate;
+          // If agreement category rate is far below catalog monthly rental, prefer catalog
+          // (guards against PO lines seeded from purchase unitPrice).
+          if (
+            expectedCat.dailyRate != null &&
+            catalogDaily != null &&
+            Number(expectedCat.dailyRate) * 30 < catalogMonthly * 0.5
+          ) {
+            dailyRateCandidate = catalogDaily;
+          }
           const dailyRateNum = Number(dailyRateCandidate);
           const resolvedDailyRate = Number.isFinite(dailyRateNum) ? dailyRateNum : 0;
 
@@ -303,8 +317,12 @@ export const PUT = withAuthAndRole(['SUPER_ADMIN', 'ADMIN', 'Operational_Officer
           continue;
         }
 
-        // No expected categories on the agreement: fall back to averaged per-machine daily rate.
-        const fallbackRateNum = Number(perMachineDailyRate);
+        // No expected categories on the agreement: prefer catalog monthly rental fee, else averaged rate.
+        const catalogMonthly =
+          machine.monthlyRentalFee != null ? Number(machine.monthlyRentalFee) : NaN;
+        const catalogDaily =
+          Number.isFinite(catalogMonthly) && catalogMonthly > 0 ? catalogMonthly / 30 : undefined;
+        const fallbackRateNum = Number(catalogDaily ?? perMachineDailyRate);
         machinesToAdd.push({
           machineId: machine.id,
           dailyRate: new Decimal(Number.isFinite(fallbackRateNum) ? fallbackRateNum : 0),
