@@ -407,7 +407,8 @@ const PurchaseOrderPage: React.FC = () => {
                     type: m.type || m.machineType || '',
                     quantity: m.quantity ?? 0,
                     availableStock: m.availableStock ?? m.stock ?? 0,
-                    unitPrice: m.unitPrice ?? m.monthlyRentalFee ?? 0,
+                    // Rental pricing must prefer monthly rental fee over purchase unit price
+                    unitPrice: m.monthlyRentalFee ?? m.unitPrice ?? 0,
                     totalPrice: 0,
                     rentedQuantity: m.rentedQuantity ?? 0,
                     pendingQuantity: m.pendingQuantity ?? 0,

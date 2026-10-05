@@ -4,6 +4,12 @@ import { parseQueryParams, buildPaginationMeta } from '@/lib/utils';
 import { withAuthAndRole, AuthUser } from '@/lib/auth-middleware';
 import { isDatabaseUnavailable } from '@/lib/db-errors';
 import prisma from '@/lib/prisma';
+import {
+  round2,
+  sumMonthFactors,
+  type RentalBillingInput,
+  type RentalBillingMode,
+} from '@/lib/invoice-month-billing';
 
 /**
  * @swagger
@@ -168,12 +174,55 @@ export const POST = withAuthAndRole(
   async (request: NextRequest, auth: AuthUser) => {
   try {
     const body = await request.json();
-    const { customerId, rentalId, rentalIds, type, taxCategory, lineItems, issueDate, dueDate, subtotal, vatAmount, grandTotal, periodFrom, periodTo } = body;
-    
+    const {
+      customerId,
+      rentalId,
+      rentalIds,
+      rentalBilling,
+      type,
+      taxCategory,
+      lineItems,
+      issueDate,
+      dueDate,
+      subtotal,
+      vatAmount,
+      grandTotal,
+      periodFrom,
+      periodTo,
+    } = body;
+
     const rentalIdsArray: string[] | undefined = Array.isArray(rentalIds) ? rentalIds.filter(Boolean) : undefined;
 
     const hasProvidedLineItems = Array.isArray(lineItems) && lineItems.length > 0;
     const hasRentalLink = Boolean(rentalId) || Boolean(rentalIdsArray && rentalIdsArray.length > 0);
+
+    const parseRentalBilling = (raw: unknown): RentalBillingInput[] | null => {
+      if (!Array.isArray(raw) || raw.length === 0) return null;
+      const parsed: RentalBillingInput[] = [];
+      for (const entry of raw) {
+        if (!entry || typeof entry !== 'object') return null;
+        const rentalIdEntry = String((entry as any).rentalId || '');
+        const mode = String((entry as any).mode || '') as RentalBillingMode;
+        if (!rentalIdEntry || (mode !== 'FULL_FEE_ALL_MONTHS' && mode !== 'SELECTED_MONTHS')) {
+          return null;
+        }
+        const monthsRaw = Array.isArray((entry as any).months) ? (entry as any).months : undefined;
+        const months = monthsRaw
+          ?.map((m: any) => ({
+            periodFrom: String(m?.periodFrom || '').slice(0, 10),
+            periodTo: String(m?.periodTo || '').slice(0, 10),
+          }))
+          .filter((m: { periodFrom: string; periodTo: string }) => m.periodFrom && m.periodTo);
+        if (mode === 'SELECTED_MONTHS' && (!months || months.length === 0)) {
+          return null;
+        }
+        parsed.push({ rentalId: rentalIdEntry, mode, months });
+      }
+      return parsed;
+    };
+
+    const rentalBillingParsed = parseRentalBilling(rentalBilling);
+    const hasRentalBilling = Boolean(rentalBillingParsed && rentalBillingParsed.length > 0);
 
     if (!customerId || !type || (!hasProvidedLineItems && !hasRentalLink)) {
       return validationErrorResponse('Missing required fields', {
@@ -188,7 +237,15 @@ export const POST = withAuthAndRole(
         rentalIds: ['At least one rental ID is required when rentalIds is provided'],
       });
     }
-    
+
+    if (rentalBilling != null && !hasRentalBilling) {
+      return validationErrorResponse('Invalid rentalBilling', {
+        rentalBilling: [
+          'Each entry needs rentalId, mode (FULL_FEE_ALL_MONTHS | SELECTED_MONTHS), and months when mode is SELECTED_MONTHS',
+        ],
+      });
+    }
+
     // Verify customer exists
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
     if (!customer) {
@@ -203,7 +260,7 @@ export const POST = withAuthAndRole(
     // Current schema uses CustomerType enum; treat any non-INDIVIDUAL as "business".
     const taxCategoryFromCustomerType: 'VAT' | 'NON_VAT' =
       customer.type !== 'INDIVIDUAL' ? 'VAT' : 'NON_VAT';
-    
+
     const validateOverlap = (r: { startDate: Date; expectedEndDate: Date | null }, from: Date, to: Date) => {
       const startOk = r.startDate <= to;
       const endOk = !r.expectedEndDate || r.expectedEndDate >= from;
@@ -211,21 +268,6 @@ export const POST = withAuthAndRole(
     };
 
     const VAT_RATE = 0.18;
-    const toValidDateOrNull = (d: unknown): Date | null => {
-      if (!d) return null;
-      const dt = new Date(d as any);
-      return Number.isNaN(dt.getTime()) ? null : dt;
-    };
-    const computeDiffMonths = (from: Date, to: Date): number => {
-      const fromDate = new Date(from);
-      const toDate = new Date(to);
-      fromDate.setHours(0, 0, 0, 0);
-      toDate.setHours(0, 0, 0, 0);
-      const diffMs = toDate.getTime() - fromDate.getTime();
-      const diffDays = Math.max(1, diffMs / (1000 * 60 * 60 * 24));
-      return Math.max(1, Math.ceil(diffDays / 30));
-    };
-    const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
     // Verify rental(s) if provided
     const periodFromDate = periodFrom ? new Date(periodFrom) : issueDate ? new Date(issueDate) : null;
@@ -236,6 +278,20 @@ export const POST = withAuthAndRole(
         rentalId: ['Provide either rentalId or rentalIds, not both'],
         rentalIds: ['Provide either rentalId or rentalIds, not both'],
       });
+    }
+
+    const linkedRentalIdsForBilling =
+      rentalIdsArray && rentalIdsArray.length > 0 ? rentalIdsArray : rentalId ? [rentalId] : [];
+
+    if (hasRentalBilling) {
+      const billingIds = rentalBillingParsed!.map((b) => b.rentalId);
+      const billingSet = new Set(billingIds);
+      const linkSet = new Set(linkedRentalIdsForBilling);
+      if (billingIds.length !== linkSet.size || [...billingSet].some((id) => !linkSet.has(id))) {
+        return validationErrorResponse('rentalBilling must match rentalIds', {
+          rentalBilling: ['rentalBilling rental IDs must be the same set as rentalIds / rentalId'],
+        });
+      }
     }
 
     if (rentalId) {
@@ -255,7 +311,17 @@ export const POST = withAuthAndRole(
           rentalId: ['Rental must be ACTIVE to be invoiced in this flow'],
         });
       }
-      if (periodFromDate && periodToDate && !validateOverlap({ startDate: rental.startDate, expectedEndDate: rental.expectedEndDate }, periodFromDate, periodToDate)) {
+      // Period overlap is skipped when rentalBilling drives the billed windows.
+      if (
+        !hasRentalBilling &&
+        periodFromDate &&
+        periodToDate &&
+        !validateOverlap(
+          { startDate: rental.startDate, expectedEndDate: rental.expectedEndDate },
+          periodFromDate,
+          periodToDate
+        )
+      ) {
         return validationErrorResponse('Rental is outside invoice period', {
           rentalId: ['Rental does not overlap the invoice period'],
         });
@@ -267,50 +333,57 @@ export const POST = withAuthAndRole(
         where: { id: { in: rentalIdsArray } },
         select: { id: true, startDate: true, expectedEndDate: true, customerId: true, status: true, agreementNumber: true },
       });
-      const foundIds = new Set(rentalsForLinking.map(r => r.id));
-      const missing = rentalIdsArray.filter(id => !foundIds.has(id));
+      const foundIds = new Set(rentalsForLinking.map((r) => r.id));
+      const missing = rentalIdsArray.filter((id) => !foundIds.has(id));
       if (missing.length > 0) {
         return validationErrorResponse('Some rentals were not found', {
           rentalIds: [`Missing rentals: ${missing.join(', ')}`],
         });
       }
-      const wrongCustomer = rentalsForLinking.filter(r => r.customerId !== customerId);
+      const wrongCustomer = rentalsForLinking.filter((r) => r.customerId !== customerId);
       if (wrongCustomer.length > 0) {
         return validationErrorResponse('Some rentals do not belong to customer', {
-          rentalIds: wrongCustomer.map(r => `Rental ${r.agreementNumber} does not belong to provided customer`),
+          rentalIds: wrongCustomer.map((r) => `Rental ${r.agreementNumber} does not belong to provided customer`),
         });
       }
-      const notActive = rentalsForLinking.filter(r => r.status !== 'ACTIVE');
+      const notActive = rentalsForLinking.filter((r) => r.status !== 'ACTIVE');
       if (notActive.length > 0) {
         return validationErrorResponse('Some rentals are not active', {
-          rentalIds: notActive.map(r => `Rental ${r.agreementNumber} is not ACTIVE`),
+          rentalIds: notActive.map((r) => `Rental ${r.agreementNumber} is not ACTIVE`),
         });
       }
-      if (periodFromDate && periodToDate) {
-        const notOverlapping = rentalsForLinking.filter(r => !validateOverlap({ startDate: r.startDate, expectedEndDate: r.expectedEndDate }, periodFromDate, periodToDate));
+      if (!hasRentalBilling && periodFromDate && periodToDate) {
+        const notOverlapping = rentalsForLinking.filter(
+          (r) =>
+            !validateOverlap(
+              { startDate: r.startDate, expectedEndDate: r.expectedEndDate },
+              periodFromDate,
+              periodToDate
+            )
+        );
         if (notOverlapping.length > 0) {
           return validationErrorResponse('Some rentals are outside invoice period', {
-            rentalIds: notOverlapping.map(r => `Rental ${r.agreementNumber} does not overlap the invoice period`),
+            rentalIds: notOverlapping.map((r) => `Rental ${r.agreementNumber} does not overlap the invoice period`),
           });
         }
       }
     }
-    
+
     const now = new Date();
     const invoiceNumber = `INV-${Date.now()}`;
     const userId = auth.id;
 
     // Line items:
     // - For rental-linked invoices, machine line items must be derived from `rental_machines.dailyRate` (source of truth).
-    // - Clients may still send additional non-machine items (e.g. tools). Preserve those, but do not trust client pricing
-    //   for rental machine lines.
+    // - When rentalBilling is provided, unitPrice = monthlyRate * sum of month factors (full fee or prorated).
+    // - Clients may still send additional non-machine items (e.g. tools). Preserve those when not deriving tools from DB.
     let finalLineItems: any[] = hasProvidedLineItems ? lineItems : [];
     let finalSubtotal = typeof subtotal === 'number' ? subtotal : Number(subtotal) || 0;
     let finalVatAmount = typeof vatAmount === 'number' ? vatAmount : Number(vatAmount) || 0;
     let finalGrandTotal = typeof grandTotal === 'number' ? grandTotal : Number(grandTotal) || 0;
 
     if (hasRentalLink) {
-      const idsToFetch = rentalIdsArray && rentalIdsArray.length > 0 ? rentalIdsArray : rentalId ? [rentalId] : [];
+      const idsToFetch = linkedRentalIdsForBilling;
       const rentals = await prisma.rental.findMany({
         where: { id: { in: idsToFetch } },
         select: {
@@ -328,6 +401,19 @@ export const POST = withAuthAndRole(
                   model: { select: { name: true } },
                   type: { select: { name: true } },
                   serialNumber: true,
+                  monthlyRentalFee: true,
+                },
+              },
+            },
+          },
+          tools: {
+            select: {
+              quantity: true,
+              unitPrice: true,
+              tool: {
+                select: {
+                  toolName: true,
+                  toolType: true,
                 },
               },
             },
@@ -335,31 +421,78 @@ export const POST = withAuthAndRole(
         },
       });
 
-      // Preserve tool line items provided by the client (machine-assign flow includes tools).
-      // We identify tools by explicit kind or by the item code prefix used in the UI.
-      const preservedToolLines = Array.isArray(finalLineItems)
-        ? finalLineItems.filter((li: any) => {
-            const code = String(li?.itemCode ?? '');
-            return li?.kind === 'TOOL' || code.startsWith('212TL');
-          })
-        : [];
+      const billingByRentalId = new Map<string, RentalBillingInput>(
+        (rentalBillingParsed ?? []).map((b) => [b.rentalId, b])
+      );
 
-      // Group machines by agreement + brand/model/type + monthlyPerMachine so multi-agreement invoices stay readable.
+      const getMonthFactorForRental = (r: {
+        id: string;
+        startDate: Date;
+        expectedEndDate: Date | null;
+      }): number => {
+        const billing = billingByRentalId.get(r.id);
+        if (!billing) {
+          // Legacy one-month invoice (no rentalBilling)
+          return 1;
+        }
+        const factor = sumMonthFactors(r.startDate, r.expectedEndDate, billing, now);
+        return factor > 0 ? factor : 0;
+      };
+
+      if (hasRentalBilling) {
+        const emptyMonths = rentals.filter((r) => getMonthFactorForRental(r) <= 0);
+        if (emptyMonths.length > 0) {
+          return validationErrorResponse('No billable months for some rentals', {
+            rentalBilling: emptyMonths.map(
+              (r) => `Rental ${r.agreementNumber} has no billable months for the selected mode`
+            ),
+          });
+        }
+      }
+
+      // Preserve tool line items provided by the client only when we are not deriving tools from rentals.
+      const preservedToolLines =
+        !hasRentalBilling && Array.isArray(finalLineItems)
+          ? finalLineItems.filter((li: any) => {
+              const code = String(li?.itemCode ?? '');
+              return li?.kind === 'TOOL' || code.startsWith('212TL');
+            })
+          : [];
+
+      // Group machines by agreement + brand/model/type + base monthly rate.
       const categoryMap = new Map<
         string,
-        { agreementNumber: string; brand: string; model: string; type: string; count: number; monthlyRatePerMachine: number; serials: string[] }
+        {
+          agreementNumber: string;
+          brand: string;
+          model: string;
+          type: string;
+          count: number;
+          monthlyRatePerMachine: number;
+          billedUnitPrice: number;
+          serials: string[];
+        }
       >();
       for (const r of rentals) {
         const agreementNo = r.agreementNumber ?? '';
+        const monthFactor = getMonthFactorForRental(r);
         const rms = Array.isArray(r.machines) ? r.machines : [];
         for (const rm of rms) {
           const brand = rm.machine?.brand?.name ?? 'Unknown';
           const model = rm.machine?.model?.name ?? 'Unknown';
           const mtype = rm.machine?.type?.name ?? '';
           const qty = typeof rm.quantity === 'number' ? rm.quantity : Number(rm.quantity) || 1;
-          const daily = Number(rm.dailyRate) || 0;
+          let daily = Number(rm.dailyRate) || 0;
+          // Prefer catalog monthly rental fee when stored dailyRate implies a much lower monthly
+          // (common when PO lines were seeded from purchase unitPrice instead of monthlyRentalFee).
+          const catalogMonthly =
+            rm.machine?.monthlyRentalFee != null ? Number(rm.machine.monthlyRentalFee) : NaN;
+          if (Number.isFinite(catalogMonthly) && catalogMonthly > 0 && daily * 30 < catalogMonthly * 0.5) {
+            daily = catalogMonthly / 30;
+          }
           const monthlyPerMachine = daily * 30;
-          const key = `${agreementNo}|${brand}|${model}|${mtype}|${monthlyPerMachine}`;
+          const billedUnitPrice = round2(monthlyPerMachine * monthFactor);
+          const key = `${agreementNo}|${brand}|${model}|${mtype}|${monthlyPerMachine}|${billedUnitPrice}`;
           if (!categoryMap.has(key)) {
             categoryMap.set(key, {
               agreementNumber: agreementNo,
@@ -368,6 +501,7 @@ export const POST = withAuthAndRole(
               type: mtype,
               count: 0,
               monthlyRatePerMachine: monthlyPerMachine,
+              billedUnitPrice,
               serials: [],
             });
           }
@@ -386,9 +520,8 @@ export const POST = withAuthAndRole(
         return {
           description: desc,
           quantity: cat.count,
-          // Requirement: unitPrice must be monthly rate per machine derived from rental_machines.dailyRate.
-          // (unitPrice = dailyRate * 30)
-          unitPrice: round2(cat.monthlyRatePerMachine),
+          // With rentalBilling: unitPrice = monthlyRate * monthFactor; otherwise monthlyRate (1 month).
+          unitPrice: round2(cat.billedUnitPrice),
           machineId: null,
           brand: cat.brand,
           model: cat.model,
@@ -402,7 +535,42 @@ export const POST = withAuthAndRole(
         };
       });
 
-      finalLineItems = [...derivedMachineLines, ...preservedToolLines];
+      let derivedToolLines: any[] = [];
+      if (hasRentalBilling) {
+        let toolIndex = 0;
+        for (const r of rentals) {
+          const monthFactor = getMonthFactorForRental(r);
+          const agreementNo = r.agreementNumber ?? '';
+          const rts = Array.isArray(r.tools) ? r.tools : [];
+          for (const rt of rts) {
+            const qty = typeof rt.quantity === 'number' ? rt.quantity : Number(rt.quantity) || 0;
+            const monthlyUnit = Number(rt.unitPrice) || 0;
+            if (qty <= 0 || monthlyUnit < 0) continue;
+            const toolName = (rt.tool?.toolName ?? 'Tool').trim() || 'Tool';
+            const toolType = (rt.tool?.toolType ?? '').trim();
+            const baseDesc = [toolName, toolType].filter(Boolean).join(' - ').toUpperCase();
+            const desc = agreementNo ? `${baseDesc} (AGREEMENT ${agreementNo})` : baseDesc;
+            derivedToolLines.push({
+              description: desc,
+              quantity: qty,
+              unitPrice: round2(monthlyUnit * monthFactor),
+              machineId: null,
+              brand: '',
+              model: '',
+              type: '',
+              brandId: null,
+              modelId: null,
+              machineTypeId: null,
+              itemCode: `212TL${String(++toolIndex).padStart(5, '0')}`,
+              serialNumber: undefined,
+              vatRate: VAT_RATE,
+              kind: 'TOOL',
+            });
+          }
+        }
+      }
+
+      finalLineItems = [...derivedMachineLines, ...(hasRentalBilling ? derivedToolLines : preservedToolLines)];
 
       if (!Array.isArray(derivedMachineLines) || derivedMachineLines.length === 0) {
         return validationErrorResponse('Unable to derive machine line items from rentals', {

@@ -144,7 +144,8 @@ export const GET = withAuthAndRole(
       const unitsData: (string | number)[][] = [
         ['Brand', 'Model', 'Type', 'Serial Number', 'Box Number', 'Status', 'Last Updated'],
         ...machines.map((machine) => {
-          let statusLabel = machine.status;
+          // Display-only label: RESERVED is not a DB MachineStatus
+          let statusLabel: string = machine.status;
           if (machine.status === 'AVAILABLE' && reservedMachineIds.has(machine.id)) {
             statusLabel = 'RESERVED';
           }
