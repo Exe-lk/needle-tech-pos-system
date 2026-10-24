@@ -1,7 +1,21 @@
 'use client';
 
 import React from 'react';
+import { amountInWords } from '@/lib/amount-in-words';
 import { LETTERHEAD_COMPANY_INFO } from '@/src/components/letterhead/letterhead-document';
+
+const TAX_INVOICE_SUPPLIER = {
+  name: 'Needle Technologies Company (Pvt) Ltd',
+  address: 'No. 137/M, Colombo Road, Biyagama',
+  telephone: '011 2488735 / 076 3480393-6',
+  email: 'needletec@sltnet.lk',
+  tin: '114719676-7000',
+  chequePayee: 'Needle Technologies Company (Pvt) Ltd',
+  bankDetails: 'A/C 1420027865, Commercial Bank, Kaduwela.',
+} as const;
+
+const MIN_LINE_ROWS = 12;
+const COL_WIDTHS = ['w-[16%]', 'w-[42%]', 'w-[14%]', 'w-[8%]', 'w-[20%]'] as const;
 
 export interface TaxInvoiceProps {
   invoiceNumber: string;
@@ -10,9 +24,10 @@ export interface TaxInvoiceProps {
   periodTo: string;
   purchaseOrderNumber?: string;
   purchaserTin?: string;
-  purchaserVat?: string;
   customerName: string;
   customerAddress: string;
+  customerPhone?: string;
+  customerEmail?: string;
   placeOfSupply?: string;
   items: {
     serialNo: string;
@@ -27,6 +42,17 @@ export interface TaxInvoiceProps {
   totalAmountIncludingVat: number;
 }
 
+function formatMoney(value: number) {
+  return value.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatDate(dateString: string) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 export function TaxInvoice({
   invoiceNumber,
   invoiceDate,
@@ -34,9 +60,10 @@ export function TaxInvoice({
   periodTo,
   purchaseOrderNumber = '',
   purchaserTin = '',
-  purchaserVat = '',
   customerName,
   customerAddress,
+  customerPhone = '',
+  customerEmail = '',
   placeOfSupply = '',
   items,
   totalValueExcludingVat,
@@ -44,191 +71,187 @@ export function TaxInvoice({
   vatAmount,
   totalAmountIncludingVat,
 }: TaxInvoiceProps) {
-  const info = LETTERHEAD_COMPANY_INFO;
-  const logoPath = info.logoPath;
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString;
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
+  const logoPath = LETTERHEAD_COMPANY_INFO.logoPath;
+  const emptyRowCount = Math.max(0, MIN_LINE_ROWS - items.length);
+  const totalInWords = amountInWords(totalAmountIncludingVat);
 
   return (
-    <div className="bg-white text-black font-sans w-[210mm] min-h-[297mm] mx-auto p-8 text-sm flex flex-col box-border">
-      {/* Header */}
-      <div className="flex justify-between items-start mb-6">
-        <div className="flex items-center gap-4 w-1/3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={logoPath}
-            alt="Needle Technologies"
-            className="h-16 w-auto object-contain object-left"
-          />
-        </div>
-        <div className="w-1/3 text-center mt-4">
-          <h1 className="text-2xl font-bold uppercase tracking-wide">TAX INVOICE</h1>
-        </div>
-        <div className="w-1/3 text-right mt-4 whitespace-nowrap">
-          <span className="font-bold mr-2">Tax Invoice No :</span>
-          <span>{invoiceNumber}</span>
-        </div>
+    <div className="bg-white text-black font-sans w-[210mm] min-h-[297mm] mx-auto px-8 py-6 text-[12px] flex flex-col box-border">
+      <div className="relative mb-4 min-h-[52px]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={logoPath}
+          alt="Needle Technologies"
+          className="absolute left-0 top-0 h-12 w-auto object-contain object-left"
+        />
+        <h1 className="text-xl font-bold uppercase tracking-wide text-center pt-2">TAX INVOICE</h1>
       </div>
 
-      {/* Grid Details */}
-      <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6">
-        {/* Left Column */}
-        <div className="flex flex-col gap-4">
-          <div className="flex justify-between items-center pr-8">
-            <span className="font-bold">Date of Invoice :</span>
-            <span>{formatDate(invoiceDate)}</span>
-          </div>
-          
-          <table className="w-full border-collapse border border-gray-400">
-            <tbody>
-              <tr>
-                <td className="border border-gray-400 p-2 font-bold w-1/2 bg-gray-50">Supplier's TIN</td>
-                <td className="border border-gray-400 p-2">{info.tinNo}</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-400 p-2 font-bold bg-gray-50">Supplier's VAT</td>
-                <td className="border border-gray-400 p-2">{info.vatNo}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div className="border border-gray-400 flex flex-col h-[165px]">
-            <div className="bg-gray-50 font-bold p-2 border-b border-gray-400">Supplier's Name & Address</div>
-            <div className="p-2 whitespace-pre-wrap flex-1 text-[13px] leading-tight">
-              {info.fullName}<br />
-              {info.address.split(',').join(',\n')}<br />
-              <br />
-              Tel&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {info.telephone[0]} / {info.hotline}<br />
-              Email : {info.email}
-            </div>
-          </div>
-
-          <div className="flex items-center text-sm gap-2 mt-2">
-            <span className="font-bold min-w-[90px]">Period From :</span>
-            <span>{formatDate(periodFrom)}</span>
-            <span className="font-bold mx-2">To</span>
-            <span>{formatDate(periodTo)}</span>
-          </div>
-
-          <table className="w-full border-collapse border border-gray-400 mt-2">
-            <tbody>
-              <tr>
-                <td className="border border-gray-400 p-2 font-bold w-2/5 bg-gray-50">Purchase Order No</td>
-                <td className="border border-gray-400 p-2">{purchaseOrderNumber}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Right Column */}
-        <div className="flex flex-col gap-4 mt-[34px]">
-          <table className="w-full border-collapse border border-gray-400">
-            <tbody>
-              <tr>
-                <td className="border border-gray-400 p-2 font-bold w-1/2 bg-gray-50">Purchaser's TIN</td>
-                <td className="border border-gray-400 p-2">{purchaserTin}</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-400 p-2 font-bold bg-gray-50">Purchaser's VAT</td>
-                <td className="border border-gray-400 p-2">{purchaserVat}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div className="border border-gray-400 flex flex-col h-[165px]">
-            <div className="bg-gray-50 font-bold p-2 border-b border-gray-400">Purchaser's Name & Address</div>
-            <div className="p-2 whitespace-pre-wrap flex-1 text-[13px] leading-tight">
-              {customerName}<br />
-              {customerAddress}
-            </div>
-          </div>
-
-          <div className="border border-gray-400 flex flex-col mt-2">
-            <div className="bg-gray-50 font-bold p-2 border-b border-gray-400">Place of Supply</div>
-            <div className="p-2 h-[42px] flex items-center">{placeOfSupply || customerAddress.split(',').pop()?.trim()}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="flex-1 flex flex-col mb-4 min-h-[300px]">
-        <table className="w-full border-collapse border-t border-l border-r border-gray-400 flex-1 flex flex-col">
-          <thead className="bg-gray-50 w-full table table-fixed">
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <table className="w-full border-collapse">
+          <tbody>
             <tr>
-              <th className="border border-gray-400 p-2 text-center w-[15%] font-bold text-xs">Serial No</th>
-              <th className="border border-gray-400 p-2 text-center w-[45%] font-bold text-xs">Description of Goods or Services</th>
-              <th className="border border-gray-400 p-2 text-center w-[15%] font-bold text-xs">Rate</th>
-              <th className="border border-gray-400 p-2 text-center w-[5%] font-bold text-xs">Qty</th>
-              <th className="border border-gray-400 p-2 text-center w-[20%] font-bold text-xs">Amount Excluding VAT</th>
+              <td className="border border-black px-2 py-1 font-semibold w-[40%]">Date of Invoice</td>
+              <td className="border border-black px-2 py-1">{formatDate(invoiceDate)}</td>
             </tr>
-          </thead>
-          <tbody className="w-full table table-fixed flex-1 border-b border-gray-400 relative">
-            <div className="absolute inset-0">
-              <table className="w-full h-full table-fixed">
-                <tbody>
-                  {items.map((item, index) => (
-                    <tr key={index} className="align-top h-8">
-                      <td className="border-r border-gray-400 p-2 text-left text-xs w-[15%]">{item.serialNo}</td>
-                      <td className="border-r border-gray-400 p-2 text-left whitespace-pre-wrap text-[11px] w-[45%] leading-tight">{item.description}</td>
-                      <td className="border-r border-gray-400 p-2 text-right text-xs w-[15%]">{item.rate.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="border-r border-gray-400 p-2 text-center text-xs w-[5%]">{item.qty}</td>
-                      <td className="p-2 text-right text-xs w-[20%]">{item.amountExcludingVat.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    </tr>
-                  ))}
-                  {/* Fill empty space */}
-                  <tr className="align-top h-full">
-                    <td className="border-r border-gray-400 p-2 w-[15%]"></td>
-                    <td className="border-r border-gray-400 p-2 w-[45%]"></td>
-                    <td className="border-r border-gray-400 p-2 w-[15%]"></td>
-                    <td className="border-r border-gray-400 p-2 w-[5%]"></td>
-                    <td className="p-2 w-[20%]"></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
           </tbody>
-          <tfoot className="w-full table table-fixed">
+        </table>
+        <table className="w-full border-collapse">
+          <tbody>
             <tr>
-              <td colSpan={4} className="border border-gray-400 p-2 pl-4 text-left font-bold w-[80%] text-xs">Total Value of Supply</td>
-              <td className="border border-gray-400 p-2 text-right w-[20%] text-xs">Rs.{totalValueExcludingVat.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td className="border border-black px-2 py-1 font-semibold w-[40%]">Tax Invoice No</td>
+              <td className="border border-black px-2 py-1">{invoiceNumber}</td>
             </tr>
+          </tbody>
+        </table>
+        <table className="w-full border-collapse">
+          <tbody>
             <tr>
-              <td colSpan={4} className="border border-gray-400 p-2 pl-4 text-left font-bold w-[80%] text-xs">VAT Amount ({vatPercentage.toFixed(1)}%)</td>
-              <td className="border border-gray-400 p-2 text-right w-[20%] text-xs">Rs.{vatAmount.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td className="border border-black px-2 py-1 font-semibold w-[40%]">Supplier&apos;s Tin</td>
+              <td className="border border-black px-2 py-1">{TAX_INVOICE_SUPPLIER.tin}</td>
             </tr>
+          </tbody>
+        </table>
+        <table className="w-full border-collapse">
+          <tbody>
             <tr>
-              <td colSpan={4} className="border border-gray-400 p-2 pl-4 text-left font-bold w-[80%] text-xs">Total Amount including VAT</td>
-              <td className="border border-gray-400 p-2 text-right font-bold w-[20%] text-xs">Rs.{totalAmountIncludingVat.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td className="border border-black px-2 py-1 font-semibold w-[40%]">Purchaser&apos;s Tin</td>
+              <td className="border border-black px-2 py-1">{purchaserTin}</td>
             </tr>
-          </tfoot>
+          </tbody>
         </table>
       </div>
 
-      {/* Footer Instructions */}
-      <div className="mt-auto flex items-end gap-8">
-        <div className="text-xs space-y-1 text-gray-700 flex-1">
-          <p>All cheques to be drawn in favour of <span className="font-bold text-black">" Needle Technologies Company (Pvt) Ltd "</span></p>
-          <p className="font-bold text-black pt-2">Bank Details :</p>
-          <p>A/C 1420027865, Commercial Bank, Kaduwela.</p>
-          <p>Kindly mention your invoice number for the reference.</p>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div className="border border-black p-2 min-h-[108px] leading-snug">
+          <div className="grid grid-cols-[110px_1fr] gap-x-1 gap-y-0.5">
+            <span>Supplier&apos;s Name :</span>
+            <span>{TAX_INVOICE_SUPPLIER.name}</span>
+            <span>Address :</span>
+            <span className="whitespace-pre-wrap">{TAX_INVOICE_SUPPLIER.address.replace(', ', ',\n')}</span>
+            <span>Telephone No :</span>
+            <span>{TAX_INVOICE_SUPPLIER.telephone}</span>
+            <span>Email :</span>
+            <span>{TAX_INVOICE_SUPPLIER.email}</span>
+          </div>
+        </div>
+        <div className="border border-black p-2 min-h-[108px] leading-snug">
+          <div className="grid grid-cols-[110px_1fr] gap-x-1 gap-y-0.5">
+            <span>Purchaser&apos;s Name :</span>
+            <span>{customerName}</span>
+            <span>Address :</span>
+            <span className="whitespace-pre-wrap">{customerAddress}</span>
+            <span>Telephone No :</span>
+            <span>{customerPhone}</span>
+            <span>Email :</span>
+            <span>{customerEmail}</span>
+          </div>
         </div>
       </div>
 
-      {/* Signatures */}
-      <div className="mt-12 mb-4 flex justify-between px-4 text-xs font-bold text-gray-800">
-        <div className="flex gap-2 items-end">
-          <span>Authorized By :</span>
-          <span className="w-48 border-b border-dotted border-gray-500 inline-block"></span>
+      <div className="grid grid-cols-2 gap-2 mb-2 items-start">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 py-1">
+            <span className="font-semibold whitespace-nowrap">Period From</span>
+            <span>{formatDate(periodFrom)}</span>
+            <span className="font-semibold">To</span>
+            <span>{formatDate(periodTo)}</span>
+          </div>
+          <table className="w-full border-collapse">
+            <tbody>
+              <tr>
+                <td className="border border-black px-2 py-1 font-semibold w-[40%]">Purchase Order No</td>
+                <td className="border border-black px-2 py-1">{purchaseOrderNumber}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div className="flex gap-2 items-end">
-          <span>Received By :</span>
-          <span className="w-48 border-b border-dotted border-gray-500 inline-block"></span>
-        </div>
+        <table className="w-full border-collapse">
+          <tbody>
+            <tr>
+              <td className="border border-black px-2 py-1 font-semibold">Place of Supply</td>
+            </tr>
+            <tr>
+              <td className="border border-black px-2 py-3 min-h-[42px] align-top">{placeOfSupply}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <table className="w-full border-collapse table-fixed flex-1">
+        <thead>
+          <tr>
+            <th className={`border border-black px-1 py-1 text-center font-semibold text-[11px] ${COL_WIDTHS[0]}`}>Serial No</th>
+            <th className={`border border-black px-1 py-1 text-center font-semibold text-[11px] ${COL_WIDTHS[1]}`}>Description of Goods or Services</th>
+            <th className={`border border-black px-1 py-1 text-center font-semibold text-[11px] ${COL_WIDTHS[2]}`}>Rate</th>
+            <th className={`border border-black px-1 py-1 text-center font-semibold text-[11px] ${COL_WIDTHS[3]}`}>Qty</th>
+            <th className={`border border-black px-1 py-1 text-center font-semibold text-[11px] ${COL_WIDTHS[4]}`}>Amount Excluding VAT (LKR)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={index} className="align-top">
+              <td className={`border-x border-black px-2 py-1 text-left text-[11px] ${COL_WIDTHS[0]}`}>{item.serialNo}</td>
+              <td className={`border-x border-black px-2 py-1 text-left text-[11px] whitespace-pre-wrap leading-tight ${COL_WIDTHS[1]}`}>{item.description}</td>
+              <td className={`border-x border-black px-2 py-1 text-right text-[11px] ${COL_WIDTHS[2]}`}>{formatMoney(item.rate)}</td>
+              <td className={`border-x border-black px-2 py-1 text-center text-[11px] ${COL_WIDTHS[3]}`}>{item.qty}</td>
+              <td className={`border-x border-black px-2 py-1 text-right text-[11px] ${COL_WIDTHS[4]}`}>{formatMoney(item.amountExcludingVat)}</td>
+            </tr>
+          ))}
+          {Array.from({ length: emptyRowCount }, (_, index) => (
+            <tr key={`empty-${index}`}>
+              <td className={`border-x border-black h-7 ${COL_WIDTHS[0]}`}>&nbsp;</td>
+              <td className={`border-x border-black ${COL_WIDTHS[1]}`}></td>
+              <td className={`border-x border-black ${COL_WIDTHS[2]}`}></td>
+              <td className={`border-x border-black ${COL_WIDTHS[3]}`}></td>
+              <td className={`border-x border-black ${COL_WIDTHS[4]}`}></td>
+            </tr>
+          ))}
+          <tr>
+            <td className={`border-x border-b border-black h-8 ${COL_WIDTHS[0]}`}></td>
+            <td className={`border-x border-b border-black ${COL_WIDTHS[1]}`}></td>
+            <td className={`border-x border-b border-black ${COL_WIDTHS[2]}`}></td>
+            <td className={`border-x border-b border-black ${COL_WIDTHS[3]}`}></td>
+            <td className={`border-x border-b border-black ${COL_WIDTHS[4]}`}></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={4} className="border border-black px-2 py-1 font-semibold">Total Value of Supply</td>
+            <td className="border border-black px-2 py-1 text-right">{formatMoney(totalValueExcludingVat)}</td>
+          </tr>
+          <tr>
+            <td colSpan={4} className="border border-black px-2 py-1 font-semibold">VAT Amount ({vatPercentage.toFixed(1)}%)</td>
+            <td className="border border-black px-2 py-1 text-right">{formatMoney(vatAmount)}</td>
+          </tr>
+          <tr>
+            <td colSpan={4} className="border border-black px-2 py-1 font-semibold">Total Amount Including VAT</td>
+            <td className="border border-black px-2 py-1 text-right font-semibold">{formatMoney(totalAmountIncludingVat)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <table className="w-full border-collapse mt-2">
+        <tbody>
+          <tr>
+            <td className="border border-black px-2 py-2">
+              <span className="font-semibold">Total Amount in Words : </span>
+              {totalInWords}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="mt-4 text-[11px] leading-relaxed">
+        <p>All Cheques to be drawn in favour of &quot; {TAX_INVOICE_SUPPLIER.chequePayee} &quot;</p>
+        <p className="font-semibold mt-2">Bank Details:</p>
+        <p>{TAX_INVOICE_SUPPLIER.bankDetails}</p>
+        <p>Kindly mention your invoice number for the reference.</p>
+      </div>
+
+      <div className="mt-10 mb-2 flex justify-between text-[12px]">
+        <span>Authorized By:</span>
+        <span className="pr-16">Received By:</span>
       </div>
     </div>
   );

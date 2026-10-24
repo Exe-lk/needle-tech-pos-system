@@ -11,11 +11,19 @@ import { authFetch } from '@/lib/auth-client';
 import { Swal, toast } from '@/src/lib/swal';
 import { TaxInvoice } from '@/src/components/invoice/tax-invoice';
 import {
+  ReviewMachinesPanel,
+  cloneReviewMachineRows,
+} from '@/src/components/invoice/review-machine-editor';
+import {
   buildMonthSlices,
+  buildReviewMachineRows,
   latestBilledPeriodTo,
+  resolveMonthlyRate,
+  reviewMachineLineDescription,
   round2,
   sumMonthFactors,
   type RentalBillingMode,
+  type ReviewMachineRow,
 } from '@/lib/invoice-month-billing';
 
 // API Configuration
@@ -33,6 +41,7 @@ interface InvoiceItem {
   type: MachineType;
   numberOfMachines: number;
   monthlyRentPerMachine: number;
+  monthlyRate?: number;
   subtotal: number;
 }
 
@@ -51,6 +60,9 @@ interface Invoice {
   invoiceType: 'VAT' | 'Non-VAT';
   customerName: string;
   customerAddress: string;
+  customerPhone: string;
+  customerEmail: string;
+  placeOfSupply: string;
   vatTinNic: string;
   purchaseOrderNumber?: string;
   invoiceDate: string;
@@ -101,6 +113,7 @@ interface ApiCustomer {
   billingPostalCode?: string;
   billingCountry?: string;
   vatRegistrationNumber?: string;
+  tinNumber?: string;
   currentBalance: number;
   status: 'ACTIVE' | 'INACTIVE';
 }
@@ -242,6 +255,65 @@ const buildCustomerAddress = (customer: ApiCustomer): string => {
   ].filter(Boolean);
   
   return parts.join(', ');
+};
+
+const mapApiInvoiceToFrontend = (invoice: ApiInvoice): Invoice => {
+  const customer = invoice.customer;
+  const lineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
+  const purchaseOrderNumber = invoice.rental?.purchaseOrder?.requestNumber || '';
+  const agreementNumbers =
+    Array.isArray(invoice.invoiceRentals)
+      ? invoice.invoiceRentals
+          .map((ir) => ir?.rental?.agreementNumber)
+          .filter(Boolean)
+      : [];
+
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    invoiceType: invoice.taxCategory === 'VAT' ? 'VAT' : 'Non-VAT',
+    customerName: customer?.name || 'Unknown Customer',
+    customerAddress: customer ? buildCustomerAddress(customer) : '',
+    customerPhone: Array.isArray(customer?.phones) ? (customer.phones[0] || '') : '',
+    customerEmail: Array.isArray(customer?.emails) ? (customer.emails[0] || '') : '',
+    placeOfSupply: customer?.billingCity || '',
+    vatTinNic: customer?.vatRegistrationNumber || customer?.tinNumber || customer?.code || '',
+    purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
+    invoiceDate: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+    periodFrom: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+    periodTo: invoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+    items: lineItems.map((item: any, index: number) => ({
+      id: String(index + 1),
+      itemCode: item.itemCode || `212WG${String(index + 1).padStart(5, '0')}`,
+      description: item.description || '',
+      serialNumber: item.serialNumber,
+      brand: item.brand || '',
+      model: item.model || '',
+      type: item.type || 'Industrial',
+      numberOfMachines: item.quantity || 1,
+      monthlyRentPerMachine: Number(item.unitPrice) || 0,
+      monthlyRate: item.monthlyRate != null ? Number(item.monthlyRate) : undefined,
+      subtotal: Number(item.quantity || 1) * Number(item.unitPrice || 0),
+    })),
+    subtotal: Number(invoice.subtotal) || 0,
+    vatAmount: Number(invoice.vatAmount) || 0,
+    totalAmount: Number(invoice.grandTotal) || 0,
+    paymentDetails: {
+      paymentMethod: '',
+      paymentDate: invoice.dueDate?.split('T')[0] || '',
+      amount: Number(invoice.grandTotal) || 0,
+      status: invoice.paymentStatus === 'PAID' ? 'paid' : 'pending',
+    },
+    status: mapApiStatusToFrontend(invoice.status),
+  };
+};
+
+const invoiceItemPrintAmounts = (item: InvoiceItem) => {
+  const qty = Number(item.numberOfMachines) || 1;
+  const billedUnit = Number(item.monthlyRentPerMachine) || 0;
+  const billed = Number(item.subtotal) || billedUnit * qty;
+  const rate = item.monthlyRate != null ? Number(item.monthlyRate) : billedUnit;
+  return { qty, rate, billed };
 };
 
 // API Functions
@@ -393,52 +465,7 @@ const fetchInvoices = async (): Promise<Invoice[]> => {
     const data = await response.json();
     const apiInvoices: ApiInvoice[] = data.data?.items || [];
 
-    return apiInvoices.map(invoice => {
-      const customer = invoice.customer;
-      const lineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
-      const purchaseOrderNumber = invoice.rental?.purchaseOrder?.requestNumber || '';
-      const agreementNumbers =
-        Array.isArray(invoice.invoiceRentals)
-          ? invoice.invoiceRentals
-              .map((ir: any) => ir?.rental?.agreementNumber)
-              .filter(Boolean)
-          : [];
-      
-      return {
-        id: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        invoiceType: invoice.taxCategory === 'VAT' ? 'VAT' : 'Non-VAT',
-        customerName: customer?.name || 'Unknown Customer',
-        customerAddress: customer ? buildCustomerAddress(customer) : '',
-        vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-        purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
-        invoiceDate: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-        periodFrom: invoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-        periodTo: invoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-        items: lineItems.map((item: any, index: number) => ({
-          id: String(index + 1),
-          itemCode: item.itemCode || `212WG${String(index + 1).padStart(5, '0')}`,
-          description: item.description || '',
-          serialNumber: item.serialNumber,
-          brand: item.brand || '',
-          model: item.model || '',
-          type: item.type || 'Industrial',
-          numberOfMachines: item.quantity || 1,
-          monthlyRentPerMachine: Number(item.unitPrice) || 0,
-          subtotal: Number(item.quantity || 1) * Number(item.unitPrice || 0),
-        })),
-        subtotal: Number(invoice.subtotal) || 0,
-        vatAmount: Number(invoice.vatAmount) || 0,
-        totalAmount: Number(invoice.grandTotal) || 0,
-        paymentDetails: {
-          paymentMethod: '',
-          paymentDate: invoice.dueDate?.split('T')[0] || '',
-          amount: Number(invoice.grandTotal) || 0,
-          status: invoice.paymentStatus === 'PAID' ? 'paid' : 'pending',
-        },
-        status: mapApiStatusToFrontend(invoice.status),
-      };
-    });
+    return apiInvoices.map(mapApiInvoiceToFrontend);
   } catch (error) {
     console.error('Error fetching invoices:', error);
     return [];
@@ -459,51 +486,7 @@ const createInvoice = async (invoiceData: any): Promise<Invoice | null> => {
     }
 
     const data = await response.json();
-    const apiInvoice: ApiInvoice = data.data;
-    const customer = apiInvoice.customer;
-    const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
-    const purchaseOrderNumber = apiInvoice.rental?.purchaseOrder?.requestNumber || '';
-    const agreementNumbers =
-      Array.isArray(apiInvoice.invoiceRentals)
-        ? apiInvoice.invoiceRentals
-            .map((ir: any) => ir?.rental?.agreementNumber)
-            .filter(Boolean)
-        : [];
-
-    return {
-      id: apiInvoice.id,
-      invoiceNumber: apiInvoice.invoiceNumber,
-      invoiceType: apiInvoice.taxCategory === 'VAT' ? 'VAT' : 'Non-VAT',
-      customerName: customer?.name || 'Unknown Customer',
-      customerAddress: customer ? buildCustomerAddress(customer) : '',
-      vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-      purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
-      invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-      periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-      periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-      items: lineItems.map((item: any, index: number) => ({
-        id: String(index + 1),
-        itemCode: item.itemCode || `212WG${String(index + 1).padStart(5, '0')}`,
-        description: item.description || '',
-        serialNumber: item.serialNumber,
-        brand: item.brand || '',
-        model: item.model || '',
-        type: item.type || 'Industrial',
-        numberOfMachines: item.quantity || 1,
-        monthlyRentPerMachine: Number(item.unitPrice) || 0,
-        subtotal: Number(item.quantity || 1) * Number(item.unitPrice || 0),
-      })),
-      subtotal: Number(apiInvoice.subtotal) || 0,
-      vatAmount: Number(apiInvoice.vatAmount) || 0,
-      totalAmount: Number(apiInvoice.grandTotal) || 0,
-      paymentDetails: {
-        paymentMethod: '',
-        paymentDate: apiInvoice.dueDate?.split('T')[0] || '',
-        amount: Number(apiInvoice.grandTotal) || 0,
-        status: apiInvoice.paymentStatus === 'PAID' ? 'paid' : 'pending',
-      },
-      status: mapApiStatusToFrontend(apiInvoice.status),
-    };
+    return mapApiInvoiceToFrontend(data.data as ApiInvoice);
   } catch (error) {
     console.error('Error creating invoice:', error);
     throw error;
@@ -524,51 +507,7 @@ const updateInvoice = async (invoiceId: string, updateData: any): Promise<Invoic
     }
 
     const data = await response.json();
-    const apiInvoice: ApiInvoice = data.data;
-    const customer = apiInvoice.customer;
-    const lineItems = Array.isArray(apiInvoice.lineItems) ? apiInvoice.lineItems : [];
-    const purchaseOrderNumber = apiInvoice.rental?.purchaseOrder?.requestNumber || '';
-    const agreementNumbers =
-      Array.isArray(apiInvoice.invoiceRentals)
-        ? apiInvoice.invoiceRentals
-            .map((ir: any) => ir?.rental?.agreementNumber)
-            .filter(Boolean)
-        : [];
-
-    return {
-      id: apiInvoice.id,
-      invoiceNumber: apiInvoice.invoiceNumber,
-      invoiceType: apiInvoice.taxCategory === 'VAT' ? 'VAT' : 'Non-VAT',
-      customerName: customer?.name || 'Unknown Customer',
-      customerAddress: customer ? buildCustomerAddress(customer) : '',
-      vatTinNic: customer?.vatRegistrationNumber || customer?.code || '',
-      purchaseOrderNumber: purchaseOrderNumber || (agreementNumbers.length > 1 ? 'Multiple' : ''),
-      invoiceDate: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-      periodFrom: apiInvoice.issueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-      periodTo: apiInvoice.dueDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-      items: lineItems.map((item: any, index: number) => ({
-        id: String(index + 1),
-        itemCode: item.itemCode || `212WG${String(index + 1).padStart(5, '0')}`,
-        description: item.description || '',
-        serialNumber: item.serialNumber,
-        brand: item.brand || '',
-        model: item.model || '',
-        type: item.type || 'Industrial',
-        numberOfMachines: item.quantity || 1,
-        monthlyRentPerMachine: Number(item.unitPrice) || 0,
-        subtotal: Number(item.quantity || 1) * Number(item.unitPrice || 0),
-      })),
-      subtotal: Number(apiInvoice.subtotal) || 0,
-      vatAmount: Number(apiInvoice.vatAmount) || 0,
-      totalAmount: Number(apiInvoice.grandTotal) || 0,
-      paymentDetails: {
-        paymentMethod: '',
-        paymentDate: apiInvoice.dueDate?.split('T')[0] || '',
-        amount: Number(apiInvoice.grandTotal) || 0,
-        status: apiInvoice.paymentStatus === 'PAID' ? 'paid' : 'pending',
-      },
-      status: mapApiStatusToFrontend(apiInvoice.status),
-    };
+    return mapApiInvoiceToFrontend(data.data as ApiInvoice);
   } catch (error) {
     console.error('Error updating invoice:', error);
     throw error;
@@ -692,6 +631,10 @@ const InvoicePage: React.FC = () => {
   const [availableRentalsForPeriod, setAvailableRentalsForPeriod] = useState<ApiRentalLite[]>([]);
   const [selectedRentalIds, setSelectedRentalIds] = useState<Set<string>>(new Set());
   const [agreementBillingConfigs, setAgreementBillingConfigs] = useState<Record<string, AgreementBillingConfig>>({});
+  const [reviewMachineEdits, setReviewMachineEdits] = useState<ReviewMachineRow[] | null>(null);
+  const [isReviewMachineEditorOpen, setIsReviewMachineEditorOpen] = useState(false);
+  const [draftReviewMachineEdits, setDraftReviewMachineEdits] = useState<ReviewMachineRow[]>([]);
+  const [reviewMachineEditorError, setReviewMachineEditorError] = useState('');
   const [isLoadingRentalsForPeriod, setIsLoadingRentalsForPeriod] = useState(false);
   // Manual itemised item entry removed; invoice line items come from backend based on rentals
   const [items, setItems] = useState<Omit<InvoiceItem, 'id' | 'subtotal'>[]>([]);
@@ -835,6 +778,10 @@ const InvoicePage: React.FC = () => {
     setAvailableRentalsForPeriod([]);
     setSelectedRentalIds(new Set());
     setAgreementBillingConfigs({});
+    setReviewMachineEdits(null);
+    setIsReviewMachineEditorOpen(false);
+    setDraftReviewMachineEdits([]);
+    setReviewMachineEditorError('');
     setItems([]);
     setPaymentMethod('');
     setPaymentDate('');
@@ -843,6 +790,13 @@ const InvoicePage: React.FC = () => {
     setFormErrors({});
     setSelectedBrandIds({});
     setAvailableModelsPerItem({});
+  };
+
+  const clearReviewMachineEdits = () => {
+    setReviewMachineEdits(null);
+    setIsReviewMachineEditorOpen(false);
+    setDraftReviewMachineEdits([]);
+    setReviewMachineEditorError('');
   };
 
   const handleCreateInvoice = () => {
@@ -866,6 +820,7 @@ const InvoicePage: React.FC = () => {
       setPaymentDate('');
       setReceiptNumber('');
       setReceiptFile(null);
+      clearReviewMachineEdits();
     }
     setCreateStep(2);
     setInvoiceDate((prev) => prev || getTodayISODate());
@@ -881,6 +836,7 @@ const InvoicePage: React.FC = () => {
     setSelectedRentalIds(new Set());
     setAgreementBillingConfigs({});
     setPeriodTo('');
+    clearReviewMachineEdits();
     if (createInvoiceMode) {
       setInvoiceType(createInvoiceMode);
       return;
@@ -925,6 +881,68 @@ const InvoicePage: React.FC = () => {
     });
   };
 
+  const getDefaultReviewMachineRows = (): ReviewMachineRow[] => {
+    const selected = availableRentalsForPeriod.filter((r) => selectedRentalIds.has(r.id));
+    return buildReviewMachineRows(
+      selected.map((rental) => {
+        const cfg = ensureBillingConfig(rental.id, rental);
+        const billing =
+          cfg.mode === 'FULL_FEE_ALL_MONTHS'
+            ? { mode: 'FULL_FEE_ALL_MONTHS' as const }
+            : {
+                mode: 'SELECTED_MONTHS' as const,
+                months: [...cfg.selectedMonthKeys].map((key) => {
+                  const [periodFromKey, periodToKey] = key.split('|');
+                  return { periodFrom: periodFromKey, periodTo: periodToKey };
+                }),
+              };
+        return {
+          rentalId: rental.id,
+          agreementNumber: rental.agreementNumber,
+          startDate: rental.startDate,
+          expectedEndDate: rental.expectedEndDate,
+          billing,
+          machines: rental.machines || [],
+        };
+      })
+    );
+  };
+
+  const handleStartReviewMachineEdit = () => {
+    const source = reviewMachineEdits ?? getDefaultReviewMachineRows();
+    setDraftReviewMachineEdits(cloneReviewMachineRows(source));
+    setReviewMachineEditorError('');
+    setIsReviewMachineEditorOpen(true);
+  };
+
+  const handleCancelReviewMachineEdit = () => {
+    setIsReviewMachineEditorOpen(false);
+    setDraftReviewMachineEdits([]);
+    setReviewMachineEditorError('');
+  };
+
+  const handleApplyReviewMachineEdit = () => {
+    const included = draftReviewMachineEdits.filter((row) => row.included);
+    if (included.length === 0) {
+      setReviewMachineEditorError('Include at least one machine');
+      return;
+    }
+    const invalid = included.find(
+      (row) =>
+        (Number(row.monthlyRent) || 0) < 0 ||
+        (Number(row.rentalDays) || 0) <= 0 ||
+        (Number(row.billedAmount) || 0) < 0
+    );
+    if (invalid) {
+      setReviewMachineEditorError('Included machines need a monthly rent, rental days greater than 0, and a non-negative amount');
+      return;
+    }
+    setReviewMachineEdits(cloneReviewMachineRows(draftReviewMachineEdits));
+    setIsReviewMachineEditorOpen(false);
+    setDraftReviewMachineEdits([]);
+    setReviewMachineEditorError('');
+  };
+
   const computeCreatePreviewTotals = () => {
     let subtotal = 0;
     for (const id of selectedRentalIds) {
@@ -943,12 +961,7 @@ const InvoicePage: React.FC = () => {
             };
       const factor = sumMonthFactors(rental.startDate, rental.expectedEndDate, billing);
       for (const m of rental.machines || []) {
-        let daily = Number(m.dailyRate) || 0;
-        const catalogMonthly = m.monthlyRentalFee != null ? Number(m.monthlyRentalFee) : NaN;
-        if (Number.isFinite(catalogMonthly) && catalogMonthly > 0 && daily * 30 < catalogMonthly * 0.5) {
-          daily = catalogMonthly / 30;
-        }
-        const monthly = daily * 30;
+        const monthly = resolveMonthlyRate(m.dailyRate, m.monthlyRentalFee);
         const qty = Number(m.quantity) || 1;
         subtotal += monthly * factor * qty;
       }
@@ -982,6 +995,15 @@ const InvoicePage: React.FC = () => {
   };
 
   const calculateTotals = () => {
+    if (reviewMachineEdits) {
+      const subtotal = round2(
+        reviewMachineEdits
+          .filter((row) => row.included)
+          .reduce((sum, row) => sum + (Number(row.billedAmount) || 0), 0)
+      );
+      const vatAmount = invoiceType === 'VAT' ? round2(subtotal * 0.18) : 0;
+      return { subtotal, vatAmount, totalAmount: round2(subtotal + vatAmount) };
+    }
     if (selectedRentalIds.size > 0) {
       return computeCreatePreviewTotals();
     }
@@ -992,6 +1014,7 @@ const InvoicePage: React.FC = () => {
   };
 
   const toggleAgreementSelection = (rental: ApiRentalLite) => {
+    clearReviewMachineEdits();
     setSelectedRentalIds((prev) => {
       const next = new Set(prev);
       if (next.has(rental.id)) {
@@ -1013,6 +1036,7 @@ const InvoicePage: React.FC = () => {
   };
 
   const setAgreementBillingMode = (rental: ApiRentalLite, mode: RentalBillingMode) => {
+    clearReviewMachineEdits();
     const slices = buildMonthSlices(rental.startDate, rental.expectedEndDate);
     setAgreementBillingConfigs((prev) => {
       const current = prev[rental.id] || getDefaultBillingConfig(rental);
@@ -1032,6 +1056,7 @@ const InvoicePage: React.FC = () => {
   };
 
   const toggleAgreementMonth = (rental: ApiRentalLite, monthKey: string) => {
+    clearReviewMachineEdits();
     setAgreementBillingConfigs((prev) => {
       const current = prev[rental.id] || getDefaultBillingConfig(rental);
       const nextKeys = new Set(current.selectedMonthKeys);
@@ -1045,6 +1070,7 @@ const InvoicePage: React.FC = () => {
   };
 
   const selectAllAgreementMonths = (rental: ApiRentalLite, selectAll: boolean) => {
+    clearReviewMachineEdits();
     const slices = buildMonthSlices(rental.startDate, rental.expectedEndDate);
     setAgreementBillingConfigs((prev) => ({
       ...prev,
@@ -1071,6 +1097,10 @@ const InvoicePage: React.FC = () => {
       if (cfg.mode === 'SELECTED_MONTHS' && cfg.selectedMonthKeys.size === 0) {
         errors[`rentalBilling_${id}`] = `Select at least one month for ${rental?.agreementNumber || 'agreement'}`;
       }
+    }
+
+    if (reviewMachineEdits && reviewMachineEdits.filter((row) => row.included).length === 0) {
+      errors.reviewMachines = 'Include at least one machine';
     }
 
     if (!paymentMethod) errors.paymentMethod = 'Payment Method is required';
@@ -1144,11 +1174,18 @@ const InvoicePage: React.FC = () => {
 
   const handleCreateWizardBack = () => {
     if (createStep <= 1) return;
+    if (createStep === 4) {
+      clearReviewMachineEdits();
+    }
     setFormErrors({});
     setCreateStep((prev) => (prev - 1) as 1 | 2 | 3 | 4);
   };
 
   const handleSubmitCreate = async () => {
+    if (isReviewMachineEditorOpen) {
+      setReviewMachineEditorError('Apply or cancel machine edits before creating the invoice');
+      return;
+    }
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
       scrollToFirstErrorField(errors);
@@ -1162,7 +1199,7 @@ const InvoicePage: React.FC = () => {
       const rentalBilling = buildRentalBillingPayload();
       const dueDate = periodTo || computeDefaultDueDate();
 
-      const invoicePayload = {
+      const invoicePayload: Record<string, unknown> = {
         customerId: customerId,
         type: 'RENTAL',
         taxCategory: invoiceType === 'VAT' ? 'VAT' : 'NON_VAT',
@@ -1174,6 +1211,30 @@ const InvoicePage: React.FC = () => {
         rentalIds,
         rentalBilling,
       };
+
+      if (reviewMachineEdits) {
+        const included = reviewMachineEdits.filter((row) => row.included);
+        invoicePayload.useProvidedMachineLines = true;
+        invoicePayload.lineItems = included.map((row, index) => ({
+          description: reviewMachineLineDescription(row),
+          quantity: 1,
+          unitPrice: round2(row.billedAmount),
+          monthlyRate: round2(row.monthlyRent),
+          rentalDays: row.rentalDays,
+          machineId: null,
+          brand: row.brand,
+          model: row.model,
+          type: row.type,
+          brandId: null,
+          modelId: null,
+          machineTypeId: null,
+          itemCode: `212WG${String(index + 1).padStart(5, '0')}`,
+          serialNumber: row.serialNumber || undefined,
+          rentalId: row.rentalId,
+          vatRate: invoiceType === 'VAT' ? 0.18 : 0,
+          kind: 'MACHINE',
+        }));
+      }
 
       const newInvoice = await createInvoice(invoicePayload);
       
@@ -1463,8 +1524,7 @@ const InvoicePage: React.FC = () => {
 
         const rows: VatRow[] = [];
         invoice.items.forEach((item, index) => {
-          const qty = Number(item.numberOfMachines) || 1;
-          const unitRate = Number(item.monthlyRentPerMachine) || 0;
+          const { qty, rate, billed } = invoiceItemPrintAmounts(item);
           const serials = splitSerials(item.serialNumber);
 
           const shouldExpand = qty > 1 || serials.length > 1;
@@ -1473,22 +1533,25 @@ const InvoicePage: React.FC = () => {
               key: `${index}-0`,
               serial: item.serialNumber?.trim() || '—',
               description: item.description,
-              rate: unitRate,
+              rate,
               qty,
-              amountExVat: Number(item.subtotal) || unitRate * qty,
+              amountExVat: billed,
             });
             return;
           }
 
           const expandedCount = Math.max(qty, serials.length || 0) || qty;
+          const billedUnit = Number(item.monthlyRentPerMachine) || 0;
+          const amountEach =
+            item.monthlyRate != null ? round2(billed / expandedCount) : billedUnit;
           for (let i = 0; i < expandedCount; i++) {
             rows.push({
               key: `${index}-${i}`,
               serial: serials[i] || '—',
               description: item.description,
-              rate: unitRate,
+              rate,
               qty: 1,
-              amountExVat: unitRate,
+              amountExVat: amountEach,
             });
           }
         });
@@ -1738,18 +1801,19 @@ const InvoicePage: React.FC = () => {
             periodTo={invoice.periodTo}
             purchaseOrderNumber={invoice.purchaseOrderNumber}
             purchaserTin={invoice.vatTinNic}
-            purchaserVat={invoice.vatTinNic ? `${invoice.vatTinNic}-7000` : ''} // Append -7000 to VAT as per example, or use same value if not defined properly
             customerName={invoice.customerName}
             customerAddress={invoice.customerAddress}
+            customerPhone={invoice.customerPhone}
+            customerEmail={invoice.customerEmail}
+            placeOfSupply={invoice.placeOfSupply}
             items={invoice.items.map(item => {
-              const qty = Number(item.numberOfMachines) || 1;
-              const rate = Number(item.monthlyRentPerMachine) || 0;
+              const { qty, rate, billed } = invoiceItemPrintAmounts(item);
               return {
                 serialNo: item.serialNumber || '',
                 description: item.description,
-                rate: rate,
-                qty: qty,
-                amountExcludingVat: qty * rate,
+                rate,
+                qty,
+                amountExcludingVat: billed,
               };
             })}
             totalValueExcludingVat={invoice.subtotal}
@@ -1834,9 +1898,11 @@ const InvoicePage: React.FC = () => {
             periodTo={periodTo}
             purchaseOrderNumber={invoice.purchaseOrderNumber || ''}
             purchaserTin={invoice.vatTinNic || ''}
-            purchaserVat={invoice.vatTinNic ? `${invoice.vatTinNic}-7000` : ''}
             customerName={invoice.customerName}
             customerAddress={invoice.customerAddress}
+            customerPhone={invoice.customerPhone}
+            customerEmail={invoice.customerEmail}
+            placeOfSupply={invoice.placeOfSupply}
             items={allItems}
             totalValueExcludingVat={grandSubtotal}
             vatPercentage={18.0}
@@ -2306,6 +2372,7 @@ const InvoicePage: React.FC = () => {
                     onClick={() => {
                       setSelectedRentalIds(new Set());
                       setAgreementBillingConfigs({});
+                      clearReviewMachineEdits();
                     }}
                     className="text-xs font-medium text-blue-700 dark:text-indigo-300 hover:underline"
                   >
@@ -2421,6 +2488,23 @@ const InvoicePage: React.FC = () => {
               </ul>
             )}
           </div>
+
+          <ReviewMachinesPanel
+            rows={
+              isReviewMachineEditorOpen
+                ? draftReviewMachineEdits
+                : (reviewMachineEdits ?? getDefaultReviewMachineRows())
+            }
+            editing={isReviewMachineEditorOpen}
+            customized={Boolean(reviewMachineEdits)}
+            error={reviewMachineEditorError || formErrors.reviewMachines}
+            disabled={isSubmitting}
+            onStartEdit={handleStartReviewMachineEdit}
+            onReset={clearReviewMachineEdits}
+            onCancel={handleCancelReviewMachineEdit}
+            onApply={handleApplyReviewMachineEdit}
+            onChangeRows={setDraftReviewMachineEdits}
+          />
 
           <div className="mb-3 rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/20 px-3 py-2 text-sm">
             <div className="flex flex-wrap gap-x-6 gap-y-1">
@@ -2909,7 +2993,7 @@ const InvoicePage: React.FC = () => {
                   ) : (
                     <button
                       onClick={handleSubmitCreate}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isReviewMachineEditorOpen}
                       className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-indigo-600 hover:bg-blue-700 dark:hover:bg-indigo-700 rounded border border-blue-700 dark:border-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       {isSubmitting ? (

@@ -1,15 +1,20 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/common/navbar';
 import Sidebar from '@/src/components/common/sidebar';
 import Table, { TableColumn, ActionButton } from '@/src/components/table/table';
 import UpdateForm from '@/src/components/form-popup/update';
 import type { FormField } from '@/src/components/form-popup/update';
-import { Eye, Clock, Pencil, X, Download, Loader2 } from 'lucide-react';
+import { Eye, Clock, Pencil, X, Download, Loader2, Upload, ChevronDown } from 'lucide-react';
 import { authFetch } from '@/lib/auth-client';
-import { Swal } from '@/src/lib/swal';
+import { Swal, toast } from '@/src/lib/swal';
+import {
+  parseMachineImportWorkbook,
+  type ImportParseResult,
+  type ImportRowError,
+} from '@/lib/inventory/import-parse';
 
 const API_BASE = '/api/v1';
 
@@ -82,6 +87,15 @@ const InventoryManagementPage: React.FC = () => {
   const [sellBoxInput, setSellBoxInput] = useState('');
   const [sellSubmitting, setSellSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+  const templateMenuRef = useRef<HTMLDivElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportParseResult | null>(null);
+  const [importPreviewLoading, setImportPreviewLoading] = useState(false);
+  const [importSubmitting, setImportSubmitting] = useState(false);
 
   // Fetch inventory from API
   const fetchInventory = useCallback(async () => {
@@ -148,6 +162,176 @@ const InventoryManagementPage: React.FC = () => {
     if (inventoryLoading) return;
     fetchMachineUnits();
   }, [inventoryLoading, fetchMachineUnits]);
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadErrorCsv = (errors: ImportRowError[]) => {
+    const escapeCell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+    const csv = [
+      'row,serialNumber,message',
+      ...errors.map((error) =>
+        [error.row, error.serialNumber, error.message].map(escapeCell).join(',')
+      ),
+    ].join('\n');
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'machine-import-errors.csv');
+  };
+
+  const handleDownloadTemplate = useCallback(async (format: 'csv' | 'xlsx') => {
+    setDownloadingTemplate(true);
+    setTemplateMenuOpen(false);
+    try {
+      const res = await authFetch(`${API_BASE}/inventory/import/template?format=${format}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.message || 'Failed to download template');
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition');
+      const match = disposition?.match(/filename="?([^";\n]+)"?/);
+      const filename =
+        match?.[1] ||
+        `machine-import-template_${new Date().toISOString().split('T')[0]}.${format}`;
+      downloadBlob(blob, filename);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to download template';
+      await Swal.fire({
+        icon: 'error',
+        title: 'Download failed',
+        text: message,
+      });
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!templateMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (templateMenuRef.current && !templateMenuRef.current.contains(event.target as Node)) {
+        setTemplateMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [templateMenuOpen]);
+
+  const resetImportModal = () => {
+    setImportFile(null);
+    setImportPreview(null);
+    setImportPreviewLoading(false);
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = '';
+    }
+  };
+
+  const handleOpenImportModal = () => {
+    resetImportModal();
+    setImportSubmitting(false);
+    setIsImportModalOpen(true);
+  };
+
+  const handleCloseImportModal = () => {
+    if (importSubmitting) return;
+    setIsImportModalOpen(false);
+    resetImportModal();
+  };
+
+  const handleImportFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setImportFile(null);
+      setImportPreview(null);
+      return;
+    }
+    setImportFile(file);
+    setImportPreviewLoading(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      setImportPreview(parseMachineImportWorkbook(bytes));
+    } catch {
+      setImportPreview({
+        validRows: [],
+        errors: [{ row: 0, serialNumber: '', message: 'Could not read this file. Use the CSV or Excel template.' }],
+        totalDataRows: 0,
+      });
+    } finally {
+      setImportPreviewLoading(false);
+    }
+  };
+
+  const handleImportMachines = async () => {
+    if (!importFile) return;
+    setImportSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      const res = await authFetch(`${API_BASE}/inventory/import`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const rowErrors = Array.isArray(json?.data?.errors)
+          ? json.data.errors
+          : Object.values(json?.data || {}).flat();
+        const message =
+          json?.message ||
+          (Array.isArray(rowErrors) && rowErrors.length > 0
+            ? String(rowErrors[0])
+            : 'Import failed');
+        throw new Error(message);
+      }
+
+      const imported = json?.data?.imported ?? 0;
+      const skipped = json?.data?.skipped ?? 0;
+      const errors: ImportRowError[] = Array.isArray(json?.data?.errors) ? json.data.errors : [];
+
+      setIsImportModalOpen(false);
+      resetImportModal();
+      await fetchInventory();
+
+      toast.fire({
+        icon: imported > 0 ? 'success' : 'warning',
+        title: json?.message || `Imported ${imported} machine(s)`,
+      });
+
+      if (skipped > 0 && errors.length > 0) {
+        const result = await Swal.fire({
+          icon: imported > 0 ? 'success' : 'warning',
+          title: imported > 0 ? 'Import completed with skipped rows' : 'No machines imported',
+          text: `${imported} imported, ${skipped} skipped. Download the skipped-row report to fix and retry.`,
+          showCancelButton: true,
+          confirmButtonText: 'Download skipped rows',
+          cancelButtonText: 'Close',
+        });
+        if (result.isConfirmed) {
+          downloadErrorCsv(errors);
+        }
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to import machines';
+      await Swal.fire({
+        icon: 'error',
+        title: 'Import failed',
+        text: message,
+      });
+    } finally {
+      setImportSubmitting(false);
+    }
+  };
 
   const handleExportToExcel = useCallback(async () => {
     setExporting(true);
@@ -770,19 +954,66 @@ const InventoryManagementPage: React.FC = () => {
                 Track and manage machine stock levels, view inventory history, and perform stock operations.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleExportToExcel}
-              disabled={exporting || inventoryLoading}
-              className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed self-start sm:self-auto"
-            >
-              {exporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              <span>{exporting ? 'Exporting…' : 'Export Excel'}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <div className="relative" ref={templateMenuRef}>
+                <div className="flex">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadTemplate('csv')}
+                    disabled={downloadingTemplate}
+                    className="px-4 py-2 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-slate-600 rounded-l-lg hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingTemplate ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    <span>{downloadingTemplate ? 'Downloading…' : 'Download CSV Template'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateMenuOpen((open) => !open)}
+                    disabled={downloadingTemplate}
+                    aria-label="More template formats"
+                    className="px-2 py-2 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100 border border-l-0 border-gray-300 dark:border-slate-600 rounded-r-lg hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
+                {templateMenuOpen && (
+                  <div className="absolute right-0 z-20 mt-1 w-56 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTemplate('xlsx')}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700"
+                    >
+                      Download Excel template (XLSX)
+                    </button>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenImportModal}
+                className="px-4 py-2 bg-emerald-600 dark:bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors duration-200 flex items-center space-x-2"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Import Machines</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportToExcel}
+                disabled={exporting || inventoryLoading}
+                className="px-4 py-2 bg-blue-600 dark:bg-indigo-600 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-500 transition-colors duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{exporting ? 'Exporting…' : 'Export Excel'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Inventory table card */}
@@ -1015,6 +1246,108 @@ const InventoryManagementPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isImportModalOpen && (
+        <div className="fixed inset-0 backdrop-blur-md bg-black/20 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  Import Machines
+                </h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Upload the filled CSV or Excel template. Valid rows will be stocked in; invalid or duplicate serials are skipped.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseImportModal}
+                disabled={importSubmitting}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50"
+                aria-label="Close import"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={handleImportFileChange}
+                disabled={importSubmitting}
+                className="block w-full text-sm text-gray-700 dark:text-gray-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 dark:file:bg-emerald-900/40 dark:file:text-emerald-200 hover:file:bg-emerald-100"
+              />
+              {importFile && (
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Selected: {importFile.name}
+                </p>
+              )}
+              {importPreviewLoading && (
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Reading file…</span>
+                </div>
+              )}
+              {importPreview && !importPreviewLoading && (
+                <div className="rounded-lg border border-gray-200 dark:border-slate-600 p-4 space-y-3">
+                  <p className="text-sm text-gray-800 dark:text-gray-200">
+                    {importPreview.totalDataRows} machine row(s) found · {importPreview.validRows.length} ready to import · {importPreview.errors.length} error(s)
+                  </p>
+                  {importPreview.errors.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto rounded-md bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-3">
+                      <ul className="space-y-1 text-xs text-red-700 dark:text-red-300">
+                        {importPreview.errors.slice(0, 10).map((error, index) => (
+                          <li key={`${error.row}-${index}`}>
+                            {error.row > 0 ? `Row ${error.row}` : 'File'}
+                            {error.serialNumber ? ` (${error.serialNumber})` : ''}: {error.message}
+                          </li>
+                        ))}
+                      </ul>
+                      {importPreview.errors.length > 10 && (
+                        <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                          Showing first 10 of {importPreview.errors.length} errors.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 p-6 border-t border-gray-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={handleCloseImportModal}
+                disabled={importSubmitting}
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleImportMachines}
+                disabled={
+                  importSubmitting ||
+                  importPreviewLoading ||
+                  !importFile ||
+                  !importPreview ||
+                  importPreview.validRows.length === 0
+                }
+                className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {importSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>
+                  {importSubmitting
+                    ? 'Importing…'
+                    : importPreview
+                      ? `Import ${importPreview.validRows.length} machine(s)`
+                      : 'Import'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}

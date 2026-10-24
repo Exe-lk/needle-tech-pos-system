@@ -189,12 +189,22 @@ export const POST = withAuthAndRole(
       grandTotal,
       periodFrom,
       periodTo,
+      useProvidedMachineLines,
     } = body;
 
     const rentalIdsArray: string[] | undefined = Array.isArray(rentalIds) ? rentalIds.filter(Boolean) : undefined;
 
     const hasProvidedLineItems = Array.isArray(lineItems) && lineItems.length > 0;
     const hasRentalLink = Boolean(rentalId) || Boolean(rentalIdsArray && rentalIdsArray.length > 0);
+    const isToolLine = (li: any): boolean => {
+      const code = String(li?.itemCode ?? '');
+      return li?.kind === 'TOOL' || code.startsWith('212TL');
+    };
+    const providedMachineLines = hasProvidedLineItems
+      ? (lineItems as any[]).filter((li) => !isToolLine(li))
+      : [];
+    const useClientMachineLines =
+      Boolean(useProvidedMachineLines) && hasRentalLink && providedMachineLines.length > 0;
 
     const parseRentalBilling = (raw: unknown): RentalBillingInput[] | null => {
       if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -243,6 +253,12 @@ export const POST = withAuthAndRole(
         rentalBilling: [
           'Each entry needs rentalId, mode (FULL_FEE_ALL_MONTHS | SELECTED_MONTHS), and months when mode is SELECTED_MONTHS',
         ],
+      });
+    }
+
+    if (Boolean(useProvidedMachineLines) && hasRentalLink && providedMachineLines.length === 0) {
+      return validationErrorResponse('Machine line items are required', {
+        lineItems: ['Provide at least one machine line when useProvidedMachineLines is true'],
       });
     }
 
@@ -374,7 +390,8 @@ export const POST = withAuthAndRole(
     const userId = auth.id;
 
     // Line items:
-    // - For rental-linked invoices, machine line items must be derived from `rental_machines.dailyRate` (source of truth).
+    // - Default: rental-linked machine lines are derived from `rental_machines.dailyRate`.
+    // - Opt-in: when useProvidedMachineLines is true, persist client machine lines (Review edits).
     // - When rentalBilling is provided, unitPrice = monthlyRate * sum of month factors (full fee or prorated).
     // - Clients may still send additional non-machine items (e.g. tools). Preserve those when not deriving tools from DB.
     let finalLineItems: any[] = hasProvidedLineItems ? lineItems : [];
@@ -453,89 +470,152 @@ export const POST = withAuthAndRole(
       // Preserve tool line items provided by the client only when we are not deriving tools from rentals.
       const preservedToolLines =
         !hasRentalBilling && Array.isArray(finalLineItems)
-          ? finalLineItems.filter((li: any) => {
-              const code = String(li?.itemCode ?? '');
-              return li?.kind === 'TOOL' || code.startsWith('212TL');
-            })
+          ? finalLineItems.filter((li: any) => isToolLine(li))
           : [];
 
-      // Group machines by agreement + brand/model/type + base monthly rate.
-      const categoryMap = new Map<
-        string,
-        {
-          agreementNumber: string;
-          brand: string;
-          model: string;
-          type: string;
-          count: number;
-          monthlyRatePerMachine: number;
-          billedUnitPrice: number;
-          serials: string[];
+      let machineLines: any[] = [];
+
+      if (useClientMachineLines) {
+        const allowedSerials = new Set(
+          rentals.flatMap((r) =>
+            (Array.isArray(r.machines) ? r.machines : [])
+              .map((rm) => String(rm.machine?.serialNumber || '').trim())
+              .filter(Boolean)
+          )
+        );
+        const allowedRentalIds = new Set(rentals.map((r) => r.id));
+        const invalid: string[] = [];
+
+        providedMachineLines.forEach((li: any, index: number) => {
+          const qty = Number(li?.quantity) || 0;
+          const unitPrice = Number(li?.unitPrice);
+          if (qty <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
+            invalid.push(`Line ${index + 1} needs quantity > 0 and a non-negative unitPrice`);
+          }
+          const serial = String(li?.serialNumber || '').trim();
+          if (serial && !allowedSerials.has(serial)) {
+            invalid.push(`Serial ${serial} is not on the selected agreements`);
+          }
+          const lineRentalId = String(li?.rentalId || '');
+          if (lineRentalId && !allowedRentalIds.has(lineRentalId)) {
+            invalid.push(`Line ${index + 1} rentalId is not linked to this invoice`);
+          }
+        });
+
+        if (invalid.length > 0) {
+          return validationErrorResponse('Invalid machine line items', {
+            lineItems: invalid,
+          });
         }
-      >();
-      for (const r of rentals) {
-        const agreementNo = r.agreementNumber ?? '';
-        const monthFactor = getMonthFactorForRental(r);
-        const rms = Array.isArray(r.machines) ? r.machines : [];
-        for (const rm of rms) {
-          const brand = rm.machine?.brand?.name ?? 'Unknown';
-          const model = rm.machine?.model?.name ?? 'Unknown';
-          const mtype = rm.machine?.type?.name ?? '';
-          const qty = typeof rm.quantity === 'number' ? rm.quantity : Number(rm.quantity) || 1;
-          let daily = Number(rm.dailyRate) || 0;
-          // Prefer catalog monthly rental fee when stored dailyRate implies a much lower monthly
-          // (common when PO lines were seeded from purchase unitPrice instead of monthlyRentalFee).
-          const catalogMonthly =
-            rm.machine?.monthlyRentalFee != null ? Number(rm.machine.monthlyRentalFee) : NaN;
-          if (Number.isFinite(catalogMonthly) && catalogMonthly > 0 && daily * 30 < catalogMonthly * 0.5) {
-            daily = catalogMonthly / 30;
+
+        machineLines = providedMachineLines.map((li: any, index: number) => {
+          const monthlyRate =
+            li?.monthlyRate != null && Number.isFinite(Number(li.monthlyRate))
+              ? round2(Number(li.monthlyRate))
+              : undefined;
+          const rentalDays =
+            li?.rentalDays != null && Number.isFinite(Number(li.rentalDays))
+              ? Number(li.rentalDays)
+              : undefined;
+          return {
+            description: String(li?.description || 'MACHINE'),
+            quantity: Number(li?.quantity) || 1,
+            unitPrice: round2(Number(li?.unitPrice) || 0),
+            monthlyRate,
+            rentalDays,
+            machineId: li?.machineId ?? null,
+            brand: li?.brand || '',
+            model: li?.model || '',
+            type: li?.type || '',
+            brandId: null,
+            modelId: null,
+            machineTypeId: null,
+            itemCode: li?.itemCode || `212WG${String(index + 1).padStart(5, '0')}`,
+            serialNumber: String(li?.serialNumber || '').trim() || undefined,
+            rentalId: li?.rentalId || undefined,
+            vatRate: VAT_RATE,
+            kind: 'MACHINE',
+          };
+        });
+      } else {
+        // Group machines by agreement + brand/model/type + base monthly rate.
+        const categoryMap = new Map<
+          string,
+          {
+            agreementNumber: string;
+            brand: string;
+            model: string;
+            type: string;
+            count: number;
+            monthlyRatePerMachine: number;
+            billedUnitPrice: number;
+            serials: string[];
           }
-          const monthlyPerMachine = daily * 30;
-          const billedUnitPrice = round2(monthlyPerMachine * monthFactor);
-          const key = `${agreementNo}|${brand}|${model}|${mtype}|${monthlyPerMachine}|${billedUnitPrice}`;
-          if (!categoryMap.has(key)) {
-            categoryMap.set(key, {
-              agreementNumber: agreementNo,
-              brand,
-              model,
-              type: mtype,
-              count: 0,
-              monthlyRatePerMachine: monthlyPerMachine,
-              billedUnitPrice,
-              serials: [],
-            });
-          }
-          const cat = categoryMap.get(key)!;
-          cat.count += qty;
-          if (rm.machine?.serialNumber) {
-            cat.serials.push(rm.machine.serialNumber);
+        >();
+        for (const r of rentals) {
+          const agreementNo = r.agreementNumber ?? '';
+          const monthFactor = getMonthFactorForRental(r);
+          const rms = Array.isArray(r.machines) ? r.machines : [];
+          for (const rm of rms) {
+            const brand = rm.machine?.brand?.name ?? 'Unknown';
+            const model = rm.machine?.model?.name ?? 'Unknown';
+            const mtype = rm.machine?.type?.name ?? '';
+            const qty = typeof rm.quantity === 'number' ? rm.quantity : Number(rm.quantity) || 1;
+            let daily = Number(rm.dailyRate) || 0;
+            // Prefer catalog monthly rental fee when stored dailyRate implies a much lower monthly
+            // (common when PO lines were seeded from purchase unitPrice instead of monthlyRentalFee).
+            const catalogMonthly =
+              rm.machine?.monthlyRentalFee != null ? Number(rm.machine.monthlyRentalFee) : NaN;
+            if (Number.isFinite(catalogMonthly) && catalogMonthly > 0 && daily * 30 < catalogMonthly * 0.5) {
+              daily = catalogMonthly / 30;
+            }
+            const monthlyPerMachine = daily * 30;
+            const billedUnitPrice = round2(monthlyPerMachine * monthFactor);
+            const key = `${agreementNo}|${brand}|${model}|${mtype}|${monthlyPerMachine}|${billedUnitPrice}`;
+            if (!categoryMap.has(key)) {
+              categoryMap.set(key, {
+                agreementNumber: agreementNo,
+                brand,
+                model,
+                type: mtype,
+                count: 0,
+                monthlyRatePerMachine: monthlyPerMachine,
+                billedUnitPrice,
+                serials: [],
+              });
+            }
+            const cat = categoryMap.get(key)!;
+            cat.count += qty;
+            if (rm.machine?.serialNumber) {
+              cat.serials.push(rm.machine.serialNumber);
+            }
           }
         }
+
+        let itemIndex = 0;
+        machineLines = Array.from(categoryMap.values()).map((cat) => {
+          const baseDesc = [cat.brand, cat.model, cat.type].filter(Boolean).join(' ').toUpperCase() || 'MACHINE';
+          const desc = cat.agreementNumber ? `${baseDesc} (AGREEMENT ${cat.agreementNumber})` : baseDesc;
+          return {
+            description: desc,
+            quantity: cat.count,
+            // With rentalBilling: unitPrice = monthlyRate * monthFactor; otherwise monthlyRate (1 month).
+            unitPrice: round2(cat.billedUnitPrice),
+            machineId: null,
+            brand: cat.brand,
+            model: cat.model,
+            type: cat.type,
+            brandId: null,
+            modelId: null,
+            machineTypeId: null,
+            itemCode: `212WG${String(++itemIndex).padStart(5, '0')}`,
+            serialNumber: cat.serials.length > 0 ? cat.serials.join(', ') : undefined,
+            vatRate: VAT_RATE,
+          };
+        });
       }
 
-      let itemIndex = 0;
-      const derivedMachineLines = Array.from(categoryMap.values()).map((cat) => {
-        const baseDesc = [cat.brand, cat.model, cat.type].filter(Boolean).join(' ').toUpperCase() || 'MACHINE';
-        const desc = cat.agreementNumber ? `${baseDesc} (AGREEMENT ${cat.agreementNumber})` : baseDesc;
-        return {
-          description: desc,
-          quantity: cat.count,
-          // With rentalBilling: unitPrice = monthlyRate * monthFactor; otherwise monthlyRate (1 month).
-          unitPrice: round2(cat.billedUnitPrice),
-          machineId: null,
-          brand: cat.brand,
-          model: cat.model,
-          type: cat.type,
-          brandId: null,
-          modelId: null,
-          machineTypeId: null,
-          itemCode: `212WG${String(++itemIndex).padStart(5, '0')}`,
-          serialNumber: cat.serials.length > 0 ? cat.serials.join(', ') : undefined,
-          vatRate: VAT_RATE,
-        };
-      });
-
-      let derivedToolLines: any[] = [];
+      const derivedToolLines: any[] = [];
       if (hasRentalBilling) {
         let toolIndex = 0;
         for (const r of rentals) {
@@ -570,13 +650,19 @@ export const POST = withAuthAndRole(
         }
       }
 
-      finalLineItems = [...derivedMachineLines, ...(hasRentalBilling ? derivedToolLines : preservedToolLines)];
+      finalLineItems = [...machineLines, ...(hasRentalBilling ? derivedToolLines : preservedToolLines)];
 
-      if (!Array.isArray(derivedMachineLines) || derivedMachineLines.length === 0) {
-        return validationErrorResponse('Unable to derive machine line items from rentals', {
-          rentalId: rentalId ? ['Selected rental has no machines assigned to invoice'] : [],
-          rentalIds: rentalIdsArray ? ['Selected rentals have no machines assigned to invoice'] : [],
-        });
+      if (!Array.isArray(machineLines) || machineLines.length === 0) {
+        return validationErrorResponse(
+          useClientMachineLines
+            ? 'No machine line items were provided'
+            : 'Unable to derive machine line items from rentals',
+          {
+            rentalId: rentalId ? ['Selected rental has no machines assigned to invoice'] : [],
+            rentalIds: rentalIdsArray ? ['Selected rentals have no machines assigned to invoice'] : [],
+            lineItems: useClientMachineLines ? ['Provide at least one machine line'] : [],
+          }
+        );
       }
     }
 

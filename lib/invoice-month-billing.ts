@@ -212,3 +212,118 @@ export function latestBilledPeriodTo(
   if (slices.length === 0) return null;
   return slices.reduce((max, s) => (s.periodTo > max ? s.periodTo : max), slices[0].periodTo);
 }
+
+/**
+ * Monthly rate used by create-invoice preview and Review edits.
+ * Prefer catalog monthlyRentalFee when stored dailyRate implies a much lower monthly
+ * (common when PO lines were seeded from purchase unitPrice instead of monthlyRentalFee).
+ */
+export function resolveMonthlyRate(
+  dailyRate?: number | null,
+  monthlyRentalFee?: number | null
+): number {
+  let daily = Number(dailyRate) || 0;
+  const catalogMonthly = monthlyRentalFee != null ? Number(monthlyRentalFee) : NaN;
+  if (Number.isFinite(catalogMonthly) && catalogMonthly > 0 && daily * 30 < catalogMonthly * 0.5) {
+    daily = catalogMonthly / 30;
+  }
+  return round2(daily * 30);
+}
+
+/** Rental Charge = (Monthly Rent / 30) × Rental Days */
+export function billedAmountFromFormula(monthlyRent: number, rentalDays: number): number {
+  return round2(((Number(monthlyRent) || 0) / 30) * (Number(rentalDays) || 0));
+}
+
+export type ReviewMachineSource = {
+  rentalId: string;
+  agreementNumber: string;
+  startDate: string | Date;
+  expectedEndDate: string | Date | null | undefined;
+  billing: Pick<RentalBillingInput, 'mode' | 'months'>;
+  machines: Array<{
+    quantity?: number;
+    dailyRate?: number | null;
+    monthlyRentalFee?: number | null;
+    brand?: string;
+    model?: string;
+    type?: string;
+    serialNumber?: string;
+  }>;
+};
+
+export type ReviewMachineRow = {
+  key: string;
+  rentalId: string;
+  agreementNumber: string;
+  serialNumber: string;
+  brand: string;
+  model: string;
+  type: string;
+  included: boolean;
+  monthlyRent: number;
+  rentalDays: number;
+  billedAmount: number;
+  amountOverridden: boolean;
+};
+
+/**
+ * One Review row per assigned machine. Defaults match create-invoice full-fee math:
+ * monthlyRent = resolveMonthlyRate(...), rentalDays = 30 × monthFactor,
+ * billedAmount = monthlyRent / 30 × rentalDays.
+ */
+export function buildReviewMachineRows(
+  rentals: ReviewMachineSource[],
+  capThrough: string | Date = new Date()
+): ReviewMachineRow[] {
+  const rows: ReviewMachineRow[] = [];
+  for (const rental of rentals) {
+    const monthFactor = sumMonthFactors(
+      rental.startDate,
+      rental.expectedEndDate,
+      rental.billing,
+      capThrough
+    );
+    const factor = monthFactor > 0 ? monthFactor : 0;
+    const machines = Array.isArray(rental.machines) ? rental.machines : [];
+    machines.forEach((machine, index) => {
+      const qty = Math.max(1, Number(machine.quantity) || 1);
+      const monthlyRent = resolveMonthlyRate(machine.dailyRate, machine.monthlyRentalFee);
+      const rentalDays = round2(30 * factor);
+      const billedAmount = billedAmountFromFormula(monthlyRent, rentalDays);
+      const serial = String(machine.serialNumber || '').trim();
+      for (let copy = 0; copy < qty; copy++) {
+        rows.push({
+          key: `${rental.rentalId}::${serial || 'noserial'}::${index}::${copy}`,
+          rentalId: rental.rentalId,
+          agreementNumber: rental.agreementNumber,
+          serialNumber: serial,
+          brand: machine.brand || '',
+          model: machine.model || '',
+          type: machine.type || '',
+          included: true,
+          monthlyRent,
+          rentalDays,
+          billedAmount,
+          amountOverridden: false,
+        });
+      }
+    });
+  }
+  return rows;
+}
+
+export function reviewMachineLineDescription(
+  row: Pick<ReviewMachineRow, 'brand' | 'model' | 'type' | 'agreementNumber' | 'rentalDays'>
+): string {
+  const baseDesc =
+    [row.brand, row.model, row.type].filter(Boolean).join(' ').toUpperCase() || 'MACHINE';
+  const withAgreement = row.agreementNumber
+    ? `${baseDesc} (AGREEMENT ${row.agreementNumber})`
+    : baseDesc;
+  const days = Number(row.rentalDays) || 0;
+  if (days > 0 && Math.abs(days % 30) > 0.001) {
+    return `${withAgreement} (${days} days)`;
+  }
+  return withAgreement;
+}
